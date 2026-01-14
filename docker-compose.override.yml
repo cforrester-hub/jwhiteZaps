@@ -1,0 +1,55 @@
+# Local development overrides
+# This file is automatically loaded by docker-compose alongside docker-compose.yml
+# It configures services for local development (localhost, no SSL, exposed ports)
+
+version: "3.8"
+
+services:
+  # Traefik - disable SSL, use HTTP only for local dev
+  traefik:
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--log.level=DEBUG"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "8080:8080"  # Traefik dashboard (insecure mode)
+    labels:
+      # Remove production labels, dashboard available at localhost:8080
+      - "traefik.enable=false"
+
+  # PostgreSQL - expose port for local tools (DBeaver, pgAdmin, etc.)
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # Redis - expose port for local debugging
+  redis:
+    ports:
+      - "6379:6379"
+
+  # Loki - expose port for local access
+  loki:
+    ports:
+      - "3100:3100"
+
+  # Grafana - use HTTP routing for localhost
+  grafana:
+    ports:
+      - "3000:3000"
+    labels:
+      - "traefik.enable=false"
+
+  # Test service - HTTP routing for localhost
+  test-service:
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.test-service.rule=Host(`localhost`) && PathPrefix(`/api/test`)"
+      - "traefik.http.routers.test-service.entrypoints=web"
+      - "traefik.http.services.test-service.loadbalancer.server.port=8000"
+    logging:
+      driver: json-file  # Use default logging locally (Loki driver requires Loki to be running first)

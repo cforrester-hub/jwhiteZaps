@@ -1,0 +1,22 @@
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# Database
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.25
+
+# Redis
+redis==5.0.1
+
+# HTTP client for external API calls
+httpx==0.26.0
+
+# Scheduling (for cron-like jobs)
+apscheduler==3.10.4
+
+# Settings management
+pydantic-settings==2.1.0
+
+# Logging
+python-json-logger==2.0.7

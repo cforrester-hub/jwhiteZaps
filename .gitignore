@@ -4,6 +4,7 @@
 .env
 .env.local
 .env.production
+.envrc
 *.pem
 *.key
 
@@ -30,9 +31,29 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 venv/
 .venv/
+env/
 ENV/
+env.bak/
+venv.bak/
+
+# =============================================================================
+# Testing
+# =============================================================================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
 # =============================================================================
 # IDE
@@ -46,18 +67,8 @@ ENV/
 # =============================================================================
 # Docker
 # =============================================================================
-# Don't ignore docker-compose files, but ignore any local overrides beyond the standard one
 docker-compose.local.yml
 docker-compose.dev.yml
-
-# =============================================================================
-# Testing
-# =============================================================================
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
 
 # =============================================================================
 # Misc
@@ -66,3 +77,7 @@ htmlcov/
 *.tmp
 .DS_Store
 Thumbs.db
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/

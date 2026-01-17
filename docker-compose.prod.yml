@@ -4,14 +4,12 @@
 # Use this file for production deployments with managed PostgreSQL.
 #
 # Deploy with:
-#   docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # This file:
 # - Removes the local PostgreSQL container (use managed DB instead)
 # - Configures services to use external DATABASE_URL
 # =============================================================================
-
-version: "3.8"
 
 services:
   # Disable the local PostgreSQL container in production
@@ -20,16 +18,13 @@ services:
     profiles:
       - disabled  # This prevents the container from starting
 
-  # Update test-service to not depend on local postgres container
+  # Update test-service for production
   test-service:
-    depends_on:
-      redis:
-        condition: service_healthy
-      # Removed postgres dependency - using managed DB
     environment:
-      # DATABASE_URL should be set in .env to point to managed PostgreSQL
-      # Example: postgresql://user:pass@db-host:25060/dbname?sslmode=require
+      # DATABASE_URL from .env points to managed PostgreSQL
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    logging:
+      driver: json-file  # Use default logging in prod (Loki requires extra setup)

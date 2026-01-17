@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # =============================================================================
   # REVERSE PROXY - Traefik
@@ -150,8 +148,6 @@ services:
       - "traefik.http.routers.test-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.test-service.loadbalancer.server.port=8000"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     logging:

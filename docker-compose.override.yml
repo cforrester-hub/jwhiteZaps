@@ -2,8 +2,6 @@
 # This file is automatically loaded by docker-compose alongside docker-compose.yml
 # It configures services for local development (localhost, no SSL, exposed ports)
 
-version: "3.8"
-
 services:
   # Traefik - disable SSL, use HTTP only for local dev
   traefik:
@@ -44,8 +42,13 @@ services:
     labels:
       - "traefik.enable=false"
 
-  # Test service - HTTP routing for localhost
+  # Test service - HTTP routing for localhost, depends on local postgres
   test-service:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.test-service.rule=Host(`localhost`) && PathPrefix(`/api/test`)"

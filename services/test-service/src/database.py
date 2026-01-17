@@ -13,7 +13,9 @@ settings = get_settings()
 
 # Create async engine
 # Note: asyncpg requires postgresql+asyncpg:// URL scheme
+# Also convert sslmode=require to ssl=require for asyncpg compatibility
 database_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
+database_url = database_url.replace("sslmode=", "ssl=")
 engine = create_async_engine(database_url, echo=False)
 
 # Session factory

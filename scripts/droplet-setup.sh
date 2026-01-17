@@ -12,6 +12,9 @@
 
 set -e  # Exit on any error
 
+# Prevent interactive prompts during package installation
+export DEBIAN_FRONTEND=noninteractive
+
 echo "============================================="
 echo "Starting Droplet Setup"
 echo "============================================="
@@ -22,7 +25,7 @@ echo "============================================="
 echo ""
 echo "[1/6] Updating system packages..."
 apt-get update
-apt-get upgrade -y
+apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 # -----------------------------------------------------------------------------
 # 2. Install Docker

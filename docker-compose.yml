@@ -3,11 +3,9 @@ services:
   # REVERSE PROXY - Traefik
   # =============================================================================
   traefik:
-    image: traefik:v3.0
+    image: traefik:v2.11
     container_name: traefik
     restart: unless-stopped
-    environment:
-      DOCKER_API_VERSION: "1.45"
     command:
       - "--api.dashboard=true"
       - "--providers.docker=true"

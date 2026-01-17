@@ -7,6 +7,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # This file:
+# - Uses pre-built images from GitHub Container Registry
 # - Removes the local PostgreSQL container (use managed DB instead)
 # - Configures services to use external DATABASE_URL
 # =============================================================================
@@ -18,8 +19,9 @@ services:
     profiles:
       - disabled  # This prevents the container from starting
 
-  # Update test-service for production
+  # Update test-service for production - use pre-built image
   test-service:
+    image: ghcr.io/cforrester-hub/test-service:latest
     environment:
       # DATABASE_URL from .env points to managed PostgreSQL
       DATABASE_URL: ${DATABASE_URL}

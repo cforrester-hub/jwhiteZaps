@@ -85,8 +85,7 @@ class LeadSearchRequest(BaseModel):
 
 class CreateNoteRequest(BaseModel):
     """Request to create a note."""
-    content: str
-    note_type: str = "General"
+    content: str  # Note content (can include HTML)
 
 
 class CreateNoteResponse(BaseModel):
@@ -263,14 +262,12 @@ async def create_customer_note(customer_id: str, request: CreateNoteRequest):
     Create a note for a customer.
 
     - **customer_id**: The customer's ID
-    - **content**: The note text
-    - **note_type**: Type of note (default: "General")
+    - **content**: The note text (can include HTML)
     """
     try:
         result = await client.create_customer_note(
             customer_id=customer_id,
             content=request.content,
-            note_type=request.note_type,
         )
 
         if not result.get("success"):
@@ -313,14 +310,12 @@ async def create_lead_note(lead_id: str, request: CreateNoteRequest):
     Create a note for a lead.
 
     - **lead_id**: The lead's ID
-    - **content**: The note text
-    - **note_type**: Type of note (default: "General")
+    - **content**: The note text (can include HTML)
     """
     try:
         result = await client.create_lead_note(
             lead_id=lead_id,
             content=request.content,
-            note_type=request.note_type,
         )
 
         if not result.get("success"):

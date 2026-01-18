@@ -261,22 +261,20 @@ async def search_by_phone(phone: str) -> dict:
 async def create_customer_note(
     customer_id: str,
     content: str,
-    note_type: str = "General",
 ) -> dict:
     """
     Create a note for a customer.
 
     Args:
         customer_id: The customer's ID in AgencyZoom
-        content: The note content/text
-        note_type: Type of note (default: "General")
+        content: The note content/text (can include HTML)
 
     Returns:
         dict with created note info or error
     """
+    # AgencyZoom API expects 'note' field, not 'content'
     payload = {
-        "content": content,
-        "noteType": note_type,
+        "note": content,
     }
 
     logger.info(f"Creating note for customer {customer_id}")
@@ -301,22 +299,20 @@ async def create_customer_note(
 async def create_lead_note(
     lead_id: str,
     content: str,
-    note_type: str = "General",
 ) -> dict:
     """
     Create a note for a lead.
 
     Args:
         lead_id: The lead's ID in AgencyZoom
-        content: The note content/text
-        note_type: Type of note (default: "General")
+        content: The note content/text (can include HTML)
 
     Returns:
         dict with created note info or error
     """
+    # AgencyZoom API expects 'note' field, not 'content'
     payload = {
-        "content": content,
-        "noteType": note_type,
+        "note": content,
     }
 
     logger.info(f"Creating note for lead {lead_id}")

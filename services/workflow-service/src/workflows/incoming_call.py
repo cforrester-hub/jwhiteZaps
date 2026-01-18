@@ -1,11 +1,11 @@
 """
-Outgoing Call Workflow - Replaces the Zapier "Outgoing Call" ZAP
+Incoming Call Workflow - Replaces the Zapier "Incoming Call" ZAP
 
 This workflow:
-1. Polls RingCentral for outgoing calls (cron-based)
+1. Polls RingCentral for incoming calls (cron-based)
 2. For each call, searches AgencyZoom for matching customers/leads by phone
 3. If a match is found:
-   - Uploads the call recording to DigitalOcean Spaces
+   - Uploads the call recording to DigitalOcean Spaces (if available)
    - Gets the RingSense AI summary (or generates one via LLM as fallback)
    - Creates a note in AgencyZoom with call details and summary
 4. Tracks processed calls to avoid duplicates
@@ -16,144 +16,30 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from . import register_workflow, TriggerType, is_processed, mark_processed
+from .outgoing_call import (
+    format_phone_for_display,
+    format_duration,
+    build_note_content,
+)
 from ..http_client import ringcentral, agencyzoom, storage
 
 logger = logging.getLogger(__name__)
 
 
-def format_phone_for_display(phone: str) -> str:
-    """Format a phone number for display in notes."""
-    # Remove non-digit characters
-    digits = "".join(c for c in phone if c.isdigit())
-
-    # Format as (XXX) XXX-XXXX for 10-digit US numbers
-    if len(digits) == 10:
-        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-    elif len(digits) == 11 and digits[0] == "1":
-        return f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
-
-    return phone
-
-
-def format_duration(seconds: int) -> str:
-    """Format duration in seconds to human-readable format."""
-    if seconds < 60:
-        return f"{seconds} seconds"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        secs = seconds % 60
-        if secs:
-            return f"{minutes}m {secs}s"
-        return f"{minutes} minutes"
-    else:
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        return f"{hours}h {minutes}m"
-
-
-def format_datetime_for_display(iso_datetime: str) -> str:
-    """Format ISO datetime string for display."""
-    if not iso_datetime:
-        return "Unknown"
-    try:
-        # Parse ISO format and return formatted date/time
-        dt = datetime.fromisoformat(iso_datetime.replace("Z", "+00:00"))
-        return dt.strftime("%m/%d/%Y %I:%M %p")
-    except (ValueError, AttributeError):
-        return iso_datetime[:19] if iso_datetime else "Unknown"
-
-
-def build_note_content(
-    call_data: dict,
-    direction: str = "Outbound",
-    recording_url: Optional[str] = None,
-    ai_summary: Optional[str] = None,
-) -> str:
-    """
-    Build the note content for AgencyZoom using HTML format.
-
-    Matches the Zapier template format with call information and recording details.
-    """
-    call = call_data.get("call", {})
-
-    # Determine the "other party" based on direction
-    if direction == "Outbound":
-        other_party = format_phone_for_display(call.get("to_number", "Unknown"))
-        other_party_label = "To"
-    else:
-        other_party = format_phone_for_display(call.get("from_number", "Unknown"))
-        other_party_label = "From"
-
-    from_number = format_phone_for_display(call.get("from_number", "Unknown"))
-    to_number = format_phone_for_display(call.get("to_number", "Unknown"))
-    result = call.get("result", "Unknown")
-    duration = format_duration(call.get("duration", 0))
-    date_time = format_datetime_for_display(call.get("start_time"))
-    recording_id = call.get("recording_id", "N/A")
-    call_id = call.get("id", "Unknown")
-
-    # Build HTML note matching Zapier template style
-    # Header line: direction - other party - result
-    header = f"📞 {direction} - {other_party} - {result}"
-
-    # Build the HTML table
-    html = f'''{header}
-<table style="width:100%;border-collapse:collapse;margin:0;padding:0;">
-<tr>
-<td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;">
-<strong>CALL INFORMATION</strong>
-<div>📅 <b>Date & Time:</b> {date_time}</div>
-<div>👤 <b>From:</b> {from_number}</div>
-<div>👤 <b>To:</b> {to_number}</div>
-<div>⏱️ <b>Duration:</b> {duration}</div>
-<div>📋 <b>Result:</b> {result}</div>'''
-
-    # Add AI summary if available
-    if ai_summary:
-        html += f'''
-<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;">
-<strong>📝 AI SUMMARY</strong>
-<div>{ai_summary}</div>
-</div>'''
-
-    html += '''
-</td>
-<td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;">
-<strong>RECORDING INFORMATION</strong>'''
-
-    if recording_url:
-        html += f'''
-<div>💾 <b>Recording ID:</b> {recording_id}</div>
-<div>🔗 <b>Recording Link:</b> <a href="{recording_url}">{recording_url}</a></div>'''
-    else:
-        html += '''
-<div>No recording available</div>'''
-
-    html += f'''
-<div style="margin-top:10px;font-size:0.9em;color:#666;">
-<b>Call ID:</b> {call_id}
-</div>
-</td>
-</tr>
-</table>'''
-
-    return html
-
-
 async def process_single_call(call: dict) -> dict:
     """
-    Process a single outgoing call.
+    Process a single incoming call.
 
     Returns a dict with the processing result.
     """
     call_id = call.get("id")
-    to_number = call.get("to_number")
+    from_number = call.get("from_number")
 
-    logger.info(f"Processing call {call_id} to {to_number}")
+    logger.info(f"Processing incoming call {call_id} from {from_number}")
 
-    # Search AgencyZoom for customer/lead by phone number
+    # Search AgencyZoom for customer/lead by phone number (caller's number)
     try:
-        search_result = await agencyzoom.search_by_phone(to_number)
+        search_result = await agencyzoom.search_by_phone(from_number)
     except Exception as e:
         logger.error(f"Failed to search AgencyZoom: {e}")
         return {"status": "error", "reason": f"AgencyZoom search failed: {e}"}
@@ -162,10 +48,10 @@ async def process_single_call(call: dict) -> dict:
     leads = search_result.get("leads", [])
 
     if not customers and not leads:
-        logger.info(f"No match found in AgencyZoom for {to_number}, skipping")
+        logger.info(f"No match found in AgencyZoom for {from_number}, skipping")
         return {"status": "skipped", "reason": "no_match"}
 
-    logger.info(f"Found {len(customers)} customers and {len(leads)} leads for {to_number}")
+    logger.info(f"Found {len(customers)} customers and {len(leads)} leads for {from_number}")
 
     # Get call details including recording and AI insights
     recording_url = None
@@ -218,7 +104,6 @@ async def process_single_call(call: dict) -> dict:
                 ai_summary = ai_insights.get("summary")
 
                 # If no summary but transcript available, we could use LLM here
-                # For now, just log that we'd need LLM fallback
                 if not ai_summary and ai_insights.get("transcript"):
                     logger.info("RingSense summary not available, would use LLM fallback")
                     # TODO: Implement LLM fallback for summarization
@@ -226,10 +111,10 @@ async def process_single_call(call: dict) -> dict:
         except Exception as e:
             logger.error(f"Failed to get call details: {e}")
 
-    # Build the note content
+    # Build the note content (using "Inbound" direction)
     note_content = build_note_content(
         call_data={"call": call},
-        direction="Outbound",
+        direction="Inbound",
         recording_url=recording_url,
         ai_summary=ai_summary,
     )
@@ -279,8 +164,8 @@ async def process_single_call(call: dict) -> dict:
 
 
 @register_workflow(
-    name="outgoing_call",
-    description="Sync outgoing calls from RingCentral to AgencyZoom",
+    name="incoming_call",
+    description="Sync incoming calls from RingCentral to AgencyZoom",
     trigger_type=TriggerType.CRON,
     cron_expression="*/15 * * * *",  # Every 15 minutes
     enabled=True,
@@ -289,9 +174,9 @@ async def run():
     """
     Main workflow entry point.
 
-    Fetches recent outgoing calls and processes any that haven't been handled yet.
+    Fetches recent incoming calls and processes any that haven't been handled yet.
     """
-    logger.info("Starting outgoing_call workflow")
+    logger.info("Starting incoming_call workflow")
 
     # Fetch calls from the last 48 hours
     # We process with a delay to ensure recordings are available
@@ -299,7 +184,7 @@ async def run():
         calls_response = await ringcentral.get_calls(
             date_from=(datetime.utcnow() - timedelta(days=2)).isoformat() + "Z",
             date_to=datetime.utcnow().isoformat() + "Z",
-            direction="Outbound",
+            direction="Inbound",
             per_page=100,
         )
     except Exception as e:
@@ -307,7 +192,7 @@ async def run():
         return {"items_processed": 0, "error": str(e)}
 
     calls = calls_response.get("calls", [])
-    logger.info(f"Found {len(calls)} outgoing calls")
+    logger.info(f"Found {len(calls)} incoming calls")
 
     processed_count = 0
     skipped_count = 0
@@ -317,7 +202,7 @@ async def run():
         call_id = call.get("id")
 
         # Skip if already processed
-        if await is_processed(call_id, "outgoing_call"):
+        if await is_processed(call_id, "incoming_call"):
             logger.debug(f"Call {call_id} already processed, skipping")
             continue
 
@@ -325,7 +210,7 @@ async def run():
         result = call.get("result", "")
         if result not in ("Accepted", "Call connected"):
             logger.debug(f"Call {call_id} has result '{result}', skipping")
-            await mark_processed(call_id, "outgoing_call", success=True, details=f"Skipped: {result}")
+            await mark_processed(call_id, "incoming_call", success=True, details=f"Skipped: {result}")
             skipped_count += 1
             continue
 
@@ -337,7 +222,7 @@ async def run():
                 # Successfully created notes - mark as processed
                 await mark_processed(
                     call_id,
-                    "outgoing_call",
+                    "incoming_call",
                     success=True,
                     details=f"notes={process_result['notes_created']}",
                 )
@@ -347,7 +232,7 @@ async def run():
                 # Mark as processed so we don't keep checking this number
                 await mark_processed(
                     call_id,
-                    "outgoing_call",
+                    "incoming_call",
                     success=True,
                     details="no_match_in_agencyzoom",
                 )

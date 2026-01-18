@@ -107,8 +107,8 @@ async def test_connection():
         account_info = await client.test_connection()
         return ConnectionTestResponse(
             status="connected",
-            account_id=account_info.get("id", "unknown"),
-            account_name=account_info.get("mainNumber", "unknown"),
+            account_id=str(account_info.get("id", "unknown")),
+            account_name=str(account_info.get("mainNumber", "unknown")),
         )
     except Exception as e:
         logger.error(f"Connection test failed: {e}")

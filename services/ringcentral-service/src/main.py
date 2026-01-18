@@ -30,7 +30,9 @@ app = FastAPI(
     title="RingCentral Service",
     description="Microservice for RingCentral call logs, recordings, and AI insights",
     version="1.0.0",
-    root_path="/api/ringcentral",
+    docs_url="/api/ringcentral/docs",
+    redoc_url="/api/ringcentral/redoc",
+    openapi_url="/api/ringcentral/openapi.json",
 )
 
 
@@ -91,13 +93,13 @@ class CallDetailResponse(BaseModel):
 
 
 # Endpoints
-@app.get("/health", response_model=HealthResponse)
+@app.get("/api/ringcentral/health", response_model=HealthResponse)
 async def health_check():
     """Basic health check endpoint."""
     return HealthResponse(status="healthy", service="ringcentral-service")
 
 
-@app.get("/test-connection", response_model=ConnectionTestResponse)
+@app.get("/api/ringcentral/test-connection", response_model=ConnectionTestResponse)
 async def test_connection():
     """Test the connection to RingCentral API."""
     try:
@@ -113,7 +115,7 @@ async def test_connection():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/calls", response_model=CallLogResponse)
+@app.get("/api/ringcentral/calls", response_model=CallLogResponse)
 async def get_call_log(
     date_from: Optional[datetime] = Query(
         None, description="Start date (ISO format). Defaults to 7 days ago."
@@ -182,7 +184,7 @@ async def get_call_log(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/calls/{call_id}", response_model=CallDetailResponse)
+@app.get("/api/ringcentral/calls/{call_id}", response_model=CallDetailResponse)
 async def get_call_details(
     call_id: str,
     include_recording: bool = Query(True, description="Include recording URL if available"),
@@ -256,7 +258,7 @@ async def get_call_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/recordings/{recording_id}")
+@app.get("/api/ringcentral/recordings/{recording_id}")
 async def get_recording(recording_id: str):
     """
     Get recording metadata and download URL.
@@ -280,7 +282,7 @@ async def get_recording(recording_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/recordings/{recording_id}/insights", response_model=RingSenseResponse)
+@app.get("/api/ringcentral/recordings/{recording_id}/insights", response_model=RingSenseResponse)
 async def get_recording_insights(recording_id: str):
     """
     Get RingSense AI insights for a specific recording.

@@ -1,13 +1,13 @@
 """
 Dashboard Service - Service Health Monitor
 
-A simple dashboard that displays the health status of all microservices.
+A simple dashboard that displays the health status of all microservices
+and workflow information.
 """
 
 import asyncio
 import logging
 from datetime import datetime
-from string import Template
 from typing import Optional
 
 import httpx
@@ -45,9 +45,27 @@ class ServiceStatus(BaseModel):
     checked_at: str
 
 
+class WorkflowInfo(BaseModel):
+    """Information about a workflow."""
+    name: str
+    description: str
+    trigger_type: str
+    cron_expression: Optional[str] = None
+    enabled: bool
+
+
+class ScheduledJobInfo(BaseModel):
+    """Information about a scheduled job."""
+    id: str
+    name: str
+    next_run: Optional[str] = None
+
+
 class DashboardData(BaseModel):
     """Complete dashboard data."""
     services: list[ServiceStatus]
+    workflows: list[WorkflowInfo]
+    scheduled_jobs: list[ScheduledJobInfo]
     checked_at: str
     healthy_count: int
     total_count: int
@@ -97,18 +115,65 @@ async def check_service_health(name: str, url: str) -> ServiceStatus:
         )
 
 
+async def get_workflow_info() -> tuple[list[WorkflowInfo], list[ScheduledJobInfo]]:
+    """Fetch workflow and scheduler information from workflow-service."""
+    workflows = []
+    scheduled_jobs = []
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            # Get workflows
+            workflows_response = await client.get(
+                "http://workflow-service:8000/api/workflows/list"
+            )
+            if workflows_response.status_code == 200:
+                data = workflows_response.json()
+                for wf in data.get("workflows", []):
+                    workflows.append(WorkflowInfo(
+                        name=wf.get("name", ""),
+                        description=wf.get("description", ""),
+                        trigger_type=wf.get("trigger_type", ""),
+                        cron_expression=wf.get("cron_expression"),
+                        enabled=wf.get("enabled", False),
+                    ))
+
+            # Get scheduler status
+            scheduler_response = await client.get(
+                "http://workflow-service:8000/api/workflows/scheduler"
+            )
+            if scheduler_response.status_code == 200:
+                data = scheduler_response.json()
+                for job in data.get("jobs", []):
+                    scheduled_jobs.append(ScheduledJobInfo(
+                        id=job.get("id", ""),
+                        name=job.get("name", ""),
+                        next_run=job.get("next_run"),
+                    ))
+
+    except Exception as e:
+        logger.error(f"Failed to fetch workflow info: {e}")
+
+    return workflows, scheduled_jobs
+
+
 async def get_all_service_statuses() -> DashboardData:
-    """Check all services concurrently."""
-    tasks = [
+    """Check all services concurrently and fetch workflow info."""
+    # Check service health
+    health_tasks = [
         check_service_health(name, url)
         for name, url in settings.services.items()
     ]
 
-    statuses = await asyncio.gather(*tasks)
+    # Fetch workflow info
+    statuses = await asyncio.gather(*health_tasks)
+    workflows, scheduled_jobs = await get_workflow_info()
+
     healthy_count = sum(1 for s in statuses if s.status == "healthy")
 
     return DashboardData(
         services=list(statuses),
+        workflows=workflows,
+        scheduled_jobs=scheduled_jobs,
         checked_at=datetime.utcnow().isoformat(),
         healthy_count=healthy_count,
         total_count=len(statuses),
@@ -146,6 +211,42 @@ def generate_dashboard_html(data: DashboardData) -> str:
 
     service_cards_html = "\n".join(service_cards)
 
+    # Generate workflow rows
+    workflow_rows = []
+    for wf in data.workflows:
+        status_class = "enabled" if wf.enabled else "disabled"
+        status_text = "Enabled" if wf.enabled else "Disabled"
+        cron = wf.cron_expression or "-"
+
+        # Find next run time for this workflow
+        next_run = "-"
+        for job in data.scheduled_jobs:
+            if job.id == wf.name:
+                if job.next_run:
+                    try:
+                        next_dt = datetime.fromisoformat(job.next_run.replace("Z", "+00:00"))
+                        next_run = next_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    except:
+                        next_run = job.next_run
+                break
+
+        row = f'''
+        <tr>
+            <td class="workflow-name">{wf.name}</td>
+            <td>{wf.description}</td>
+            <td><span class="trigger-badge">{wf.trigger_type}</span></td>
+            <td class="cron">{cron}</td>
+            <td class="next-run">{next_run}</td>
+            <td><span class="status-badge {status_class}">{status_text}</span></td>
+            <td>
+                <button class="run-btn" onclick="runWorkflow('{wf.name}')">Run Now</button>
+            </td>
+        </tr>
+        '''
+        workflow_rows.append(row)
+
+    workflow_rows_html = "\n".join(workflow_rows) if workflow_rows else '<tr><td colspan="7">No workflows registered</td></tr>'
+
     html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -169,7 +270,7 @@ def generate_dashboard_html(data: DashboardData) -> str:
         }}
 
         .container {{
-            max-width: 900px;
+            max-width: 1200px;
             margin: 0 auto;
         }}
 
@@ -182,6 +283,14 @@ def generate_dashboard_html(data: DashboardData) -> str:
             font-size: 2rem;
             margin-bottom: 10px;
             color: #fff;
+        }}
+
+        h2 {{
+            font-size: 1.5rem;
+            margin: 30px 0 20px 0;
+            color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 10px;
         }}
 
         .summary {{
@@ -265,12 +374,12 @@ def generate_dashboard_html(data: DashboardData) -> str:
             text-transform: uppercase;
         }}
 
-        .status-badge.healthy {{
+        .status-badge.healthy, .status-badge.enabled {{
             background: rgba(74, 222, 128, 0.2);
             color: #4ade80;
         }}
 
-        .status-badge.unhealthy {{
+        .status-badge.unhealthy, .status-badge.disabled {{
             background: rgba(248, 113, 113, 0.2);
             color: #f87171;
         }}
@@ -278,6 +387,16 @@ def generate_dashboard_html(data: DashboardData) -> str:
         .status-badge.unknown {{
             background: rgba(251, 191, 36, 0.2);
             color: #fbbf24;
+        }}
+
+        .trigger-badge {{
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: rgba(96, 165, 250, 0.2);
+            color: #60a5fa;
         }}
 
         .service-details {{
@@ -296,6 +415,103 @@ def generate_dashboard_html(data: DashboardData) -> str:
         .error-message {{
             color: #f87171;
             font-style: italic;
+        }}
+
+        /* Workflow table */
+        .workflow-table {{
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            overflow: hidden;
+        }}
+
+        .workflow-table th, .workflow-table td {{
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+
+        .workflow-table th {{
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            color: #fff;
+        }}
+
+        .workflow-table tr:hover {{
+            background: rgba(255, 255, 255, 0.05);
+        }}
+
+        .workflow-name {{
+            font-weight: 600;
+            color: #60a5fa;
+        }}
+
+        .cron {{
+            font-family: monospace;
+            color: #a0a0a0;
+        }}
+
+        .next-run {{
+            color: #4ade80;
+            font-size: 0.9rem;
+        }}
+
+        .run-btn {{
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: #60a5fa;
+            color: #fff;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }}
+
+        .run-btn:hover {{
+            background: #3b82f6;
+        }}
+
+        .run-btn:disabled {{
+            background: #666;
+            cursor: not-allowed;
+        }}
+
+        /* Result toast */
+        .toast {{
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 500;
+            z-index: 1000;
+            display: none;
+        }}
+
+        .toast.success {{
+            background: #4ade80;
+        }}
+
+        .toast.error {{
+            background: #f87171;
+        }}
+
+        .toast.show {{
+            display: block;
+            animation: slideIn 0.3s ease;
+        }}
+
+        @keyframes slideIn {{
+            from {{
+                transform: translateX(100%);
+                opacity: 0;
+            }}
+            to {{
+                transform: translateX(0);
+                opacity: 1;
+            }}
         }}
 
         footer {{
@@ -330,14 +546,71 @@ def generate_dashboard_html(data: DashboardData) -> str:
             </div>
         </div>
 
+        <h2>Services</h2>
         <div class="services-grid">
             {service_cards_html}
         </div>
+
+        <h2>Workflows</h2>
+        <table class="workflow-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Trigger</th>
+                    <th>Schedule</th>
+                    <th>Next Run</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {workflow_rows_html}
+            </tbody>
+        </table>
 
         <footer>
             <p class="refresh-note">Auto-refreshes every 30 seconds</p>
         </footer>
     </div>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        async function runWorkflow(name) {{
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+
+            try {{
+                const response = await fetch('/api/workflows/run/' + name, {{
+                    method: 'POST'
+                }});
+                const result = await response.json();
+
+                if (result.status === 'success') {{
+                    showToast('Workflow completed successfully!', 'success');
+                }} else {{
+                    showToast('Workflow failed: ' + (result.error || 'Unknown error'), 'error');
+                }}
+            }} catch (err) {{
+                showToast('Request failed: ' + err.message, 'error');
+            }} finally {{
+                btn.disabled = false;
+                btn.textContent = 'Run Now';
+            }}
+        }}
+
+        function showToast(message, type) {{
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type + ' show';
+
+            setTimeout(() => {{
+                toast.classList.remove('show');
+            }}, 5000);
+        }}
+    </script>
 </body>
 </html>'''
 

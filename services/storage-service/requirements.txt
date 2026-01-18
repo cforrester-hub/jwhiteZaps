@@ -1,6 +1,7 @@
 # Web framework
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
 
 # S3-compatible storage (DigitalOcean Spaces)
 boto3>=1.34.0

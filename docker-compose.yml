@@ -217,9 +217,11 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      postgres:
-        condition: service_healthy
       ringcentral-service:
+        condition: service_healthy
+      storage-service:
+        condition: service_healthy
+      agencyzoom-service:
         condition: service_healthy
     logging:
       driver: loki

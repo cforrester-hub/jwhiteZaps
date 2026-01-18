@@ -72,6 +72,8 @@ services:
       - "traefik.http.services.workflow-service.loadbalancer.server.port=8000"
     depends_on:
       - ringcentral-service
+      - storage-service
+      - agencyzoom-service
     logging:
       driver: json-file
 

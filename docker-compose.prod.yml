@@ -45,7 +45,6 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=web"
       - "traefik.http.routers.ringcentral-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/ringcentral`)"
       - "traefik.http.routers.ringcentral-service.entrypoints=websecure"
       - "traefik.http.routers.ringcentral-service.tls.certresolver=letsencrypt"

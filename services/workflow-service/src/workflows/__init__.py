@@ -109,9 +109,10 @@ def get_webhook_workflows() -> Dict[str, WorkflowConfig]:
 
 async def is_processed(item_id: str, workflow_name: str) -> bool:
     """Check if an item has already been processed by a workflow."""
+    composite_id = f"{workflow_name}:{item_id}"
     async with async_session() as session:
-        result = await session.get(ProcessedItem, item_id)
-        return result is not None and result.workflow_name == workflow_name
+        result = await session.get(ProcessedItem, composite_id)
+        return result is not None
 
 
 async def mark_processed(
@@ -120,15 +121,26 @@ async def mark_processed(
     success: bool = True,
     details: Optional[str] = None,
 ):
-    """Mark an item as processed by a workflow."""
+    """Mark an item as processed by a workflow. Uses upsert to handle duplicates."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    composite_id = f"{workflow_name}:{item_id}"
     async with async_session() as session:
-        item = ProcessedItem(
-            id=f"{workflow_name}:{item_id}",
+        stmt = insert(ProcessedItem).values(
+            id=composite_id,
             workflow_name=workflow_name,
+            processed_at=datetime.utcnow(),
             success=success,
             details=details,
+        ).on_conflict_do_update(
+            index_elements=['id'],
+            set_={
+                'processed_at': datetime.utcnow(),
+                'success': success,
+                'details': details,
+            }
         )
-        session.add(item)
+        await session.execute(stmt)
         await session.commit()
 
 

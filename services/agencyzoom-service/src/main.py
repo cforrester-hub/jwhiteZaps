@@ -335,3 +335,44 @@ async def create_lead_note(lead_id: str, request: CreateNoteRequest):
     except Exception as e:
         logger.error(f"Create lead note failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# DEBUG ENDPOINTS
+# =============================================================================
+
+
+@app.get("/debug/raw-customer-search/{phone}", tags=["debug"])
+async def debug_raw_customer_search(phone: str):
+    """
+    Debug endpoint: Make a raw customer search and return the exact response.
+
+    This helps diagnose issues with the AgencyZoom API response format.
+    """
+    import httpx
+    from .auth import get_auth_headers
+
+    normalized = client.normalize_phone(phone)
+    headers = await get_auth_headers()
+
+    payload = {
+        "page": 1,
+        "pageSize": 20,
+        "phone": normalized,
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as http_client:
+        response = await http_client.post(
+            f"{settings.agencyzoom_api_url}/v1/api/customers",
+            headers=headers,
+            json=payload,
+        )
+
+    return {
+        "input_phone": phone,
+        "normalized_phone": normalized,
+        "request_payload": payload,
+        "response_status": response.status_code,
+        "response_headers": dict(response.headers),
+        "response_body": response.json() if response.status_code == 200 else response.text,
+    }

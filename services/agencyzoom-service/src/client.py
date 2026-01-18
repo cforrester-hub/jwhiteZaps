@@ -155,6 +155,7 @@ async def search_customers(
         return {"customers": [], "total": 0, "error": response.text}
 
     data = response.json()
+    logger.info(f"Customer search raw response: {data}")
 
     # Handle the response format from AgencyZoom
     # API returns {"totalCount": N, "customers": [...]}
@@ -212,6 +213,7 @@ async def search_leads(
         return {"leads": [], "total": 0, "error": response.text}
 
     data = response.json()
+    logger.info(f"Lead search raw response: {data}")
 
     # Handle the response format from AgencyZoom
     # API likely returns {"totalCount": N, "leads": [...]}

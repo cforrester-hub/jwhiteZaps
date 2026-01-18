@@ -1,7 +1,9 @@
 """AgencyZoom API client for customers, leads, and notes."""
 
+import asyncio
 import logging
 import re
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -11,6 +13,16 @@ from .auth import get_auth_headers, clear_token_cache
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Rate limiting configuration
+# AgencyZoom limits: 30 calls/min during day, 60 calls/min 10PM-4AM CT
+RATE_LIMIT_RETRY_SECONDS = 65  # Wait slightly over 1 minute on rate limit
+MAX_RETRIES = 3
+# Proactive delay between requests to stay under rate limit (2 seconds = max 30/min)
+REQUEST_DELAY_SECONDS = 2.0
+
+# Track last request time for rate limiting
+_last_request_time: Optional[datetime] = None
 
 
 def normalize_phone(phone: str) -> str:
@@ -39,23 +51,25 @@ async def _make_request(method: str, endpoint: str, **kwargs) -> httpx.Response:
     """
     Make an authenticated request to AgencyZoom API.
 
-    Handles token refresh on 401 errors.
+    Handles:
+    - Proactive rate limiting (delay between requests)
+    - Token refresh on 401 errors
+    - Rate limiting (429) with automatic retry after waiting
     """
+    global _last_request_time
+
+    # Proactive rate limiting - ensure minimum delay between requests
+    if _last_request_time is not None:
+        elapsed = (datetime.utcnow() - _last_request_time).total_seconds()
+        if elapsed < REQUEST_DELAY_SECONDS:
+            wait_time = REQUEST_DELAY_SECONDS - elapsed
+            await asyncio.sleep(wait_time)
+
+    _last_request_time = datetime.utcnow()
     headers = await get_auth_headers()
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.request(
-            method,
-            f"{settings.agencyzoom_api_url}{endpoint}",
-            headers=headers,
-            **kwargs,
-        )
-
-        # If unauthorized, clear cache and retry once
-        if response.status_code == 401:
-            logger.warning("Got 401, clearing token cache and retrying")
-            clear_token_cache()
-            headers = await get_auth_headers()
+    for attempt in range(MAX_RETRIES):
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.request(
                 method,
                 f"{settings.agencyzoom_api_url}{endpoint}",
@@ -63,7 +77,39 @@ async def _make_request(method: str, endpoint: str, **kwargs) -> httpx.Response:
                 **kwargs,
             )
 
-        return response
+            # Handle unauthorized - refresh token and retry
+            if response.status_code == 401:
+                logger.warning("Got 401, clearing token cache and retrying")
+                clear_token_cache()
+                headers = await get_auth_headers()
+                response = await client.request(
+                    method,
+                    f"{settings.agencyzoom_api_url}{endpoint}",
+                    headers=headers,
+                    **kwargs,
+                )
+                # If still 401 after refresh, return the error
+                if response.status_code == 401:
+                    return response
+
+            # Handle rate limiting - wait and retry
+            if response.status_code == 429:
+                if attempt < MAX_RETRIES - 1:
+                    logger.warning(
+                        f"Rate limited by AgencyZoom (attempt {attempt + 1}/{MAX_RETRIES}). "
+                        f"Waiting {RATE_LIMIT_RETRY_SECONDS} seconds before retry..."
+                    )
+                    await asyncio.sleep(RATE_LIMIT_RETRY_SECONDS)
+                    continue
+                else:
+                    logger.error("Rate limited by AgencyZoom - max retries exceeded")
+                    return response
+
+            # Success or other error - return response
+            return response
+
+    # Should not reach here, but return last response if we do
+    return response
 
 
 async def search_customers(

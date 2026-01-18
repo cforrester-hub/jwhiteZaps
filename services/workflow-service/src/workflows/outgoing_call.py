@@ -283,6 +283,7 @@ async def run():
             process_result = await process_single_call(call)
 
             if process_result["status"] == "success":
+                # Successfully created notes - mark as processed
                 await mark_processed(
                     call_id,
                     "outgoing_call",
@@ -290,26 +291,27 @@ async def run():
                     details=f"notes={process_result['notes_created']}",
                 )
                 processed_count += 1
-            elif process_result["status"] == "skipped":
+            elif process_result["status"] == "skipped" and process_result.get("reason") == "no_match":
+                # No customer/lead found in AgencyZoom - this is a legitimate skip
+                # Mark as processed so we don't keep checking this number
                 await mark_processed(
                     call_id,
                     "outgoing_call",
                     success=True,
-                    details=process_result["reason"],
+                    details="no_match_in_agencyzoom",
                 )
                 skipped_count += 1
             else:
-                await mark_processed(
-                    call_id,
-                    "outgoing_call",
-                    success=False,
-                    details=process_result.get("reason", "Unknown error"),
+                # Error occurred (e.g., AgencyZoom API error, storage error)
+                # DO NOT mark as processed - we want to retry on next run
+                logger.warning(
+                    f"Call {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
                 )
                 error_count += 1
 
         except Exception as e:
-            logger.error(f"Error processing call {call_id}: {e}")
-            await mark_processed(call_id, "outgoing_call", success=False, details=str(e))
+            # Exception occurred - DO NOT mark as processed, will retry
+            logger.error(f"Error processing call {call_id}, will retry: {e}")
             error_count += 1
 
     logger.info(

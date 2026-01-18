@@ -185,3 +185,24 @@ async def run_workflow_by_name(workflow_name: str):
 
     result = await run_workflow(workflow_name)
     return WorkflowRunResponse(**result)
+
+
+@app.delete("/api/workflows/processed/{workflow_name}")
+async def clear_processed_items(workflow_name: str):
+    """
+    Clear all processed items for a workflow.
+    This allows reprocessing of all items on the next run.
+    USE WITH CAUTION - this will cause duplicate processing if items were already
+    successfully synced to external systems.
+    """
+    from sqlalchemy import delete
+    from .database import async_session, ProcessedItem
+
+    async with async_session() as session:
+        stmt = delete(ProcessedItem).where(ProcessedItem.workflow_name == workflow_name)
+        result = await session.execute(stmt)
+        await session.commit()
+        deleted_count = result.rowcount
+
+    logger.warning(f"Cleared {deleted_count} processed items for workflow: {workflow_name}")
+    return {"status": "cleared", "workflow_name": workflow_name, "items_deleted": deleted_count}

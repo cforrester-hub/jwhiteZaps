@@ -33,8 +33,9 @@ from .workflows import (
 
 # Import workflow modules to register them
 from .workflows import example_workflow  # noqa: F401
+from .workflows import outgoing_call  # noqa: F401
 # Add your workflows here:
-# from .workflows import call_log_sync  # noqa: F401
+# from .workflows import incoming_call  # noqa: F401
 
 # Configure logging
 settings = get_settings()

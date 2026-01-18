@@ -111,12 +111,75 @@ class RingCentralClient(ServiceClient):
 
 
 class AgencyZoomClient(ServiceClient):
-    """Client for the AgencyZoom service (placeholder)."""
+    """Client for the AgencyZoom service."""
 
     def __init__(self):
         super().__init__(settings.agencyzoom_service_url)
 
-    # Add AgencyZoom-specific methods as needed
+    async def search_by_phone(self, phone: str) -> dict:
+        """Search for customers and leads by phone number."""
+        return await self.post("/api/agencyzoom/search/phone", json={"phone": phone})
+
+    async def create_customer_note(self, customer_id: str, content: str, note_type: str = "General") -> dict:
+        """Create a note for a customer."""
+        return await self.post(
+            f"/api/agencyzoom/customers/{customer_id}/notes",
+            json={"content": content, "note_type": note_type},
+        )
+
+    async def create_lead_note(self, lead_id: str, content: str, note_type: str = "General") -> dict:
+        """Create a note for a lead."""
+        return await self.post(
+            f"/api/agencyzoom/leads/{lead_id}/notes",
+            json={"content": content, "note_type": note_type},
+        )
+
+    async def health_check(self) -> bool:
+        """Check if AgencyZoom service is healthy."""
+        try:
+            await self.get("/api/agencyzoom/health")
+            return True
+        except Exception:
+            return False
+
+
+class StorageClient(ServiceClient):
+    """Client for the Storage service (DigitalOcean Spaces)."""
+
+    def __init__(self):
+        super().__init__(settings.storage_service_url)
+
+    async def upload_from_url(
+        self,
+        url: str,
+        filename: str,
+        folder: str = "",
+        content_type: str = "application/octet-stream",
+        public: bool = True,
+    ) -> dict:
+        """Upload a file from a URL to storage."""
+        return await self.post(
+            "/api/storage/upload-from-url",
+            json={
+                "url": url,
+                "filename": filename,
+                "folder": folder,
+                "content_type": content_type,
+                "public": public,
+            },
+        )
+
+    async def list_files(self, prefix: str = "", max_keys: int = 100) -> list:
+        """List files in storage."""
+        return await self.get("/api/storage/files", params={"prefix": prefix, "max_keys": max_keys})
+
+    async def health_check(self) -> bool:
+        """Check if Storage service is healthy."""
+        try:
+            await self.get("/api/storage/health")
+            return True
+        except Exception:
+            return False
 
 
 class TeamsClient(ServiceClient):
@@ -140,5 +203,6 @@ class OneDriveClient(ServiceClient):
 # Singleton instances
 ringcentral = RingCentralClient()
 agencyzoom = AgencyZoomClient()
+storage = StorageClient()
 teams = TeamsClient()
 onedrive = OneDriveClient()

@@ -1,0 +1,9 @@
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# HTTP client for AgencyZoom API
+httpx>=0.25.0
+
+# Settings management
+pydantic-settings>=2.0.0

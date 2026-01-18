@@ -54,6 +54,18 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install storage-service dependencies
+        run: |
+          cd services/storage-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Install agencyzoom-service dependencies
+        run: |
+          cd services/agencyzoom-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
       - name: Run tests
         run: |
           cd services/test-service
@@ -110,6 +122,24 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/workflow-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/workflow-service:latest
+
+      - name: Build and push storage-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/storage-service
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/storage-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/storage-service:latest
+
+      - name: Build and push agencyzoom-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/agencyzoom-service
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/agencyzoom-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/agencyzoom-service:latest
 
   # ===========================================================================
   # DEPLOY

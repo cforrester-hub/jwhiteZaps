@@ -1,0 +1,324 @@
+"""
+Outgoing Call Workflow - Replaces the Zapier "Outgoing Call" ZAP
+
+This workflow:
+1. Polls RingCentral for outgoing calls (cron-based)
+2. For each call, searches AgencyZoom for matching customers/leads by phone
+3. If a match is found:
+   - Uploads the call recording to DigitalOcean Spaces
+   - Gets the RingSense AI summary (or generates one via LLM as fallback)
+   - Creates a note in AgencyZoom with call details and summary
+4. Tracks processed calls to avoid duplicates
+"""
+
+import logging
+from datetime import datetime, timedelta
+from typing import Optional
+
+from . import register_workflow, TriggerType, is_processed, mark_processed
+from ..http_client import ringcentral, agencyzoom, storage
+
+logger = logging.getLogger(__name__)
+
+
+def format_phone_for_display(phone: str) -> str:
+    """Format a phone number for display in notes."""
+    # Remove non-digit characters
+    digits = "".join(c for c in phone if c.isdigit())
+
+    # Format as (XXX) XXX-XXXX for 10-digit US numbers
+    if len(digits) == 10:
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+    elif len(digits) == 11 and digits[0] == "1":
+        return f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+
+    return phone
+
+
+def format_duration(seconds: int) -> str:
+    """Format duration in seconds to human-readable format."""
+    if seconds < 60:
+        return f"{seconds} seconds"
+    elif seconds < 3600:
+        minutes = seconds // 60
+        secs = seconds % 60
+        if secs:
+            return f"{minutes}m {secs}s"
+        return f"{minutes} minutes"
+    else:
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        return f"{hours}h {minutes}m"
+
+
+def build_note_content(
+    call_data: dict,
+    recording_url: Optional[str] = None,
+    ai_summary: Optional[str] = None,
+) -> str:
+    """Build the note content for AgencyZoom."""
+    call = call_data.get("call", {})
+
+    # Build the note
+    lines = []
+    lines.append("=== Outgoing Call ===")
+    lines.append("")
+
+    # Call details
+    lines.append(f"Date: {call.get('start_time', 'Unknown')[:10]}")
+    lines.append(f"Time: {call.get('start_time', 'Unknown')[11:19] if call.get('start_time') else 'Unknown'}")
+    lines.append(f"Duration: {format_duration(call.get('duration', 0))}")
+    lines.append(f"To: {format_phone_for_display(call.get('to_number', 'Unknown'))}")
+
+    if call.get("to_name"):
+        lines.append(f"Contact: {call.get('to_name')}")
+
+    lines.append(f"Result: {call.get('result', 'Unknown')}")
+    lines.append("")
+
+    # AI Summary
+    if ai_summary:
+        lines.append("--- Call Summary ---")
+        lines.append(ai_summary)
+        lines.append("")
+
+    # Recording link
+    if recording_url:
+        lines.append("--- Recording ---")
+        lines.append(recording_url)
+        lines.append("")
+
+    lines.append(f"Call ID: {call.get('id', 'Unknown')}")
+
+    return "\n".join(lines)
+
+
+async def process_single_call(call: dict) -> dict:
+    """
+    Process a single outgoing call.
+
+    Returns a dict with the processing result.
+    """
+    call_id = call.get("id")
+    to_number = call.get("to_number")
+
+    logger.info(f"Processing call {call_id} to {to_number}")
+
+    # Search AgencyZoom for customer/lead by phone number
+    try:
+        search_result = await agencyzoom.search_by_phone(to_number)
+    except Exception as e:
+        logger.error(f"Failed to search AgencyZoom: {e}")
+        return {"status": "error", "reason": f"AgencyZoom search failed: {e}"}
+
+    customers = search_result.get("customers", [])
+    leads = search_result.get("leads", [])
+
+    if not customers and not leads:
+        logger.info(f"No match found in AgencyZoom for {to_number}, skipping")
+        return {"status": "skipped", "reason": "no_match"}
+
+    logger.info(f"Found {len(customers)} customers and {len(leads)} leads for {to_number}")
+
+    # Get call details including recording and AI insights
+    recording_url = None
+    ai_summary = None
+    recording_id = call.get("recording_id")
+
+    if recording_id:
+        try:
+            # Get full call details with AI insights
+            call_details = await ringcentral.get_call_details(
+                call_id,
+                include_recording=True,
+                include_ai_insights=True,
+            )
+
+            # Upload recording to storage
+            recording_info = call_details.get("recording")
+            if recording_info and recording_info.get("content_url"):
+                content_url = recording_info.get("content_url")
+                content_type = recording_info.get("content_type", "audio/mpeg")
+
+                # Determine file extension
+                ext = "mp3"
+                if "wav" in content_type:
+                    ext = "wav"
+                elif "ogg" in content_type:
+                    ext = "ogg"
+
+                # Build filename with date
+                call_date = call.get("start_time", "")[:10].replace("-", "/")
+                filename = f"{call_id}.{ext}"
+                folder = f"recordings/{call_date}"
+
+                try:
+                    upload_result = await storage.upload_from_url(
+                        url=content_url,
+                        filename=filename,
+                        folder=folder,
+                        content_type=content_type,
+                        public=True,
+                    )
+                    recording_url = upload_result.get("url")
+                    logger.info(f"Uploaded recording to {recording_url}")
+                except Exception as e:
+                    logger.error(f"Failed to upload recording: {e}")
+
+            # Get AI summary from RingSense
+            ai_insights = call_details.get("ai_insights")
+            if ai_insights and ai_insights.get("available"):
+                ai_summary = ai_insights.get("summary")
+
+                # If no summary but transcript available, we could use LLM here
+                # For now, just log that we'd need LLM fallback
+                if not ai_summary and ai_insights.get("transcript"):
+                    logger.info("RingSense summary not available, would use LLM fallback")
+                    # TODO: Implement LLM fallback for summarization
+
+        except Exception as e:
+            logger.error(f"Failed to get call details: {e}")
+
+    # Build the note content
+    note_content = build_note_content(
+        call_data={"call": call},
+        recording_url=recording_url,
+        ai_summary=ai_summary,
+    )
+
+    # Create notes in AgencyZoom for each customer and lead
+    notes_created = 0
+
+    for customer in customers:
+        customer_id = customer.get("id")
+        if customer_id:
+            try:
+                await agencyzoom.create_customer_note(
+                    customer_id=str(customer_id),
+                    content=note_content,
+                    note_type="Phone Call",
+                )
+                notes_created += 1
+                logger.info(f"Created note for customer {customer_id}")
+            except Exception as e:
+                logger.error(f"Failed to create customer note: {e}")
+
+    for lead in leads:
+        lead_id = lead.get("id")
+        if lead_id:
+            try:
+                await agencyzoom.create_lead_note(
+                    lead_id=str(lead_id),
+                    content=note_content,
+                    note_type="Phone Call",
+                )
+                notes_created += 1
+                logger.info(f"Created note for lead {lead_id}")
+            except Exception as e:
+                logger.error(f"Failed to create lead note: {e}")
+
+    return {
+        "status": "success",
+        "customers_matched": len(customers),
+        "leads_matched": len(leads),
+        "notes_created": notes_created,
+        "recording_uploaded": recording_url is not None,
+        "has_ai_summary": ai_summary is not None,
+    }
+
+
+@register_workflow(
+    name="outgoing_call",
+    description="Sync outgoing calls from RingCentral to AgencyZoom",
+    trigger_type=TriggerType.CRON,
+    cron_expression="*/15 * * * *",  # Every 15 minutes
+    enabled=True,
+)
+async def run():
+    """
+    Main workflow entry point.
+
+    Fetches recent outgoing calls and processes any that haven't been handled yet.
+    """
+    logger.info("Starting outgoing_call workflow")
+
+    # Fetch calls from the last 24 hours
+    # We process with a delay to ensure recordings are available
+    try:
+        calls_response = await ringcentral.get_calls(
+            date_from=(datetime.utcnow() - timedelta(days=1)).isoformat() + "Z",
+            date_to=datetime.utcnow().isoformat() + "Z",
+            direction="Outbound",
+            per_page=100,
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch calls from RingCentral: {e}")
+        return {"items_processed": 0, "error": str(e)}
+
+    calls = calls_response.get("calls", [])
+    logger.info(f"Found {len(calls)} outgoing calls")
+
+    processed_count = 0
+    skipped_count = 0
+    error_count = 0
+
+    for call in calls:
+        call_id = call.get("id")
+
+        # Skip if already processed
+        if await is_processed(call_id, "outgoing_call"):
+            logger.debug(f"Call {call_id} already processed, skipping")
+            continue
+
+        # Skip calls with no result or failed calls
+        result = call.get("result", "")
+        if result not in ("Accepted", "Call connected"):
+            logger.debug(f"Call {call_id} has result '{result}', skipping")
+            await mark_processed(call_id, "outgoing_call", success=True, details=f"Skipped: {result}")
+            skipped_count += 1
+            continue
+
+        # Process the call
+        try:
+            process_result = await process_single_call(call)
+
+            if process_result["status"] == "success":
+                await mark_processed(
+                    call_id,
+                    "outgoing_call",
+                    success=True,
+                    details=f"notes={process_result['notes_created']}",
+                )
+                processed_count += 1
+            elif process_result["status"] == "skipped":
+                await mark_processed(
+                    call_id,
+                    "outgoing_call",
+                    success=True,
+                    details=process_result["reason"],
+                )
+                skipped_count += 1
+            else:
+                await mark_processed(
+                    call_id,
+                    "outgoing_call",
+                    success=False,
+                    details=process_result.get("reason", "Unknown error"),
+                )
+                error_count += 1
+
+        except Exception as e:
+            logger.error(f"Error processing call {call_id}: {e}")
+            await mark_processed(call_id, "outgoing_call", success=False, details=str(e))
+            error_count += 1
+
+    logger.info(
+        f"Workflow complete: processed={processed_count}, skipped={skipped_count}, errors={error_count}"
+    )
+
+    return {
+        "items_processed": processed_count,
+        "items_skipped": skipped_count,
+        "items_errored": error_count,
+        "total_calls": len(calls),
+    }

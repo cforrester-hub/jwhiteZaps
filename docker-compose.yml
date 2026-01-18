@@ -198,6 +198,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-zapier}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapier_replacement}
       RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      STORAGE_SERVICE_URL: http://storage-service:8000
+      AGENCYZOOM_SERVICE_URL: http://agencyzoom-service:8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - internal
@@ -219,6 +221,71 @@ services:
         condition: service_healthy
       ringcentral-service:
         condition: service_healthy
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
+  storage-service:
+    build:
+      context: ./services/storage-service
+      dockerfile: Dockerfile
+    container_name: storage-service
+    restart: unless-stopped
+    environment:
+      SPACES_ACCESS_KEY: ${SPACES_ACCESS_KEY}
+      SPACES_SECRET_KEY: ${SPACES_SECRET_KEY}
+      SPACES_REGION: ${SPACES_REGION:-nyc3}
+      SPACES_BUCKET: ${SPACES_BUCKET:-call-recordings}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.storage-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/storage`)"
+      - "traefik.http.routers.storage-service.entrypoints=websecure"
+      - "traefik.http.routers.storage-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.storage-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/storage/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
+  agencyzoom-service:
+    build:
+      context: ./services/agencyzoom-service
+      dockerfile: Dockerfile
+    container_name: agencyzoom-service
+    restart: unless-stopped
+    environment:
+      AGENCYZOOM_API_URL: ${AGENCYZOOM_API_URL:-https://api.agencyzoom.com}
+      AGENCYZOOM_USERNAME: ${AGENCYZOOM_USERNAME}
+      AGENCYZOOM_PASSWORD: ${AGENCYZOOM_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.agencyzoom-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/agencyzoom`)"
+      - "traefik.http.routers.agencyzoom-service.entrypoints=websecure"
+      - "traefik.http.routers.agencyzoom-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.agencyzoom-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/agencyzoom/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     logging:
       driver: loki
       options:

@@ -156,6 +156,39 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         labels: "service"
 
+  ringcentral-service:
+    build:
+      context: ./services/ringcentral-service
+      dockerfile: Dockerfile
+    container_name: ringcentral-service
+    restart: unless-stopped
+    environment:
+      RINGCENTRAL_CLIENT_ID: ${RINGCENTRAL_CLIENT_ID}
+      RINGCENTRAL_CLIENT_SECRET: ${RINGCENTRAL_CLIENT_SECRET}
+      RINGCENTRAL_JWT_TOKEN: ${RINGCENTRAL_JWT_TOKEN}
+      RINGCENTRAL_SERVER_URL: ${RINGCENTRAL_SERVER_URL:-https://platform.ringcentral.com}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ringcentral-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/ringcentral`)"
+      - "traefik.http.routers.ringcentral-service.entrypoints=websecure"
+      - "traefik.http.routers.ringcentral-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ringcentral-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/ringcentral/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
 # =============================================================================
 # NETWORKS
 # =============================================================================

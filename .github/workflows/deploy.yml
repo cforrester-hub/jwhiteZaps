@@ -42,6 +42,12 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install ringcentral-service dependencies
+        run: |
+          cd services/ringcentral-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
       - name: Run tests
         run: |
           cd services/test-service
@@ -80,6 +86,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/test-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/test-service:latest
+
+      - name: Build and push ringcentral-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ringcentral-service
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/ringcentral-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/ringcentral-service:latest
 
   # ===========================================================================
   # DEPLOY

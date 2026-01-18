@@ -30,3 +30,15 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     logging:
       driver: json-file  # Use default logging in prod (Loki requires extra setup)
+
+  # Update ringcentral-service for production - use pre-built image
+  ringcentral-service:
+    image: ghcr.io/cforrester-hub/ringcentral-service:latest
+    environment:
+      RINGCENTRAL_CLIENT_ID: ${RINGCENTRAL_CLIENT_ID}
+      RINGCENTRAL_CLIENT_SECRET: ${RINGCENTRAL_CLIENT_SECRET}
+      RINGCENTRAL_JWT_TOKEN: ${RINGCENTRAL_JWT_TOKEN}
+      RINGCENTRAL_SERVER_URL: ${RINGCENTRAL_SERVER_URL:-https://platform.ringcentral.com}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    logging:
+      driver: json-file

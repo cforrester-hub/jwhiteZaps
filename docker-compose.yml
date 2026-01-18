@@ -294,6 +294,35 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         labels: "service"
 
+  dashboard-service:
+    build:
+      context: ./services/dashboard-service
+      dockerfile: Dockerfile
+    container_name: dashboard-service
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/dashboard`)"
+      - "traefik.http.routers.dashboard-service.entrypoints=websecure"
+      - "traefik.http.routers.dashboard-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/dashboard/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
 # =============================================================================
 # NETWORKS
 # =============================================================================

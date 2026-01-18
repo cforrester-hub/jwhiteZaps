@@ -66,6 +66,12 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install dashboard-service dependencies
+        run: |
+          cd services/dashboard-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
       - name: Run tests
         run: |
           cd services/test-service
@@ -140,6 +146,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/agencyzoom-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/agencyzoom-service:latest
+
+      - name: Build and push dashboard-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/dashboard-service
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/dashboard-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/dashboard-service:latest
 
   # ===========================================================================
   # DEPLOY

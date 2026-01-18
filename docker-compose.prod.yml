@@ -51,3 +51,24 @@ services:
       - "traefik.http.services.ringcentral-service.loadbalancer.server.port=8000"
     logging:
       driver: json-file
+
+  # Update workflow-service for production - use pre-built image
+  workflow-service:
+    image: ghcr.io/cforrester-hub/workflow-service:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.workflow-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/workflows`)"
+      - "traefik.http.routers.workflow-service.entrypoints=websecure"
+      - "traefik.http.routers.workflow-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.workflow-service.loadbalancer.server.port=8000"
+    depends_on:
+      - ringcentral-service
+    logging:
+      driver: json-file

@@ -189,6 +189,42 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         labels: "service"
 
+  workflow-service:
+    build:
+      context: ./services/workflow-service
+      dockerfile: Dockerfile
+    container_name: workflow-service
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zapier}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapier_replacement}
+      RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.workflow-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/workflows`)"
+      - "traefik.http.routers.workflow-service.entrypoints=websecure"
+      - "traefik.http.routers.workflow-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.workflow-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/workflows/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ringcentral-service:
+        condition: service_healthy
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
 # =============================================================================
 # NETWORKS
 # =============================================================================

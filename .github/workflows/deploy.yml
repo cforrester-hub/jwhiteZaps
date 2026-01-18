@@ -48,6 +48,12 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install workflow-service dependencies
+        run: |
+          cd services/workflow-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
       - name: Run tests
         run: |
           cd services/test-service
@@ -95,6 +101,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/ringcentral-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/ringcentral-service:latest
+
+      - name: Build and push workflow-service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/workflow-service
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/workflow-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/workflow-service:latest
 
   # ===========================================================================
   # DEPLOY

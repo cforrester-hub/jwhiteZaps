@@ -29,7 +29,9 @@ app = FastAPI(
     title="Storage Service",
     description="File storage API using DigitalOcean Spaces",
     version="1.0.0",
-    root_path="/api/storage",
+    docs_url="/api/storage/docs",
+    redoc_url="/api/storage/redoc",
+    openapi_url="/api/storage/openapi.json",
 )
 
 
@@ -81,7 +83,7 @@ class PresignedUrlResponse(BaseModel):
 # =============================================================================
 
 
-@app.get("/health", response_model=HealthResponse, tags=["health"])
+@app.get("/api/storage/health", response_model=HealthResponse, tags=["health"])
 async def health_check():
     """Basic health check."""
     return HealthResponse(
@@ -91,7 +93,7 @@ async def health_check():
     )
 
 
-@app.get("/health/ready", response_model=HealthResponse, tags=["health"])
+@app.get("/api/storage/health/ready", response_model=HealthResponse, tags=["health"])
 async def readiness_check():
     """Readiness check - verifies Spaces connection."""
     try:
@@ -112,7 +114,7 @@ async def readiness_check():
 # =============================================================================
 
 
-@app.post("/upload", response_model=UploadResponse, tags=["files"])
+@app.post("/api/storage/upload", response_model=UploadResponse, tags=["files"])
 async def upload_file(
     file: UploadFile = File(...),
     folder: str = Form(default=""),
@@ -144,7 +146,7 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
-@app.post("/upload-from-url", response_model=UploadResponse, tags=["files"])
+@app.post("/api/storage/upload-from-url", response_model=UploadResponse, tags=["files"])
 async def upload_from_url(request: UploadFromUrlRequest):
     """
     Download a file from a URL and upload it to storage.
@@ -194,7 +196,7 @@ async def upload_from_url(request: UploadFromUrlRequest):
 # =============================================================================
 
 
-@app.get("/files", response_model=list[FileInfo], tags=["files"])
+@app.get("/api/storage/files", response_model=list[FileInfo], tags=["files"])
 async def list_files(
     prefix: str = Query(default="", description="Filter by key prefix (folder path)"),
     max_keys: int = Query(default=100, le=1000, description="Maximum number of results"),
@@ -213,7 +215,7 @@ async def list_files(
         raise HTTPException(status_code=500, detail=f"List failed: {str(e)}")
 
 
-@app.get("/files/{key:path}", tags=["files"])
+@app.get("/api/storage/files/{key:path}", tags=["files"])
 async def get_file_info(key: str):
     """
     Get information about a specific file.
@@ -246,7 +248,7 @@ async def get_file_info(key: str):
         raise HTTPException(status_code=500, detail=f"Failed: {str(e)}")
 
 
-@app.get("/presigned-url/{key:path}", response_model=PresignedUrlResponse, tags=["files"])
+@app.get("/api/storage/presigned-url/{key:path}", response_model=PresignedUrlResponse, tags=["files"])
 async def get_presigned_url(
     key: str,
     expires_in: int = Query(default=3600, le=86400, description="URL expiration in seconds"),
@@ -276,7 +278,7 @@ async def get_presigned_url(
 # =============================================================================
 
 
-@app.delete("/files/{key:path}", tags=["files"])
+@app.delete("/api/storage/files/{key:path}", tags=["files"])
 async def delete_file(key: str):
     """
     Delete a file from storage.

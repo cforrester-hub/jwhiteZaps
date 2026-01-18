@@ -15,15 +15,24 @@ settings = get_settings()
 
 def normalize_phone(phone: str) -> str:
     """
-    Normalize phone number to digits only for comparison.
+    Normalize phone number for AgencyZoom search.
+
+    AgencyZoom expects 10-digit US phone numbers without country code.
 
     Args:
-        phone: Phone number in any format
+        phone: Phone number in any format (e.g., "+18057946787", "(805) 794-6787")
 
     Returns:
-        Digits only (e.g., "1234567890")
+        10-digit phone number (e.g., "8057946787")
     """
-    return re.sub(r"\D", "", phone)
+    # Strip all non-digit characters
+    digits = re.sub(r"\D", "", phone)
+
+    # Remove leading 1 for US numbers (11 digits starting with 1)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+
+    return digits
 
 
 async def _make_request(method: str, endpoint: str, **kwargs) -> httpx.Response:

@@ -186,36 +186,41 @@ async def process_single_call(call: dict) -> dict:
         ai_summary=ai_summary,
     )
 
-    # Create notes in AgencyZoom for each customer and lead
+    # Create notes in AgencyZoom
+    # Priority: Create note on CUSTOMER if they exist (even if also a lead)
+    # Only create note on LEAD if they are NOT also a customer
     notes_created = 0
 
-    for customer in customers:
-        customer_id = customer.get("id")
-        if customer_id:
-            try:
-                await agencyzoom.create_customer_note(
-                    customer_id=str(customer_id),
-                    content=note_content,
-                    note_type="Phone Call",
-                )
-                notes_created += 1
-                logger.info(f"Created note for customer {customer_id}")
-            except Exception as e:
-                logger.error(f"Failed to create customer note: {e}")
-
-    for lead in leads:
-        lead_id = lead.get("id")
-        if lead_id:
-            try:
-                await agencyzoom.create_lead_note(
-                    lead_id=str(lead_id),
-                    content=note_content,
-                    note_type="Phone Call",
-                )
-                notes_created += 1
-                logger.info(f"Created note for lead {lead_id}")
-            except Exception as e:
-                logger.error(f"Failed to create lead note: {e}")
+    if customers:
+        # Person is a customer - create note(s) on customer record(s) only
+        for customer in customers:
+            customer_id = customer.get("id")
+            if customer_id:
+                try:
+                    await agencyzoom.create_customer_note(
+                        customer_id=str(customer_id),
+                        content=note_content,
+                        note_type="Phone Call",
+                    )
+                    notes_created += 1
+                    logger.info(f"Created note for customer {customer_id}")
+                except Exception as e:
+                    logger.error(f"Failed to create customer note: {e}")
+    elif leads:
+        # Person is only a lead (not a customer) - create note(s) on lead record(s)
+        for lead in leads:
+            lead_id = lead.get("id")
+            if lead_id:
+                try:
+                    await agencyzoom.create_lead_note(
+                        lead_id=str(lead_id),
+                        content=note_content,
+                        note_type="Phone Call",
+                    )
+                    notes_created += 1
+                    logger.info(f"Created note for lead {lead_id}")
+                except Exception as e:
+                    logger.error(f"Failed to create lead note: {e}")
 
     return {
         "status": "success",

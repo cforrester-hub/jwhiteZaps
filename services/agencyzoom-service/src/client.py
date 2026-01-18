@@ -111,7 +111,8 @@ async def search_customers(
     data = response.json()
 
     # Handle the response format from AgencyZoom
-    customers = data.get("data", [])
+    # API returns {"totalCount": N, "customers": [...]}
+    customers = data.get("customers", [])
     total = data.get("totalCount", len(customers))
 
     return {
@@ -166,8 +167,9 @@ async def search_leads(
 
     data = response.json()
 
-    # Handle the response format
-    leads = data.get("data", [])
+    # Handle the response format from AgencyZoom
+    # API likely returns {"totalCount": N, "leads": [...]}
+    leads = data.get("leads", [])
     total = data.get("totalCount", len(leads))
 
     return {

@@ -40,5 +40,15 @@ services:
       RINGCENTRAL_JWT_TOKEN: ${RINGCENTRAL_JWT_TOKEN}
       RINGCENTRAL_SERVER_URL: ${RINGCENTRAL_SERVER_URL:-https://platform.ringcentral.com}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.ringcentral-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/ringcentral`)"
+      - "traefik.http.routers.ringcentral-service.entrypoints=websecure"
+      - "traefik.http.routers.ringcentral-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ringcentral-service.loadbalancer.server.port=8000"
     logging:
       driver: json-file

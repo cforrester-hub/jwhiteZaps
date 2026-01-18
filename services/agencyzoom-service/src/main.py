@@ -70,7 +70,7 @@ class CustomerSearchRequest(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    page: int = 1
+    page: int = 0  # AgencyZoom uses 0-indexed pages
     page_size: int = 20
 
 
@@ -79,7 +79,7 @@ class LeadSearchRequest(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    page: int = 1
+    page: int = 0  # AgencyZoom uses 0-indexed pages
     page_size: int = 20
 
 
@@ -356,7 +356,7 @@ async def debug_raw_customer_search(phone: str):
     headers = await get_auth_headers()
 
     payload = {
-        "page": 1,
+        "page": 0,  # AgencyZoom uses 0-indexed pages
         "pageSize": 20,
         "phone": normalized,
     }

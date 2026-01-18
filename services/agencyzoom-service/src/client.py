@@ -116,7 +116,7 @@ async def search_customers(
     phone: Optional[str] = None,
     email: Optional[str] = None,
     name: Optional[str] = None,
-    page: int = 1,
+    page: int = 0,
     page_size: int = 20,
 ) -> dict:
     """
@@ -126,13 +126,13 @@ async def search_customers(
         phone: Phone number to search for
         email: Email to search for
         name: Name to search for
-        page: Page number (1-indexed)
+        page: Page number (0-indexed, per AgencyZoom API)
         page_size: Number of results per page
 
     Returns:
         dict with 'customers' list and pagination info
     """
-    # Build search payload
+    # Build search payload - AgencyZoom uses 0-indexed pages
     payload = {
         "page": page,
         "pageSize": page_size,
@@ -144,7 +144,7 @@ async def search_customers(
     if email:
         payload["email"] = email
     if name:
-        payload["name"] = name
+        payload["fullName"] = name  # AgencyZoom uses fullName for name search
 
     logger.info(f"Searching customers with: {payload}")
 
@@ -174,7 +174,7 @@ async def search_leads(
     phone: Optional[str] = None,
     email: Optional[str] = None,
     name: Optional[str] = None,
-    page: int = 1,
+    page: int = 0,
     page_size: int = 20,
 ) -> dict:
     """
@@ -184,13 +184,13 @@ async def search_leads(
         phone: Phone number to search for (customerPhone field)
         email: Email to search for
         name: Name to search for
-        page: Page number (1-indexed)
+        page: Page number (0-indexed, per AgencyZoom API)
         page_size: Number of results per page
 
     Returns:
         dict with 'leads' list and pagination info
     """
-    # Build search payload
+    # Build search payload - AgencyZoom uses 0-indexed pages
     payload = {
         "page": page,
         "pageSize": page_size,

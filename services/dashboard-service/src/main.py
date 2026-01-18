@@ -7,6 +7,7 @@ A simple dashboard that displays the health status of all microservices.
 import asyncio
 import logging
 from datetime import datetime
+from string import Template
 from typing import Optional
 
 import httpx
@@ -114,9 +115,38 @@ async def get_all_service_statuses() -> DashboardData:
     )
 
 
-# HTML template for the dashboard
-DASHBOARD_HTML = """
-<!DOCTYPE html>
+def generate_dashboard_html(data: DashboardData) -> str:
+    """Generate the dashboard HTML."""
+    # Format timestamp
+    checked_at = datetime.fromisoformat(data.checked_at).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Generate service cards
+    service_cards = []
+    for service in data.services:
+        details = []
+        if service.response_time_ms is not None:
+            details.append(f'<p class="response-time">Response: {service.response_time_ms}ms</p>')
+        if service.error:
+            details.append(f'<p class="error-message">Error: {service.error}</p>')
+
+        details_html = "\n".join(details) if details else "<p>No additional info</p>"
+
+        card = f'''
+        <div class="service-card">
+            <div class="service-header">
+                <span class="service-name">{service.name}</span>
+                <span class="status-badge {service.status}">{service.status}</span>
+            </div>
+            <div class="service-details">
+                {details_html}
+            </div>
+        </div>
+        '''
+        service_cards.append(card)
+
+    service_cards_html = "\n".join(service_cards)
+
+    html = f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -124,176 +154,162 @@ DASHBOARD_HTML = """
     <meta http-equiv="refresh" content="30">
     <title>Service Dashboard - JWhite Zaps</title>
     <style>
-        * {
+        * {{
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
+        }}
 
-        body {
+        body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             min-height: 100vh;
             color: #e4e4e4;
             padding: 20px;
-        }
+        }}
 
-        .container {
+        .container {{
             max-width: 900px;
             margin: 0 auto;
-        }
+        }}
 
-        header {
+        header {{
             text-align: center;
             margin-bottom: 30px;
-        }
+        }}
 
-        h1 {
+        h1 {{
             font-size: 2rem;
             margin-bottom: 10px;
             color: #fff;
-        }
+        }}
 
-        .summary {
+        .summary {{
             display: flex;
             justify-content: center;
             gap: 20px;
             margin-bottom: 30px;
-        }
+        }}
 
-        .summary-card {
+        .summary-card {{
             background: rgba(255, 255, 255, 0.1);
             border-radius: 12px;
             padding: 20px 40px;
             text-align: center;
             backdrop-filter: blur(10px);
-        }
+        }}
 
-        .summary-card.healthy {
+        .summary-card.healthy {{
             border: 2px solid #4ade80;
-        }
+        }}
 
-        .summary-card.total {
+        .summary-card.total {{
             border: 2px solid #60a5fa;
-        }
+        }}
 
-        .summary-number {
+        .summary-number {{
             font-size: 3rem;
             font-weight: bold;
-        }
+        }}
 
-        .summary-card.healthy .summary-number {
+        .summary-card.healthy .summary-number {{
             color: #4ade80;
-        }
+        }}
 
-        .summary-card.total .summary-number {
+        .summary-card.total .summary-number {{
             color: #60a5fa;
-        }
+        }}
 
-        .summary-label {
+        .summary-label {{
             font-size: 0.9rem;
             color: #a0a0a0;
             margin-top: 5px;
-        }
+        }}
 
-        .services-grid {
+        .services-grid {{
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 20px;
-        }
+        }}
 
-        .service-card {
+        .service-card {{
             background: rgba(255, 255, 255, 0.05);
             border-radius: 12px;
             padding: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
             transition: transform 0.2s, box-shadow 0.2s;
-        }
+        }}
 
-        .service-card:hover {
+        .service-card:hover {{
             transform: translateY(-2px);
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-        }
+        }}
 
-        .service-header {
+        .service-header {{
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 15px;
-        }
+        }}
 
-        .service-name {
+        .service-name {{
             font-weight: 600;
             font-size: 1.1rem;
-        }
+        }}
 
-        .status-badge {
+        .status-badge {{
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 0.8rem;
             font-weight: 600;
             text-transform: uppercase;
-        }
+        }}
 
-        .status-badge.healthy {
+        .status-badge.healthy {{
             background: rgba(74, 222, 128, 0.2);
             color: #4ade80;
-        }
+        }}
 
-        .status-badge.unhealthy {
+        .status-badge.unhealthy {{
             background: rgba(248, 113, 113, 0.2);
             color: #f87171;
-        }
+        }}
 
-        .status-badge.unknown {
+        .status-badge.unknown {{
             background: rgba(251, 191, 36, 0.2);
             color: #fbbf24;
-        }
+        }}
 
-        .service-details {
+        .service-details {{
             font-size: 0.85rem;
             color: #a0a0a0;
-        }
+        }}
 
-        .service-details p {
+        .service-details p {{
             margin: 5px 0;
-        }
+        }}
 
-        .response-time {
+        .response-time {{
             color: #60a5fa;
-        }
+        }}
 
-        .error-message {
+        .error-message {{
             color: #f87171;
             font-style: italic;
-        }
+        }}
 
-        footer {
+        footer {{
             text-align: center;
             margin-top: 40px;
             color: #666;
             font-size: 0.85rem;
-        }
+        }}
 
-        .refresh-note {
+        .refresh-note {{
             margin-top: 10px;
             font-size: 0.8rem;
             color: #666;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 50px;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .loading-text {
-            animation: pulse 1.5s infinite;
-        }
+        }}
     </style>
 </head>
 <body>
@@ -305,17 +321,17 @@ DASHBOARD_HTML = """
 
         <div class="summary">
             <div class="summary-card healthy">
-                <div class="summary-number">{healthy_count}</div>
+                <div class="summary-number">{data.healthy_count}</div>
                 <div class="summary-label">Healthy</div>
             </div>
             <div class="summary-card total">
-                <div class="summary-number">{total_count}</div>
+                <div class="summary-number">{data.total_count}</div>
                 <div class="summary-label">Total Services</div>
             </div>
         </div>
 
         <div class="services-grid">
-            {service_cards}
+            {service_cards_html}
         </div>
 
         <footer>
@@ -323,37 +339,9 @@ DASHBOARD_HTML = """
         </footer>
     </div>
 </body>
-</html>
-"""
+</html>'''
 
-SERVICE_CARD_TEMPLATE = """
-<div class="service-card">
-    <div class="service-header">
-        <span class="service-name">{name}</span>
-        <span class="status-badge {status}">{status}</span>
-    </div>
-    <div class="service-details">
-        {details}
-    </div>
-</div>
-"""
-
-
-def render_service_card(service: ServiceStatus) -> str:
-    """Render a single service card."""
-    details = []
-
-    if service.response_time_ms is not None:
-        details.append(f'<p class="response-time">Response: {service.response_time_ms}ms</p>')
-
-    if service.error:
-        details.append(f'<p class="error-message">Error: {service.error}</p>')
-
-    return SERVICE_CARD_TEMPLATE.format(
-        name=service.name,
-        status=service.status,
-        details="\n".join(details) if details else "<p>No additional info</p>",
-    )
+    return html
 
 
 @app.get("/api/dashboard/health")
@@ -372,21 +360,7 @@ async def get_status():
 async def dashboard():
     """Render the dashboard HTML page."""
     data = await get_all_service_statuses()
-
-    service_cards = "\n".join(
-        render_service_card(service) for service in data.services
-    )
-
-    # Format the timestamp for display
-    checked_at = datetime.fromisoformat(data.checked_at).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    html = DASHBOARD_HTML.format(
-        checked_at=checked_at,
-        healthy_count=data.healthy_count,
-        total_count=data.total_count,
-        service_cards=service_cards,
-    )
-
+    html = generate_dashboard_html(data)
     return HTMLResponse(content=html)
 
 

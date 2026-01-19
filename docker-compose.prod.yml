@@ -170,6 +170,24 @@ services:
     logging:
       driver: json-file
 
+  # Static file server for downloads (desktop app, etc.)
+  downloads:
+    image: nginx:alpine
+    volumes:
+      - /root/app/downloads:/usr/share/nginx/html:ro
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.downloads.rule=Host(`${DOMAIN}`) && PathPrefix(`/downloads`)"
+      - "traefik.http.routers.downloads.entrypoints=websecure"
+      - "traefik.http.routers.downloads.tls.certresolver=letsencrypt"
+      - "traefik.http.middlewares.downloads-strip.stripprefix.prefixes=/downloads"
+      - "traefik.http.routers.downloads.middlewares=downloads-strip"
+      - "traefik.http.services.downloads.loadbalancer.server.port=80"
+    logging:
+      driver: json-file
+
   # Transcription service - use pre-built image
   transcription-service:
     image: ghcr.io/cforrester-hub/transcription-service:latest

@@ -186,6 +186,40 @@ async def run_workflow_by_name(workflow_name: str):
     return WorkflowRunResponse(**result)
 
 
+@app.get("/api/workflows/processed/{workflow_name}")
+async def get_processed_items(workflow_name: str, limit: int = 100):
+    """
+    Get processed items for a workflow.
+    Useful for debugging and auditing which items have been processed.
+    """
+    from sqlalchemy import select
+    from .database import async_session, ProcessedItem
+
+    async with async_session() as session:
+        stmt = (
+            select(ProcessedItem)
+            .where(ProcessedItem.workflow_name == workflow_name)
+            .order_by(ProcessedItem.processed_at.desc())
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        items = result.scalars().all()
+
+    return {
+        "workflow_name": workflow_name,
+        "count": len(items),
+        "items": [
+            {
+                "id": item.id,
+                "processed_at": item.processed_at.isoformat() if item.processed_at else None,
+                "success": item.success,
+                "details": item.details,
+            }
+            for item in items
+        ],
+    }
+
+
 @app.delete("/api/workflows/processed/{workflow_name}")
 async def clear_processed_items(workflow_name: str):
     """

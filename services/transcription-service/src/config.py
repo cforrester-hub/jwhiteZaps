@@ -12,7 +12,12 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
 
     # Model Configuration
-    whisper_model: str = "whisper-1"  # or "gpt-4o-mini-transcribe" for cheaper
+    # gpt-4o-transcribe is more accurate than whisper-1, especially for:
+    # - Spelled-out names and letters
+    # - Accents and varying speech patterns
+    # - Noisy audio
+    # Same price as whisper-1: $0.006/minute
+    whisper_model: str = "gpt-4o-transcribe"
     summary_model: str = "gpt-4o-mini"  # Fast and cheap for summaries
 
     # Service Configuration

@@ -36,7 +36,7 @@ async def download_audio(url: str) -> bytes:
 
 async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> str:
     """
-    Transcribe audio using OpenAI Whisper.
+    Transcribe audio using OpenAI's transcription API.
 
     Args:
         audio_data: Raw audio bytes
@@ -53,6 +53,14 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
         tmp_file.write(audio_data)
         tmp_path = tmp_file.name
 
+    # Build a prompt to help with transcription accuracy
+    # This helps the model understand context and handle spelled-out names
+    prompt = """This is a voicemail or phone call for an insurance agency.
+The caller may spell out their name letter by letter (e.g., "R-O-B-A-S-C-I-O-T-T-I").
+When letters are spelled out, transcribe them as individual letters with hyphens.
+Common topics include: policy numbers, insurance claims, renewals, quotes, and coverage questions.
+Names mentioned may be unusual - transcribe them phonetically if unclear."""
+
     try:
         logger.info(f"Transcribing audio with {settings.whisper_model}...")
         with open(tmp_path, "rb") as audio_file:
@@ -60,6 +68,7 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
                 model=settings.whisper_model,
                 file=audio_file,
                 response_format="text",
+                prompt=prompt,
             )
         logger.info(f"Transcription complete: {len(transcript)} characters")
         return transcript

@@ -60,6 +60,7 @@ services:
       RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
       STORAGE_SERVICE_URL: http://storage-service:8000
       AGENCYZOOM_SERVICE_URL: http://agencyzoom-service:8000
+      TRANSCRIPTION_SERVICE_URL: http://transcription-service:8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - internal
@@ -74,6 +75,7 @@ services:
       - ringcentral-service
       - storage-service
       - agencyzoom-service
+      - transcription-service
     logging:
       driver: json-file
 
@@ -132,5 +134,25 @@ services:
       - "traefik.http.routers.dashboard-service.entrypoints=websecure"
       - "traefik.http.routers.dashboard-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
+    logging:
+      driver: json-file
+
+  # Transcription service - use pre-built image
+  transcription-service:
+    image: ghcr.io/cforrester-hub/transcription-service:latest
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      SUMMARY_MODEL: ${SUMMARY_MODEL:-gpt-4o-mini}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.transcription-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/transcription`)"
+      - "traefik.http.routers.transcription-service.entrypoints=websecure"
+      - "traefik.http.routers.transcription-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.transcription-service.loadbalancer.server.port=8000"
     logging:
       driver: json-file

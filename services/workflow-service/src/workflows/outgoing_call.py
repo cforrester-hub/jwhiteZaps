@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from . import register_workflow, TriggerType, is_processed, mark_processed
-from ..http_client import ringcentral, agencyzoom, storage
+from ..http_client import ringcentral, agencyzoom, storage, transcription
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,7 @@ def build_note_content(
     direction: str = "Outbound",
     recording_url: Optional[str] = None,
     ai_summary: Optional[str] = None,
+    action_items: Optional[list] = None,
 ) -> str:
     """
     Build the note content for AgencyZoom using HTML format.
@@ -103,6 +104,13 @@ def build_note_content(
     # Add AI summary if available
     if ai_summary:
         html += f'''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>📝 AI SUMMARY</strong><div>{ai_summary}</div></div>'''
+
+    # Add action items if available
+    if action_items:
+        html += '''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>✅ ACTION ITEMS</strong><ul style="margin:5px 0;padding-left:20px;">'''
+        for item in action_items:
+            html += f'''<li>{item}</li>'''
+        html += '''</ul></div>'''
 
     html += '''</td><td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;"><strong>RECORDING INFORMATION</strong>'''
 
@@ -146,7 +154,9 @@ async def process_single_call(call: dict) -> dict:
     # Get call details including recording and AI insights
     recording_url = None
     ai_summary = None
+    action_items = []
     recording_id = call.get("recording_id")
+    content_url = None
 
     if recording_id:
         try:
@@ -188,16 +198,28 @@ async def process_single_call(call: dict) -> dict:
                 except Exception as e:
                     logger.error(f"Failed to upload recording: {e}")
 
-            # Get AI summary from RingSense
+            # Try RingSense first for AI summary
             ai_insights = call_details.get("ai_insights")
             if ai_insights and ai_insights.get("available"):
                 ai_summary = ai_insights.get("summary")
 
-                # If no summary but transcript available, we could use LLM here
-                # For now, just log that we'd need LLM fallback
-                if not ai_summary and ai_insights.get("transcript"):
-                    logger.info("RingSense summary not available, would use LLM fallback")
-                    # TODO: Implement LLM fallback for summarization
+            # If no RingSense summary, use transcription service
+            if not ai_summary and content_url:
+                logger.info("RingSense not available, using transcription service")
+                try:
+                    # Build context for better summarization
+                    context = f"Outbound call to {to_number}"
+
+                    transcription_result = await transcription.transcribe_and_summarize(
+                        audio_url=content_url,
+                        context=context,
+                        filename=f"{call_id}.{ext}" if 'ext' in dir() else "audio.mp3",
+                    )
+                    ai_summary = transcription_result.get("summary")
+                    action_items = transcription_result.get("action_items", [])
+                    logger.info(f"Transcription complete: {len(ai_summary or '')} char summary, {len(action_items)} action items")
+                except Exception as e:
+                    logger.warning(f"Transcription service failed, continuing without summary: {e}")
 
         except Exception as e:
             logger.error(f"Failed to get call details: {e}")
@@ -208,6 +230,7 @@ async def process_single_call(call: dict) -> dict:
         direction="Outbound",
         recording_url=recording_url,
         ai_summary=ai_summary,
+        action_items=action_items,
     )
 
     # Create notes in AgencyZoom

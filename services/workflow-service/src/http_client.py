@@ -182,6 +182,46 @@ class StorageClient(ServiceClient):
             return False
 
 
+class TranscriptionClient(ServiceClient):
+    """Client for the Transcription service (OpenAI Whisper + GPT)."""
+
+    def __init__(self):
+        super().__init__(settings.transcription_service_url)
+
+    async def transcribe_and_summarize(
+        self,
+        audio_url: str,
+        context: str = None,
+        filename: str = "audio.mp3",
+    ) -> dict:
+        """
+        Transcribe audio and generate summary.
+
+        Args:
+            audio_url: URL to download the audio from
+            context: Optional context about the call (e.g., "Inbound call from John Doe")
+            filename: Filename hint for audio format
+
+        Returns:
+            dict with 'transcript', 'summary', and 'action_items'
+        """
+        payload = {
+            "audio_url": audio_url,
+            "filename": filename,
+        }
+        if context:
+            payload["context"] = context
+        return await self.post("/api/transcription/process", json=payload)
+
+    async def health_check(self) -> bool:
+        """Check if Transcription service is healthy."""
+        try:
+            await self.get("/api/transcription/health")
+            return True
+        except Exception:
+            return False
+
+
 class TeamsClient(ServiceClient):
     """Client for the Microsoft Teams service (placeholder)."""
 
@@ -204,5 +244,6 @@ class OneDriveClient(ServiceClient):
 ringcentral = RingCentralClient()
 agencyzoom = AgencyZoomClient()
 storage = StorageClient()
+transcription = TranscriptionClient()
 teams = TeamsClient()
 onedrive = OneDriveClient()

@@ -200,6 +200,7 @@ services:
       RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
       STORAGE_SERVICE_URL: http://storage-service:8000
       AGENCYZOOM_SERVICE_URL: http://agencyzoom-service:8000
+      TRANSCRIPTION_SERVICE_URL: http://transcription-service:8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - internal
@@ -222,6 +223,8 @@ services:
       storage-service:
         condition: service_healthy
       agencyzoom-service:
+        condition: service_healthy
+      transcription-service:
         condition: service_healthy
     logging:
       driver: loki
@@ -313,6 +316,38 @@ services:
       - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/dashboard/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
+  transcription-service:
+    build:
+      context: ./services/transcription-service
+      dockerfile: Dockerfile
+    container_name: transcription-service
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      WHISPER_MODEL: ${WHISPER_MODEL:-whisper-1}
+      SUMMARY_MODEL: ${SUMMARY_MODEL:-gpt-4o-mini}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.transcription-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/transcription`)"
+      - "traefik.http.routers.transcription-service.entrypoints=websecure"
+      - "traefik.http.routers.transcription-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.transcription-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/transcription/health"]
       interval: 30s
       timeout: 10s
       retries: 3

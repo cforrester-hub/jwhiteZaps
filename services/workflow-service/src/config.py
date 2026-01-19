@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ringcentral_service_url: str = "http://ringcentral-service:8000"
     agencyzoom_service_url: str = "http://agencyzoom-service:8000"
     storage_service_url: str = "http://storage-service:8000"
+    transcription_service_url: str = "http://transcription-service:8000"
     teams_service_url: str = "http://teams-service:8000"
     onedrive_service_url: str = "http://onedrive-service:8000"
 

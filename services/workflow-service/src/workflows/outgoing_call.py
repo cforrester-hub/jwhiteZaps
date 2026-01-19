@@ -97,46 +97,21 @@ def build_note_content(
     # Header line: emoji + direction - other party - result
     header = f"📞 {direction} - {other_party} - {result}"
 
-    # Build the HTML table (no emojis inside table - they don't render in AZ)
-    html = f'''{header}
-<table style="width:100%;border-collapse:collapse;margin:0;padding:0;">
-<tr>
-<td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;">
-<strong>CALL INFORMATION</strong>
-<div><b>Date & Time:</b> {date_time}</div>
-<div><b>From:</b> {from_number}</div>
-<div><b>To:</b> {to_number}</div>
-<div><b>Duration:</b> {duration}</div>
-<div><b>Result:</b> {result}</div>'''
+    # Build the HTML table - full width, no gaps
+    html = f'''{header}<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_number}</div><div>👤 <b>To:</b> {to_number}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
 
     # Add AI summary if available
     if ai_summary:
-        html += f'''
-<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;">
-<strong>AI SUMMARY</strong>
-<div>{ai_summary}</div>
-</div>'''
+        html += f'''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>📝 AI SUMMARY</strong><div>{ai_summary}</div></div>'''
 
-    html += '''
-</td>
-<td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;">
-<strong>RECORDING INFORMATION</strong>'''
+    html += '''</td><td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;"><strong>RECORDING INFORMATION</strong>'''
 
     if recording_url:
-        html += f'''
-<div><b>Recording ID:</b> {recording_id}</div>
-<div><b>Recording Link:</b> <a href="{recording_url}">{recording_url}</a></div>'''
+        html += f'''<div>💾 <b>Recording ID:</b> {recording_id}</div><div>🔗 <b>Recording Link:</b> <a href="{recording_url}">{recording_url}</a></div>'''
     else:
-        html += '''
-<div>No recording available</div>'''
+        html += '''<div>No recording available</div>'''
 
-    html += f'''
-<div style="margin-top:10px;font-size:0.9em;color:#666;">
-<b>Call ID:</b> {call_id}
-</div>
-</td>
-</tr>
-</table>'''
+    html += f'''<div style="margin-top:10px;font-size:0.9em;color:#666;"><b>Call ID:</b> {call_id}</div></td></tr></table>'''
 
     return html
 

@@ -2,6 +2,7 @@
 
 import logging
 from contextlib import asynccontextmanager
+from datetime import date, timezone
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Request
@@ -95,16 +96,36 @@ async def update_ringcentral_dnd(
         return False
 
 
+def is_today(timesheet_date: str | None) -> bool:
+    """Check if the timesheet date matches today's date."""
+    if not timesheet_date:
+        return False
+    today_str = date.today().strftime("%Y-%m-%d")
+    return timesheet_date == today_str
+
+
 async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
     """
     Process a timesheet event after acquiring dedupe lock.
 
+    - Checks if the timesheet is for today (skips past timecards)
     - Looks up the employee in user_mappings
     - Calls RingCentral to update DND status based on clock status
     """
     logger.info(
-        f"Processing event: {event.action.value} for employee {event.employee_id}"
+        f"Processing event: {event.action.value} for employee {event.employee_id} "
+        f"(timesheet date: {event.timesheet_date})"
     )
+
+    # Only process timesheets for today - skip past timecard approvals
+    if not is_today(event.timesheet_date):
+        logger.info(
+            f"Skipping RingCentral update - timesheet date {event.timesheet_date} "
+            f"is not today ({date.today().strftime('%Y-%m-%d')})"
+        )
+        if event.dedupe_key:
+            await mark_dedupe_completed(event.dedupe_key)
+        return
 
     # Look up employee in shared user_mappings
     user = find_by_deputy_id(str(event.employee_id))
@@ -272,6 +293,8 @@ async def test_webhook(request: Request):
 
     event = parse_timesheet_webhook(payload)
 
+    today_str = date.today().strftime("%Y-%m-%d")
+
     return {
         "action": event.action.value,
         "desired_dnd_status": (
@@ -283,6 +306,9 @@ async def test_webhook(request: Request):
         "dedupe_key": event.dedupe_key,
         "reason": event.reason,
         "topic": event.topic,
+        "timesheet_date": event.timesheet_date,
+        "is_today": event.timesheet_date == today_str,
+        "would_update_ringcentral": event.timesheet_date == today_str,
         "debug_break": (
             {
                 "start": event.debug_break.start,

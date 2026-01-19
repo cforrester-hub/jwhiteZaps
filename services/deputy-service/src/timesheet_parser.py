@@ -56,6 +56,7 @@ class ParsedTimesheetEvent:
     reason: str
     topic: Optional[str] = None
     debug_break: Optional[BreakSlot] = None
+    timesheet_date: Optional[str] = None  # Date string from timesheet (YYYY-MM-DD)
 
 
 def _to_number(value: Any) -> Optional[int]:
@@ -224,6 +225,18 @@ def parse_timesheet_webhook(payload: dict) -> ParsedTimesheetEvent:
     start_time = _to_number(ts_obj.get("StartTime"))
     end_time = _to_number(ts_obj.get("EndTime"))
 
+    # Extract timesheet date (can be string like "2026-01-18" or timestamp)
+    timesheet_date = ts_obj.get("Date")
+    if timesheet_date and isinstance(timesheet_date, str):
+        # Already a date string, use as-is (take first 10 chars for YYYY-MM-DD)
+        timesheet_date = timesheet_date[:10] if len(timesheet_date) >= 10 else timesheet_date
+    elif start_time:
+        # Convert start_time unix timestamp to date string
+        from datetime import datetime, timezone
+        timesheet_date = datetime.fromtimestamp(start_time, tz=timezone.utc).strftime("%Y-%m-%d")
+    else:
+        timesheet_date = None
+
     created = ts_obj.get("Created")
     modified = ts_obj.get("Modified")
 
@@ -315,4 +328,5 @@ def parse_timesheet_webhook(payload: dict) -> ParsedTimesheetEvent:
         reason=reason,
         topic=topic or None,
         debug_break=debug_break,
+        timesheet_date=timesheet_date,
     )

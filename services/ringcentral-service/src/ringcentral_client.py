@@ -195,6 +195,124 @@ class RingCentralClient:
             params={"view": "Detailed"},
         )
 
+    async def get_voicemail_messages(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        per_page: int = 100,
+        page: int = 1,
+    ) -> dict:
+        """
+        Fetch voicemail messages from the message store.
+
+        This is different from call logs - voicemail audio is accessed
+        through the message-store API, not the call-log recording API.
+
+        Args:
+            date_from: Start date for filtering messages
+            date_to: End date for filtering messages
+            per_page: Number of records per page (max 250)
+            page: Page number
+        """
+        params = {
+            "messageType": "VoiceMail",
+            "perPage": min(per_page, 250),
+            "page": page,
+        }
+
+        if date_from:
+            params["dateFrom"] = date_from.isoformat()
+        if date_to:
+            params["dateTo"] = date_to.isoformat()
+
+        return await self._make_request(
+            "GET",
+            "/restapi/v1.0/account/~/extension/~/message-store",
+            params=params,
+        )
+
+    async def get_voicemail_message(self, message_id: str) -> dict:
+        """
+        Get a specific voicemail message by ID.
+
+        Args:
+            message_id: The message ID
+        """
+        return await self._make_request(
+            "GET",
+            f"/restapi/v1.0/account/~/extension/~/message-store/{message_id}",
+        )
+
+    async def get_voicemail_content_url(self, content_uri: str) -> str:
+        """
+        Get the URL to download voicemail audio content with access token.
+
+        Args:
+            content_uri: The uri from the attachment object in message-store response
+        """
+        await self._ensure_authenticated()
+        # Append access token for direct download
+        if "?" in content_uri:
+            return f"{content_uri}&access_token={self.access_token}"
+        return f"{content_uri}?access_token={self.access_token}"
+
+    async def find_voicemail_for_call(self, call_id: str, from_number: str, start_time: str) -> Optional[dict]:
+        """
+        Find the voicemail message associated with a call.
+
+        Voicemails in the message-store don't have a direct link to call-log entries,
+        so we match by phone number and approximate time.
+
+        Args:
+            call_id: The call ID (for logging)
+            from_number: The caller's phone number
+            start_time: The call start time (ISO format)
+
+        Returns:
+            The voicemail message dict with attachments, or None if not found
+        """
+        from datetime import datetime, timedelta
+
+        try:
+            # Parse the call start time
+            if start_time.endswith("Z"):
+                call_time = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+            else:
+                call_time = datetime.fromisoformat(start_time)
+
+            # Search for voicemails within a window around the call time
+            # Voicemail creation time might be slightly after call start
+            date_from = call_time - timedelta(minutes=5)
+            date_to = call_time + timedelta(minutes=30)
+
+            result = await self.get_voicemail_messages(
+                date_from=date_from,
+                date_to=date_to,
+                per_page=50,
+            )
+
+            # Normalize the from_number for matching
+            from_digits = "".join(c for c in from_number if c.isdigit())
+            if len(from_digits) == 11 and from_digits.startswith("1"):
+                from_digits = from_digits[1:]  # Remove US country code
+
+            for message in result.get("records", []):
+                msg_from = message.get("from", {}).get("phoneNumber", "")
+                msg_digits = "".join(c for c in msg_from if c.isdigit())
+                if len(msg_digits) == 11 and msg_digits.startswith("1"):
+                    msg_digits = msg_digits[1:]
+
+                if from_digits == msg_digits:
+                    logger.info(f"Found voicemail message {message.get('id')} for call {call_id}")
+                    return message
+
+            logger.warning(f"No voicemail message found for call {call_id} from {from_number}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding voicemail for call {call_id}: {e}")
+            return None
+
 
 # Singleton instance
 _client: Optional[RingCentralClient] = None

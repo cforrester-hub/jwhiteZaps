@@ -145,67 +145,74 @@ async def process_single_voicemail(call: dict) -> dict:
         assignee_id = FALLBACK_CSR_ID
         lead_id = None  # Clear lead_id if using fallback
 
-    # Get recording and transcribe
+    # Get voicemail audio from message-store (NOT from call-log recording)
+    # Voicemails are stored separately in RingCentral's message-store API
     recording_url = None
     transcript = None
-    recording_id = call.get("recording_id")
     content_url = None
 
-    if recording_id:
-        try:
-            # Get full call details
-            call_details = await ringcentral.get_call_details(
-                call_id,
-                include_recording=True,
-                include_ai_insights=False,
-            )
+    try:
+        # Find the voicemail message associated with this call
+        # The message-store has the actual audio attachment
+        voicemail_info = await ringcentral.find_voicemail_for_call(
+            call_id=call_id,
+            from_number=from_number,
+            start_time=start_time,
+        )
 
-            # Upload recording to storage
-            recording_info = call_details.get("recording")
-            if recording_info and recording_info.get("content_url"):
-                content_url = recording_info.get("content_url")
-                content_type = recording_info.get("content_type", "audio/mpeg")
+        content_url = voicemail_info.get("content_url")
+        content_type = voicemail_info.get("content_type", "audio/mpeg")
+        vm_duration = voicemail_info.get("duration")
 
-                # Determine file extension
-                ext = "mp3"
-                if "wav" in content_type:
-                    ext = "wav"
-                elif "ogg" in content_type:
-                    ext = "ogg"
+        if content_url:
+            logger.info(f"Found voicemail audio for call {call_id}, duration: {vm_duration}s")
 
-                # Build filename with date
-                call_date = start_time[:10].replace("-", "/") if start_time else "unknown"
-                filename = f"{call_id}.{ext}"
-                folder = f"voicemails/{call_date}"
+            # Determine file extension from content type
+            ext = "mp3"
+            if "wav" in content_type:
+                ext = "wav"
+            elif "ogg" in content_type:
+                ext = "ogg"
 
-                try:
-                    upload_result = await storage.upload_from_url(
-                        url=content_url,
-                        filename=filename,
-                        folder=folder,
-                        content_type=content_type,
-                        public=True,
-                    )
-                    recording_url = upload_result.get("url")
-                    logger.info(f"Uploaded voicemail to {recording_url}")
-                except Exception as e:
-                    logger.error(f"Failed to upload voicemail: {e}")
+            # Build filename with date
+            call_date = start_time[:10].replace("-", "/") if start_time else "unknown"
+            filename = f"{call_id}.{ext}"
+            folder = f"voicemails/{call_date}"
+
+            # Upload voicemail audio to storage
+            try:
+                upload_result = await storage.upload_from_url(
+                    url=content_url,
+                    filename=filename,
+                    folder=folder,
+                    content_type=content_type,
+                    public=True,
+                )
+                recording_url = upload_result.get("url")
+                logger.info(f"Uploaded voicemail to {recording_url}")
+            except Exception as e:
+                logger.error(f"Failed to upload voicemail: {e}")
 
             # Transcribe the voicemail
-            if content_url:
-                try:
-                    transcription_result = await transcription.transcribe_and_summarize(
-                        audio_url=content_url,
-                        context=f"Voicemail from {from_name or from_number}",
-                        filename=f"{call_id}.{ext}" if 'ext' in dir() else "audio.mp3",
-                    )
-                    transcript = transcription_result.get("transcript")
-                    logger.info(f"Transcription complete: {len(transcript or '')} chars")
-                except Exception as e:
-                    logger.warning(f"Transcription failed: {e}")
+            try:
+                transcription_result = await transcription.transcribe_and_summarize(
+                    audio_url=content_url,
+                    context=f"Voicemail from {from_name or from_number}",
+                    filename=filename,
+                )
+                transcript = transcription_result.get("transcript")
+                logger.info(f"Transcription complete: {len(transcript or '')} chars")
+            except Exception as e:
+                logger.warning(f"Transcription failed: {e}")
+        else:
+            logger.warning(f"Voicemail found but no content URL for call {call_id}")
 
-        except Exception as e:
-            logger.error(f"Failed to get call details: {e}")
+    except Exception as e:
+        # Voicemail not found in message-store - this can happen if:
+        # 1. The voicemail was deleted
+        # 2. The voicemail hasn't synced yet (try again later)
+        # 3. The phone number matching failed
+        logger.warning(f"Could not find voicemail audio for call {call_id}: {e}")
 
     # Build task content
     task_title = build_task_title(from_name, from_number)

@@ -101,6 +101,23 @@ class RingCentralClient(ServiceClient):
         """Get recording metadata and download URL."""
         return await self.get(f"/api/ringcentral/recordings/{recording_id}")
 
+    async def find_voicemail_for_call(
+        self, call_id: str, from_number: str, start_time: str
+    ) -> dict:
+        """
+        Find the voicemail message associated with a call.
+
+        Since voicemails in message-store don't link directly to call-log entries,
+        this matches by phone number and approximate time.
+
+        Returns dict with message_id, content_url, content_type, duration, etc.
+        Raises exception if not found.
+        """
+        return await self.get(
+            f"/api/ringcentral/voicemails/find-for-call/{call_id}",
+            params={"from_number": from_number, "start_time": start_time},
+        )
+
     async def health_check(self) -> bool:
         """Check if RingCentral service is healthy."""
         try:

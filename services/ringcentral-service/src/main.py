@@ -310,3 +310,189 @@ async def get_recording_insights(recording_id: str):
     except Exception as e:
         logger.error(f"Failed to get insights: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# VOICEMAIL ENDPOINTS (Message Store)
+# =============================================================================
+
+
+class VoicemailAttachment(BaseModel):
+    id: str
+    uri: str
+    content_type: str
+    duration: Optional[int] = None
+
+
+class VoicemailMessage(BaseModel):
+    id: str
+    from_number: str
+    from_name: Optional[str] = None
+    to_number: str
+    creation_time: str
+    read_status: str
+    attachments: list[VoicemailAttachment]
+    vm_transcription_status: Optional[str] = None
+    subject: Optional[str] = None
+
+
+class VoicemailListResponse(BaseModel):
+    total_records: int
+    page: int
+    per_page: int
+    messages: list[VoicemailMessage]
+
+
+class VoicemailDetailResponse(BaseModel):
+    message: VoicemailMessage
+    content_url: Optional[str] = None
+
+
+@app.get("/api/ringcentral/voicemails", response_model=VoicemailListResponse)
+async def get_voicemails(
+    date_from: Optional[datetime] = Query(None, description="Start date (ISO format)"),
+    date_to: Optional[datetime] = Query(None, description="End date (ISO format)"),
+    per_page: int = Query(50, ge=1, le=250, description="Records per page"),
+    page: int = Query(1, ge=1, description="Page number"),
+):
+    """
+    Fetch voicemail messages from the message store.
+
+    Returns voicemails with their attachments (audio recordings).
+    """
+    try:
+        client = get_ringcentral_client()
+        result = await client.get_voicemail_messages(
+            date_from=date_from,
+            date_to=date_to,
+            per_page=per_page,
+            page=page,
+        )
+
+        messages = []
+        for record in result.get("records", []):
+            attachments = []
+            for att in record.get("attachments", []):
+                attachments.append(
+                    VoicemailAttachment(
+                        id=str(att.get("id", "")),
+                        uri=att.get("uri", ""),
+                        content_type=att.get("contentType", "audio/mpeg"),
+                        duration=att.get("vmDuration"),
+                    )
+                )
+
+            messages.append(
+                VoicemailMessage(
+                    id=str(record.get("id", "")),
+                    from_number=record.get("from", {}).get("phoneNumber", ""),
+                    from_name=record.get("from", {}).get("name"),
+                    to_number=record.get("to", [{}])[0].get("phoneNumber", "") if record.get("to") else "",
+                    creation_time=record.get("creationTime", ""),
+                    read_status=record.get("readStatus", ""),
+                    attachments=attachments,
+                    vm_transcription_status=record.get("vmTranscriptionStatus"),
+                    subject=record.get("subject"),
+                )
+            )
+
+        paging = result.get("paging", {})
+        return VoicemailListResponse(
+            total_records=paging.get("totalRecords", len(messages)),
+            page=paging.get("page", page),
+            per_page=paging.get("perPage", per_page),
+            messages=messages,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to fetch voicemails: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ringcentral/voicemails/{message_id}", response_model=VoicemailDetailResponse)
+async def get_voicemail(message_id: str, include_content_url: bool = True):
+    """
+    Get a specific voicemail message with optional download URL.
+    """
+    try:
+        client = get_ringcentral_client()
+        record = await client.get_voicemail_message(message_id)
+
+        attachments = []
+        content_url = None
+        for att in record.get("attachments", []):
+            attachments.append(
+                VoicemailAttachment(
+                    id=str(att.get("id", "")),
+                    uri=att.get("uri", ""),
+                    content_type=att.get("contentType", "audio/mpeg"),
+                    duration=att.get("vmDuration"),
+                )
+            )
+            # Get download URL for first audio attachment
+            if include_content_url and not content_url and att.get("uri"):
+                content_url = await client.get_voicemail_content_url(att.get("uri"))
+
+        message = VoicemailMessage(
+            id=str(record.get("id", "")),
+            from_number=record.get("from", {}).get("phoneNumber", ""),
+            from_name=record.get("from", {}).get("name"),
+            to_number=record.get("to", [{}])[0].get("phoneNumber", "") if record.get("to") else "",
+            creation_time=record.get("creationTime", ""),
+            read_status=record.get("readStatus", ""),
+            attachments=attachments,
+            vm_transcription_status=record.get("vmTranscriptionStatus"),
+            subject=record.get("subject"),
+        )
+
+        return VoicemailDetailResponse(
+            message=message,
+            content_url=content_url,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get voicemail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ringcentral/voicemails/find-for-call/{call_id}")
+async def find_voicemail_for_call(
+    call_id: str,
+    from_number: str = Query(..., description="Caller's phone number"),
+    start_time: str = Query(..., description="Call start time (ISO format)"),
+):
+    """
+    Find the voicemail message associated with a call.
+
+    Since voicemails in message-store don't link directly to call-log entries,
+    this matches by phone number and approximate time.
+    """
+    try:
+        client = get_ringcentral_client()
+        message = await client.find_voicemail_for_call(call_id, from_number, start_time)
+
+        if not message:
+            raise HTTPException(status_code=404, detail="Voicemail not found for this call")
+
+        # Get content URL for the first attachment
+        content_url = None
+        attachments = message.get("attachments", [])
+        if attachments and attachments[0].get("uri"):
+            content_url = await client.get_voicemail_content_url(attachments[0].get("uri"))
+
+        return {
+            "message_id": str(message.get("id", "")),
+            "from_number": message.get("from", {}).get("phoneNumber", ""),
+            "from_name": message.get("from", {}).get("name"),
+            "creation_time": message.get("creationTime", ""),
+            "content_url": content_url,
+            "content_type": attachments[0].get("contentType", "audio/mpeg") if attachments else None,
+            "duration": attachments[0].get("vmDuration") if attachments else None,
+            "vm_transcription_status": message.get("vmTranscriptionStatus"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to find voicemail for call: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

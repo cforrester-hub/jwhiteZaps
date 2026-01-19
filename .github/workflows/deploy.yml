@@ -21,6 +21,46 @@ env:
 
 jobs:
   # ===========================================================================
+  # BUILD WINDOWS DESKTOP APP
+  # ===========================================================================
+  build-desktop-app:
+    name: Build Windows Desktop App
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          cd desktop-app
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Create icon
+        run: |
+          cd desktop-app
+          python create_icon.py
+
+      - name: Build executable
+        run: |
+          cd desktop-app
+          pyinstaller --onefile --noconsole --name "JWhiteEmployeeStatus" --icon "icon.ico" --add-data "icon.ico;." --hidden-import=pystray._win32 --hidden-import=PIL._tkinter_finder employee_status_app.py
+
+      - name: Upload executable as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-app
+          path: desktop-app/dist/JWhiteEmployeeStatus.exe
+          retention-days: 90
+
+  # ===========================================================================
   # TEST
   # ===========================================================================
   test:
@@ -69,6 +109,12 @@ jobs:
       - name: Install dashboard-service dependencies
         run: |
           cd services/dashboard-service
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Install deputy-service dependencies
+        run: |
+          cd services/deputy-service
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
@@ -129,7 +175,8 @@ jobs:
       - name: Build and push workflow-service
         uses: docker/build-push-action@v5
         with:
-          context: ./services/workflow-service
+          context: .
+          file: ./services/workflow-service/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/workflow-service:${{ github.sha }}
@@ -156,11 +203,22 @@ jobs:
       - name: Build and push dashboard-service
         uses: docker/build-push-action@v5
         with:
-          context: ./services/dashboard-service
+          context: .
+          file: ./services/dashboard-service/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/dashboard-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/dashboard-service:latest
+
+      - name: Build and push deputy-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./services/deputy-service/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/deputy-service:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/deputy-service:latest
 
       - name: Build and push transcription-service
         uses: docker/build-push-action@v5
@@ -177,7 +235,7 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, build-desktop-app]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment:
       name: production
@@ -187,6 +245,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Download desktop app artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-app
+          path: ./desktop-app-dist
+
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -195,6 +259,16 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.yml,docker-compose.prod.yml,grafana/"
           target: "~/app"
+
+      - name: Copy desktop app to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "desktop-app-dist/JWhiteEmployeeStatus.exe"
+          target: "~/app/downloads"
+          strip_components: 1
 
       - name: Deploy to DigitalOcean
         uses: appleboy/ssh-action@v1.0.3

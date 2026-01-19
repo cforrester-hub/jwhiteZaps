@@ -354,23 +354,37 @@ async def get_voicemails(
     date_to: Optional[datetime] = Query(None, description="End date (ISO format)"),
     per_page: int = Query(50, ge=1, le=250, description="Records per page"),
     page: int = Query(1, ge=1, description="Page number"),
+    all_extensions: bool = Query(False, description="Search across all extensions (slower but comprehensive)"),
 ):
     """
     Fetch voicemail messages from the message store.
 
     Returns voicemails with their attachments (audio recordings).
+    Note: By default only searches the authenticated user's extension.
+    Use all_extensions=true to search across ALL extensions in the account.
     """
     try:
         client = get_ringcentral_client()
-        result = await client.get_voicemail_messages(
-            date_from=date_from,
-            date_to=date_to,
-            per_page=per_page,
-            page=page,
-        )
+
+        if all_extensions:
+            # Search across all extensions
+            records = await client.get_all_voicemail_messages(
+                date_from=date_from,
+                date_to=date_to,
+                per_page=per_page,
+            )
+        else:
+            # Search only current extension
+            result = await client.get_voicemail_messages(
+                date_from=date_from,
+                date_to=date_to,
+                per_page=per_page,
+                page=page,
+            )
+            records = result.get("records", [])
 
         messages = []
-        for record in result.get("records", []):
+        for record in records:
             attachments = []
             for att in record.get("attachments", []):
                 attachments.append(
@@ -396,11 +410,10 @@ async def get_voicemails(
                 )
             )
 
-        paging = result.get("paging", {})
         return VoicemailListResponse(
-            total_records=paging.get("totalRecords", len(messages)),
-            page=paging.get("page", page),
-            per_page=paging.get("perPage", per_page),
+            total_records=len(messages),
+            page=page if not all_extensions else 1,
+            per_page=per_page,
             messages=messages,
         )
 

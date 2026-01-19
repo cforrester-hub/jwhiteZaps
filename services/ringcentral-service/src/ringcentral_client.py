@@ -195,15 +195,29 @@ class RingCentralClient:
             params={"view": "Detailed"},
         )
 
+    async def get_extensions(self) -> list:
+        """
+        Get all extensions in the account.
+
+        Returns a list of extension info dicts.
+        """
+        result = await self._make_request(
+            "GET",
+            "/restapi/v1.0/account/~/extension",
+            params={"perPage": 500, "status": "Enabled"},
+        )
+        return result.get("records", [])
+
     async def get_voicemail_messages(
         self,
         date_from: Optional[datetime] = None,
         date_to: Optional[datetime] = None,
         per_page: int = 100,
         page: int = 1,
+        extension_id: str = "~",
     ) -> dict:
         """
-        Fetch voicemail messages from the message store.
+        Fetch voicemail messages from the message store for a specific extension.
 
         This is different from call logs - voicemail audio is accessed
         through the message-store API, not the call-log recording API.
@@ -213,6 +227,7 @@ class RingCentralClient:
             date_to: End date for filtering messages
             per_page: Number of records per page (max 250)
             page: Page number
+            extension_id: Extension ID (use "~" for current user)
         """
         params = {
             "messageType": "VoiceMail",
@@ -227,9 +242,62 @@ class RingCentralClient:
 
         return await self._make_request(
             "GET",
-            "/restapi/v1.0/account/~/extension/~/message-store",
+            f"/restapi/v1.0/account/~/extension/{extension_id}/message-store",
             params=params,
         )
+
+    async def get_all_voicemail_messages(
+        self,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        per_page: int = 100,
+    ) -> list:
+        """
+        Fetch voicemail messages from ALL extensions in the account.
+
+        Iterates through all enabled extensions and collects their voicemails.
+
+        Args:
+            date_from: Start date for filtering messages
+            date_to: End date for filtering messages
+            per_page: Number of records per page per extension
+
+        Returns:
+            List of all voicemail messages across all extensions
+        """
+        all_messages = []
+
+        try:
+            extensions = await self.get_extensions()
+            logger.info(f"Found {len(extensions)} extensions to search for voicemails")
+
+            for ext in extensions:
+                ext_id = ext.get("id")
+                ext_name = ext.get("name", "Unknown")
+
+                try:
+                    result = await self.get_voicemail_messages(
+                        date_from=date_from,
+                        date_to=date_to,
+                        per_page=per_page,
+                        extension_id=str(ext_id),
+                    )
+                    messages = result.get("records", [])
+                    if messages:
+                        logger.info(f"Found {len(messages)} voicemails for extension {ext_name} ({ext_id})")
+                        # Add extension info to each message for context
+                        for msg in messages:
+                            msg["_extension_id"] = ext_id
+                            msg["_extension_name"] = ext_name
+                        all_messages.extend(messages)
+                except Exception as e:
+                    # Some extensions may not have message-store access
+                    logger.debug(f"Could not get voicemails for extension {ext_name}: {e}")
+
+        except Exception as e:
+            logger.error(f"Error getting extensions: {e}")
+
+        return all_messages
 
     async def get_voicemail_message(self, message_id: str) -> dict:
         """
@@ -261,7 +329,8 @@ class RingCentralClient:
         Find the voicemail message associated with a call.
 
         Voicemails in the message-store don't have a direct link to call-log entries,
-        so we match by phone number and approximate time.
+        so we match by phone number and approximate time. Searches across ALL extensions
+        since voicemails are stored at the extension level.
 
         Args:
             call_id: The call ID (for logging)
@@ -285,28 +354,32 @@ class RingCentralClient:
             date_from = call_time - timedelta(minutes=5)
             date_to = call_time + timedelta(minutes=30)
 
-            result = await self.get_voicemail_messages(
+            # Search across ALL extensions since voicemails are stored per-extension
+            all_messages = await self.get_all_voicemail_messages(
                 date_from=date_from,
                 date_to=date_to,
                 per_page=50,
             )
+
+            logger.info(f"Searching {len(all_messages)} voicemails for call {call_id} from {from_number}")
 
             # Normalize the from_number for matching
             from_digits = "".join(c for c in from_number if c.isdigit())
             if len(from_digits) == 11 and from_digits.startswith("1"):
                 from_digits = from_digits[1:]  # Remove US country code
 
-            for message in result.get("records", []):
+            for message in all_messages:
                 msg_from = message.get("from", {}).get("phoneNumber", "")
                 msg_digits = "".join(c for c in msg_from if c.isdigit())
                 if len(msg_digits) == 11 and msg_digits.startswith("1"):
                     msg_digits = msg_digits[1:]
 
                 if from_digits == msg_digits:
-                    logger.info(f"Found voicemail message {message.get('id')} for call {call_id}")
+                    ext_name = message.get("_extension_name", "Unknown")
+                    logger.info(f"Found voicemail message {message.get('id')} for call {call_id} on extension {ext_name}")
                     return message
 
-            logger.warning(f"No voicemail message found for call {call_id} from {from_number}")
+            logger.warning(f"No voicemail message found for call {call_id} from {from_number} in any extension")
             return None
 
         except Exception as e:

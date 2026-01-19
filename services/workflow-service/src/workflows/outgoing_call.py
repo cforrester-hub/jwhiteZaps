@@ -21,7 +21,7 @@ from ..http_client import ringcentral, agencyzoom, storage
 logger = logging.getLogger(__name__)
 
 
-def format_phone_for_display(phone: str) -> str:
+def format_phone_for_display(phone: str, include_country_code: bool = False) -> str:
     """Format a phone number for display in notes."""
     # Remove non-digit characters
     digits = "".join(c for c in phone if c.isdigit())
@@ -30,7 +30,10 @@ def format_phone_for_display(phone: str) -> str:
     if len(digits) == 10:
         return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
     elif len(digits) == 11 and digits[0] == "1":
-        return f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+        if include_country_code:
+            return f"+1 ({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+        else:
+            return f"({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
 
     return phone
 
@@ -79,10 +82,8 @@ def build_note_content(
     # Determine the "other party" based on direction
     if direction == "Outbound":
         other_party = format_phone_for_display(call.get("to_number", "Unknown"))
-        other_party_label = "To"
     else:
         other_party = format_phone_for_display(call.get("from_number", "Unknown"))
-        other_party_label = "From"
 
     from_number = format_phone_for_display(call.get("from_number", "Unknown"))
     to_number = format_phone_for_display(call.get("to_number", "Unknown"))
@@ -93,26 +94,26 @@ def build_note_content(
     call_id = call.get("id", "Unknown")
 
     # Build HTML note matching Zapier template style
-    # Header line: direction - other party - result
+    # Header line: emoji + direction - other party - result
     header = f"📞 {direction} - {other_party} - {result}"
 
-    # Build the HTML table
+    # Build the HTML table (no emojis inside table - they don't render in AZ)
     html = f'''{header}
 <table style="width:100%;border-collapse:collapse;margin:0;padding:0;">
 <tr>
 <td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;">
 <strong>CALL INFORMATION</strong>
-<div>📅 <b>Date & Time:</b> {date_time}</div>
-<div>👤 <b>From:</b> {from_number}</div>
-<div>👤 <b>To:</b> {to_number}</div>
-<div>⏱️ <b>Duration:</b> {duration}</div>
-<div>📋 <b>Result:</b> {result}</div>'''
+<div><b>Date & Time:</b> {date_time}</div>
+<div><b>From:</b> {from_number}</div>
+<div><b>To:</b> {to_number}</div>
+<div><b>Duration:</b> {duration}</div>
+<div><b>Result:</b> {result}</div>'''
 
     # Add AI summary if available
     if ai_summary:
         html += f'''
 <div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;">
-<strong>📝 AI SUMMARY</strong>
+<strong>AI SUMMARY</strong>
 <div>{ai_summary}</div>
 </div>'''
 
@@ -123,8 +124,8 @@ def build_note_content(
 
     if recording_url:
         html += f'''
-<div>💾 <b>Recording ID:</b> {recording_id}</div>
-<div>🔗 <b>Recording Link:</b> <a href="{recording_url}">{recording_url}</a></div>'''
+<div><b>Recording ID:</b> {recording_id}</div>
+<div><b>Recording Link:</b> <a href="{recording_url}">{recording_url}</a></div>'''
     else:
         html += '''
 <div>No recording available</div>'''

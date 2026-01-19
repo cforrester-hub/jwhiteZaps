@@ -11,12 +11,19 @@ from .config import get_settings
 
 settings = get_settings()
 
-# Create async engine
+# Create async engine with connection pool limits
 # Note: asyncpg requires postgresql+asyncpg:// URL scheme
 # Also convert sslmode=require to ssl=require for asyncpg compatibility
 database_url = settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
 database_url = database_url.replace("sslmode=", "ssl=")
-engine = create_async_engine(database_url, echo=False)
+engine = create_async_engine(
+    database_url,
+    echo=False,
+    pool_size=3,           # Maximum number of connections to keep in the pool
+    max_overflow=2,        # Allow up to 2 additional connections beyond pool_size
+    pool_pre_ping=True,    # Verify connections before use
+    pool_recycle=300,      # Recycle connections after 5 minutes
+)
 
 # Session factory
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

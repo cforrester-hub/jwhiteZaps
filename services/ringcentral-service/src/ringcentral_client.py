@@ -324,21 +324,70 @@ class RingCentralClient:
             return f"{content_uri}&access_token={self.access_token}"
         return f"{content_uri}?access_token={self.access_token}"
 
+    async def get_voicemail_message_by_extension(self, extension_id: str, message_id: str) -> dict:
+        """
+        Get a specific voicemail message from a specific extension.
+
+        Args:
+            extension_id: The extension ID that owns the voicemail
+            message_id: The message ID
+        """
+        return await self._make_request(
+            "GET",
+            f"/restapi/v1.0/account/~/extension/{extension_id}/message-store/{message_id}",
+        )
+
     async def find_voicemail_for_call(self, call_id: str, from_number: str, start_time: str) -> Optional[dict]:
         """
         Find the voicemail message associated with a call.
 
-        Voicemails in the message-store don't have a direct link to call-log entries,
-        so we match by phone number and approximate time. Searches across ALL extensions
-        since voicemails are stored at the extension level.
+        First tries to get the voicemail directly from the call log's detailed legs
+        (which include the message ID and extension ID). Falls back to searching
+        across extensions if the direct method fails.
 
         Args:
-            call_id: The call ID (for logging)
-            from_number: The caller's phone number
-            start_time: The call start time (ISO format)
+            call_id: The call ID
+            from_number: The caller's phone number (fallback for search)
+            start_time: The call start time (fallback for search)
 
         Returns:
             The voicemail message dict with attachments, or None if not found
+        """
+        try:
+            # First, try to get voicemail info directly from the call log
+            # The detailed call log includes the message ID in the legs
+            call_details = await self.get_call_with_details(call_id)
+
+            legs = call_details.get("legs", [])
+            for leg in legs:
+                message_info = leg.get("message", {})
+                if message_info.get("type") == "VoiceMail" and message_info.get("id"):
+                    message_id = str(message_info.get("id"))
+                    extension_info = leg.get("extension", {})
+                    extension_id = str(extension_info.get("id", "~"))
+
+                    logger.info(f"Found voicemail {message_id} in call log for call {call_id}, extension {extension_id}")
+
+                    # Fetch the full voicemail message with attachments
+                    try:
+                        return await self.get_voicemail_message_by_extension(extension_id, message_id)
+                    except Exception as e:
+                        logger.warning(f"Could not fetch voicemail {message_id} from extension {extension_id}: {e}")
+
+            # Fallback: search by phone number and time (slower but comprehensive)
+            logger.info(f"No voicemail in call log legs, falling back to search for call {call_id}")
+            return await self._search_voicemail_by_phone_and_time(call_id, from_number, start_time)
+
+        except Exception as e:
+            logger.error(f"Error finding voicemail for call {call_id}: {e}")
+            return None
+
+    async def _search_voicemail_by_phone_and_time(
+        self, call_id: str, from_number: str, start_time: str
+    ) -> Optional[dict]:
+        """
+        Fallback method: Search for voicemail by phone number and approximate time.
+        Searches across all extensions.
         """
         from datetime import datetime, timedelta
 
@@ -349,12 +398,11 @@ class RingCentralClient:
             else:
                 call_time = datetime.fromisoformat(start_time)
 
-            # Search for voicemails within a window around the call time
-            # Voicemail creation time might be slightly after call start
+            # Search window around call time
             date_from = call_time - timedelta(minutes=5)
             date_to = call_time + timedelta(minutes=30)
 
-            # Search across ALL extensions since voicemails are stored per-extension
+            # Search across ALL extensions
             all_messages = await self.get_all_voicemail_messages(
                 date_from=date_from,
                 date_to=date_to,
@@ -366,7 +414,7 @@ class RingCentralClient:
             # Normalize the from_number for matching
             from_digits = "".join(c for c in from_number if c.isdigit())
             if len(from_digits) == 11 and from_digits.startswith("1"):
-                from_digits = from_digits[1:]  # Remove US country code
+                from_digits = from_digits[1:]
 
             for message in all_messages:
                 msg_from = message.get("from", {}).get("phoneNumber", "")
@@ -376,14 +424,14 @@ class RingCentralClient:
 
                 if from_digits == msg_digits:
                     ext_name = message.get("_extension_name", "Unknown")
-                    logger.info(f"Found voicemail message {message.get('id')} for call {call_id} on extension {ext_name}")
+                    logger.info(f"Found voicemail {message.get('id')} for call {call_id} on extension {ext_name}")
                     return message
 
-            logger.warning(f"No voicemail message found for call {call_id} from {from_number} in any extension")
+            logger.warning(f"No voicemail found for call {call_id} from {from_number}")
             return None
 
         except Exception as e:
-            logger.error(f"Error finding voicemail for call {call_id}: {e}")
+            logger.error(f"Search voicemail error for call {call_id}: {e}")
             return None
 
 

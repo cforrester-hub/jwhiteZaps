@@ -1,5 +1,5 @@
 """
-RingCentral API client for call logs, recordings, and AI insights.
+RingCentral API client for call logs, recordings, voicemails, and AI insights.
 """
 
 import logging

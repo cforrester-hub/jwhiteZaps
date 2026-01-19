@@ -30,9 +30,10 @@ FALLBACK_CSR_ID = 110493
 
 def build_task_title(caller_name: str, caller_number: str) -> str:
     """Build the task title for a voicemail."""
+    phone_display = format_phone_for_display(caller_number)
     if caller_name and caller_name.strip():
-        return f"Voicemail from {caller_name.strip()}"
-    return f"Voicemail from {format_phone_for_display(caller_number)}"
+        return f"Voicemail from {caller_name.strip()} - {phone_display}"
+    return f"Voicemail from {phone_display}"
 
 
 def build_task_content(
@@ -45,17 +46,22 @@ def build_task_content(
 
     Matches the Zapier template format.
     """
+    from zoneinfo import ZoneInfo
+
     from_number = format_phone_for_display(call.get("from_number", "Unknown"))
     from_name = call.get("from_name", "").strip() or "Unknown"
     start_time = call.get("start_time", "")
     duration = format_duration(call.get("duration", 0))
 
-    # Format the received time
+    # Format the received time in Pacific timezone
     received = "Unknown"
     if start_time:
         try:
             dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-            received = dt.strftime("%m/%d/%Y %I:%M %p")
+            # Convert UTC to Pacific time
+            pacific = ZoneInfo("America/Los_Angeles")
+            dt_pacific = dt.astimezone(pacific)
+            received = dt_pacific.strftime("%m/%d/%Y %I:%M %p")
         except (ValueError, AttributeError):
             received = start_time[:19] if start_time else "Unknown"
 

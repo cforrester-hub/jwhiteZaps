@@ -53,6 +53,12 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
         tmp_file.write(audio_data)
         tmp_path = tmp_file.name
 
+    # Prompt provides context to help Whisper with domain-specific content
+    prompt = (
+        "Insurance agency voicemail. Caller may spell their name letter by letter. "
+        "Common terms: policy number, claim, renewal, quote, coverage, deductible."
+    )
+
     try:
         logger.info(f"Transcribing audio with {settings.whisper_model}...")
         with open(tmp_path, "rb") as audio_file:
@@ -60,6 +66,7 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
                 model=settings.whisper_model,
                 file=audio_file,
                 response_format="text",
+                prompt=prompt,
             )
         logger.info(f"Transcription complete: {len(transcript)} characters")
         return transcript

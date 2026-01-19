@@ -134,6 +134,49 @@ class AgencyZoomClient(ServiceClient):
             json={"content": content, "note_type": note_type},
         )
 
+    async def create_task(
+        self,
+        title: str,
+        due_datetime: str,
+        assignee_id: int,
+        customer_id: int = None,
+        lead_id: int = None,
+        comments: str = None,
+        task_type: str = "call",
+        duration: int = 15,
+        time_specific: bool = True,
+    ) -> dict:
+        """Create a task in AgencyZoom."""
+        payload = {
+            "title": title,
+            "due_datetime": due_datetime,
+            "assignee_id": assignee_id,
+            "task_type": task_type,
+            "duration": duration,
+            "time_specific": time_specific,
+        }
+        if customer_id:
+            payload["customer_id"] = customer_id
+        if lead_id:
+            payload["lead_id"] = lead_id
+        if comments:
+            payload["comments"] = comments
+        return await self.post("/api/agencyzoom/tasks", json=payload)
+
+    async def get_customer(self, customer_id: str) -> dict:
+        """Get customer details including CSR info."""
+        return await self.get(f"/api/agencyzoom/customers/{customer_id}")
+
+    async def get_customer_csr_id(self, customer_id: int) -> int:
+        """Get the primary CSR ID for a customer."""
+        result = await self.get(f"/api/agencyzoom/customers/{customer_id}/csr")
+        return result.get("csr_id")
+
+    async def get_lead_producer_id(self, lead_id: int) -> int:
+        """Get the primary producer/agent ID for a lead."""
+        result = await self.get(f"/api/agencyzoom/leads/{lead_id}/producer")
+        return result.get("producer_id")
+
     async def health_check(self) -> bool:
         """Check if AgencyZoom service is healthy."""
         try:

@@ -96,6 +96,27 @@ class CreateNoteResponse(BaseModel):
     error: Optional[str] = None
 
 
+class CreateTaskRequest(BaseModel):
+    """Request to create a task."""
+    title: str
+    due_datetime: str  # ISO format datetime
+    assignee_id: int
+    customer_id: Optional[int] = None
+    lead_id: Optional[int] = None
+    comments: Optional[str] = None
+    task_type: str = "call"  # todo, email, call, meeting
+    duration: int = 15
+    time_specific: bool = True
+
+
+class CreateTaskResponse(BaseModel):
+    """Response from task creation."""
+    success: bool
+    customer_id: Optional[int] = None
+    lead_id: Optional[int] = None
+    error: Optional[str] = None
+
+
 # =============================================================================
 # HEALTH ENDPOINTS
 # =============================================================================
@@ -329,6 +350,84 @@ async def create_lead_note(lead_id: str, request: CreateNoteRequest):
         raise
     except Exception as e:
         logger.error(f"Create lead note failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# TASK ENDPOINTS
+# =============================================================================
+
+
+@app.post("/tasks", response_model=CreateTaskResponse, tags=["tasks"])
+async def create_task(request: CreateTaskRequest):
+    """
+    Create a task in AgencyZoom.
+
+    - **title**: Task title/subject
+    - **due_datetime**: Due date/time in ISO format
+    - **assignee_id**: CSR/Agent ID to assign the task to
+    - **customer_id**: Customer ID to link the task to (optional)
+    - **lead_id**: Lead ID to link the task to (optional)
+    - **comments**: Task notes/description (can include HTML)
+    - **task_type**: Type of task - "todo", "email", "call", or "meeting"
+    - **duration**: Duration in minutes
+    - **time_specific**: If true, time is applicable for due date
+    """
+    try:
+        result = await client.create_task(
+            title=request.title,
+            due_datetime=request.due_datetime,
+            assignee_id=request.assignee_id,
+            customer_id=request.customer_id,
+            lead_id=request.lead_id,
+            comments=request.comments,
+            task_type=request.task_type,
+            duration=request.duration,
+            time_specific=request.time_specific,
+        )
+
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Failed to create task"))
+
+        return CreateTaskResponse(
+            success=True,
+            customer_id=request.customer_id,
+            lead_id=request.lead_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create task failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/customers/{customer_id}/csr", tags=["customers"])
+async def get_customer_csr(customer_id: str):
+    """Get the primary CSR ID for a customer."""
+    try:
+        csr_id = await client.get_customer_csr_id(int(customer_id))
+        if csr_id is None:
+            raise HTTPException(status_code=404, detail="CSR not found for customer")
+        return {"customer_id": customer_id, "csr_id": csr_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get customer CSR failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/leads/{lead_id}/producer", tags=["leads"])
+async def get_lead_producer(lead_id: str):
+    """Get the primary producer/agent ID for a lead."""
+    try:
+        producer_id = await client.get_lead_producer_id(int(lead_id))
+        if producer_id is None:
+            raise HTTPException(status_code=404, detail="Producer not found for lead")
+        return {"lead_id": lead_id, "producer_id": producer_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get lead producer failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -354,3 +354,107 @@ async def get_lead(lead_id: str) -> Optional[dict]:
         return None
 
     return response.json()
+
+
+async def create_task(
+    title: str,
+    due_datetime: str,
+    assignee_id: int,
+    customer_id: Optional[int] = None,
+    lead_id: Optional[int] = None,
+    comments: Optional[str] = None,
+    task_type: str = "call",
+    duration: int = 15,
+    time_specific: bool = True,
+) -> dict:
+    """
+    Create a task in AgencyZoom.
+
+    Args:
+        title: Task title/subject
+        due_datetime: Due date/time in ISO format
+        assignee_id: CSR/Agent ID to assign the task to
+        customer_id: Customer ID to link the task to (optional)
+        lead_id: Lead ID to link the task to (optional)
+        comments: Task notes/description (can include HTML)
+        task_type: Type of task - "todo", "email", "call", or "meeting"
+        duration: Duration in minutes
+        time_specific: If true, time is applicable for due date
+
+    Returns:
+        dict with created task info or error
+    """
+    payload = {
+        "title": title,
+        "dueDatetime": due_datetime,
+        "assigneeId": assignee_id,
+        "type": task_type,
+        "duration": duration,
+        "timeSpecific": time_specific,
+    }
+
+    if customer_id:
+        payload["customerId"] = customer_id
+    if lead_id:
+        payload["leadId"] = lead_id
+    if comments:
+        payload["comments"] = comments
+
+    logger.info(f"Creating task: {title} for assignee {assignee_id}")
+
+    response = await _make_request("POST", "/v1/api/tasks", json=payload)
+
+    if response.status_code not in (200, 201):
+        logger.error(f"Create task failed: {response.status_code} - {response.text}")
+        return {"success": False, "error": response.text}
+
+    return {
+        "success": True,
+        "customer_id": customer_id,
+        "lead_id": lead_id,
+        "data": response.json() if response.text else {},
+    }
+
+
+async def get_customer_csr_id(customer_id: int) -> Optional[int]:
+    """
+    Get the primary CSR ID for a customer.
+
+    Looks at the customer's policies to find the CSR assigned.
+
+    Args:
+        customer_id: The customer ID
+
+    Returns:
+        CSR ID or None if not found
+    """
+    customer = await get_customer(str(customer_id))
+    if not customer:
+        return None
+
+    # Check policies for CSR ID
+    policies = customer.get("policies", [])
+    for policy in policies:
+        csr_id = policy.get("csrId")
+        if csr_id:
+            return csr_id
+
+    return None
+
+
+async def get_lead_producer_id(lead_id: int) -> Optional[int]:
+    """
+    Get the primary producer/agent ID for a lead.
+
+    Args:
+        lead_id: The lead ID
+
+    Returns:
+        Producer/Agent ID or None if not found
+    """
+    lead = await get_lead(str(lead_id))
+    if not lead:
+        return None
+
+    # Leads typically have an agentId or producerId
+    return lead.get("agentId") or lead.get("producerId")

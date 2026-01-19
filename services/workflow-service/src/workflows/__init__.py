@@ -202,3 +202,9 @@ async def run_workflow(name: str, **kwargs) -> Dict[str, Any]:
         logger.error(f"Workflow {name} failed: {e}")
         await complete_workflow_run(run_id, success=False, error_message=str(e))
         return {"status": "failed", "run_id": run_id, "error": str(e)}
+
+
+# Import workflows to register them
+from . import outgoing_call  # noqa: F401, E402
+from . import incoming_call  # noqa: F401, E402
+from . import voicemail  # noqa: F401, E402

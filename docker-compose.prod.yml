@@ -125,6 +125,12 @@ services:
     image: ghcr.io/cforrester-hub/dashboard-service:latest
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EMPLOYEE_STATUS_API_KEY: ${EMPLOYEE_STATUS_API_KEY:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-service-key}
+      RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      DEPUTY_SERVICE_URL: http://deputy-service:8000
+    volumes:
+      - /root/app/downloads:/app/downloads:ro
     networks:
       - internal
       - web
@@ -134,6 +140,33 @@ services:
       - "traefik.http.routers.dashboard-service.entrypoints=websecure"
       - "traefik.http.routers.dashboard-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
+    depends_on:
+      - deputy-service
+    logging:
+      driver: json-file
+
+  # Deputy service - use pre-built image
+  deputy-service:
+    image: ghcr.io/cforrester-hub/deputy-service:latest
+    environment:
+      DEPUTY_BASE_URL: ${DEPUTY_BASE_URL}
+      DEPUTY_ACCESS_TOKEN: ${DEPUTY_ACCESS_TOKEN}
+      REDIS_URL: redis://redis:6379/0
+      RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      DASHBOARD_SERVICE_URL: http://dashboard-service:8000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-service-key}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deputy-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/deputy`)"
+      - "traefik.http.routers.deputy-service.entrypoints=websecure"
+      - "traefik.http.routers.deputy-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.deputy-service.loadbalancer.server.port=8000"
+    depends_on:
+      - ringcentral-service
     logging:
       driver: json-file
 

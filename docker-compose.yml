@@ -299,12 +299,16 @@ services:
 
   dashboard-service:
     build:
-      context: ./services/dashboard-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/dashboard-service/Dockerfile
     container_name: dashboard-service
     restart: unless-stopped
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EMPLOYEE_STATUS_API_KEY: ${EMPLOYEE_STATUS_API_KEY:-}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-service-key}
+      RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      DEPUTY_SERVICE_URL: http://deputy-service:8000
     networks:
       - internal
       - web
@@ -320,6 +324,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      deputy-service:
+        condition: service_healthy
     logging:
       driver: loki
       options:
@@ -369,6 +376,8 @@ services:
       DEPUTY_ACCESS_TOKEN: ${DEPUTY_ACCESS_TOKEN}
       REDIS_URL: redis://redis:6379/0
       RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
+      DASHBOARD_SERVICE_URL: http://dashboard-service:8000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-internal-service-key}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     networks:
       - internal

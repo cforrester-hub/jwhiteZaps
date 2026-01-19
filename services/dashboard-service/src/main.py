@@ -2,20 +2,30 @@
 Dashboard Service - Service Health Monitor
 
 A simple dashboard that displays the health status of all microservices
-and workflow information.
+and workflow information. Also provides employee clock status via WebSocket
+for the Windows desktop app.
 """
 
 import asyncio
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Optional
+from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from pathlib import Path
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
 from .config import get_settings
+from .employee_status import (
+    ClockStatus,
+    EmployeeStatus,
+    status_manager,
+)
 
 # Configure logging
 settings = get_settings()
@@ -25,13 +35,123 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+async def initialize_employee_statuses():
+    """Initialize employee statuses by querying Deputy for current timesheet status."""
+    try:
+        # Query deputy-service for current clock status of all employees
+        await recover_statuses_from_deputy()
+
+    except Exception as e:
+        logger.error(f"Failed to initialize employee statuses: {e}")
+        # Fall back to initializing with unknown status
+        await _initialize_employees_unknown()
+
+
+async def _initialize_employees_unknown():
+    """Initialize all employees with unknown status (fallback)."""
+    try:
+        from shared import get_all_users
+
+        users = get_all_users()
+        logger.info(f"Initializing {len(users)} employees with unknown status (fallback)")
+
+        for user in users:
+            deputy_id = user.get("deputy_id")
+            name = user.get("name", "Unknown")
+            rc_extension_id = user.get("ringcentral_extension_id")
+
+            await status_manager.initialize_employee(
+                employee_id=deputy_id,
+                name=name,
+                ringcentral_extension_id=rc_extension_id,
+                clock_status=ClockStatus.UNKNOWN,
+            )
+    except Exception as e:
+        logger.error(f"Failed to initialize employees with unknown status: {e}")
+
+
+async def recover_statuses_from_deputy():
+    """Query Deputy via deputy-service to get current clock status for all employees."""
+    endpoint = f"{settings.deputy_service_url}/api/deputy/employees/clock-status"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(endpoint)
+
+            if response.status_code == 200:
+                data = response.json()
+                employees = data.get("employees", [])
+                active_count = data.get("active_timesheets_count", 0)
+
+                logger.info(
+                    f"Recovered status from Deputy: {len(employees)} employees, "
+                    f"{active_count} active timesheets"
+                )
+
+                for emp in employees:
+                    employee_id = emp.get("employee_id")
+                    name = emp.get("name", "Unknown")
+                    status_str = emp.get("clock_status", "unknown")
+                    rc_extension_id = emp.get("ringcentral_extension_id")
+
+                    # Map string to ClockStatus enum
+                    status_map = {
+                        "clocked_in": ClockStatus.CLOCKED_IN,
+                        "clocked_out": ClockStatus.CLOCKED_OUT,
+                        "on_break": ClockStatus.ON_BREAK,
+                    }
+                    clock_status = status_map.get(status_str, ClockStatus.UNKNOWN)
+
+                    await status_manager.initialize_employee(
+                        employee_id=employee_id,
+                        name=name,
+                        ringcentral_extension_id=rc_extension_id,
+                        clock_status=clock_status,
+                    )
+                    logger.info(f"Initialized {name}: {clock_status.value}")
+
+            else:
+                logger.error(
+                    f"Failed to query deputy-service: {response.status_code} - {response.text}"
+                )
+                await _initialize_employees_unknown()
+
+    except Exception as e:
+        logger.error(f"Error querying deputy-service for status recovery: {e}")
+        await _initialize_employees_unknown()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler."""
+    logger.info("Dashboard service starting up...")
+
+    # Set up API key for desktop app authentication
+    if settings.employee_status_api_key:
+        status_manager.add_api_key(settings.employee_status_api_key)
+        logger.info("Using configured employee status API key")
+    else:
+        # Generate one and log it for the first run
+        generated_key = status_manager.generate_api_key()
+        logger.warning(f"Generated employee status API key: {generated_key}")
+        logger.warning("Set EMPLOYEE_STATUS_API_KEY env var to use a persistent key")
+
+    # Initialize employee statuses from shared mappings
+    await initialize_employee_statuses()
+
+    yield
+    logger.info("Dashboard service shutting down...")
+
+
 app = FastAPI(
     title="Dashboard Service",
-    description="Service health monitoring dashboard",
+    description="Service health monitoring dashboard with employee status WebSocket",
     version="1.0.0",
     docs_url="/api/dashboard/docs",
     redoc_url="/api/dashboard/redoc",
     openapi_url="/api/dashboard/openapi.json",
+    lifespan=lifespan,
 )
 
 
@@ -526,6 +646,48 @@ def generate_dashboard_html(data: DashboardData) -> str:
             font-size: 0.8rem;
             color: #666;
         }}
+
+        /* Desktop app download section */
+        .download-section {{
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+
+        .download-section h2 {{
+            margin-top: 0;
+            border-bottom: none;
+            padding-bottom: 0;
+        }}
+
+        .download-btn {{
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+        }}
+
+        .download-btn:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(74, 222, 128, 0.4);
+        }}
+
+        .download-info {{
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #a0a0a0;
+        }}
     </style>
 </head>
 <body>
@@ -568,6 +730,24 @@ def generate_dashboard_html(data: DashboardData) -> str:
                 {workflow_rows_html}
             </tbody>
         </table>
+
+        <div class="download-section">
+            <h2>Desktop Status Monitor</h2>
+            <p style="margin-bottom: 15px; color: #e4e4e4;">
+                Download the Windows desktop app to see employee clock status in real-time.
+            </p>
+            <a href="/api/dashboard/download/desktop-app" class="download-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7,10 12,15 17,10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                Download for Windows
+            </a>
+            <div class="download-info">
+                <p>Requires Windows 10 or later. The app displays as a small floating window and runs in the system tray.</p>
+            </div>
+        </div>
 
         <footer>
             <p class="refresh-note">Auto-refreshes every 30 seconds</p>
@@ -641,3 +821,232 @@ async def dashboard():
 async def root():
     """Redirect root to dashboard."""
     return await dashboard()
+
+
+# =============================================================================
+# EMPLOYEE STATUS API - For Windows Desktop App
+# =============================================================================
+
+
+class StatusUpdateRequest(BaseModel):
+    """Request body for status update from deputy-service."""
+
+    employee_id: str
+    name: str
+    clock_status: str  # clocked_in, clocked_out, on_break
+
+
+class EmployeeStatusResponse(BaseModel):
+    """Response containing employee statuses."""
+
+    employees: list[EmployeeStatus]
+    connected_clients: int
+
+
+@app.websocket("/api/dashboard/employee-status/ws")
+async def employee_status_websocket(
+    websocket: WebSocket,
+    api_key: str = Query(..., description="API key for authentication"),
+):
+    """
+    WebSocket endpoint for real-time employee status updates.
+
+    Connect with: ws://host/api/dashboard/employee-status/ws?api_key=YOUR_KEY
+
+    On connection, you'll receive all current statuses.
+    Updates are pushed automatically when status changes.
+    """
+    # Validate API key
+    if not status_manager.validate_api_key(api_key):
+        await websocket.close(code=4001, reason="Invalid API key")
+        return
+
+    await websocket.accept()
+
+    # Generate client ID and register
+    client_id = f"client_{uuid4().hex[:8]}"
+    await status_manager.register_connection(websocket, client_id)
+
+    # Send all current statuses immediately
+    await status_manager.send_all_statuses(websocket)
+
+    try:
+        # Keep connection alive, handle incoming messages (like ping)
+        while True:
+            data = await websocket.receive_text()
+            # Could handle client commands here if needed (e.g., ping/pong)
+            if data == "ping":
+                await websocket.send_text('{"type": "pong"}')
+
+    except WebSocketDisconnect:
+        logger.info(f"Client {client_id} disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket error for {client_id}: {e}")
+    finally:
+        await status_manager.unregister_connection(websocket)
+
+
+@app.get("/api/dashboard/employee-status")
+async def get_employee_statuses(
+    x_api_key: str = Header(None, alias="X-API-Key"),
+    api_key: str = Query(None),
+) -> EmployeeStatusResponse:
+    """
+    Get all employee clock statuses (REST endpoint).
+
+    Authenticate via X-API-Key header or api_key query parameter.
+    Use this for initial load or if WebSocket is unavailable.
+    """
+    # Check either header or query param
+    key = x_api_key or api_key
+    if not key or not status_manager.validate_api_key(key):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    statuses = await status_manager.get_all_statuses()
+    return EmployeeStatusResponse(
+        employees=statuses,
+        connected_clients=status_manager.connection_count,
+    )
+
+
+@app.get("/api/dashboard/employee-status/{employee_id}")
+async def get_employee_status(
+    employee_id: str,
+    x_api_key: str = Header(None, alias="X-API-Key"),
+    api_key: str = Query(None),
+) -> EmployeeStatus:
+    """Get status for a specific employee."""
+    key = x_api_key or api_key
+    if not key or not status_manager.validate_api_key(key):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    status = await status_manager.get_status(employee_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    return status
+
+
+# =============================================================================
+# INTERNAL API - For Deputy Service to Publish Updates
+# =============================================================================
+
+
+@app.post("/api/dashboard/internal/employee-status")
+async def update_employee_status(
+    request: StatusUpdateRequest,
+    x_internal_key: str = Header(..., alias="X-Internal-Key"),
+):
+    """
+    Internal endpoint for deputy-service to publish status updates.
+
+    This is called when an employee clocks in/out or starts/ends a break.
+    The update is broadcast to all connected WebSocket clients.
+    """
+    if x_internal_key != settings.internal_api_key:
+        raise HTTPException(status_code=401, detail="Invalid internal key")
+
+    # Map string to ClockStatus enum
+    try:
+        clock_status = ClockStatus(request.clock_status)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid clock_status. Must be one of: {[s.value for s in ClockStatus]}",
+        )
+
+    # Get RingCentral extension ID from shared mappings if available
+    ringcentral_extension_id = None
+    try:
+        from shared import find_by_deputy_id
+
+        user = find_by_deputy_id(request.employee_id)
+        if user:
+            ringcentral_extension_id = user.get("ringcentral_extension_id")
+    except Exception:
+        pass
+
+    await status_manager.update_status(
+        employee_id=request.employee_id,
+        name=request.name,
+        clock_status=clock_status,
+        ringcentral_extension_id=ringcentral_extension_id,
+    )
+
+    return {
+        "status": "updated",
+        "employee_id": request.employee_id,
+        "clock_status": clock_status.value,
+        "connected_clients": status_manager.connection_count,
+    }
+
+
+@app.get("/api/dashboard/employee-status/info")
+async def employee_status_info():
+    """
+    Public info endpoint showing how to connect to the employee status API.
+
+    No authentication required - just provides connection information.
+    """
+    return {
+        "websocket_url": "/api/dashboard/employee-status/ws?api_key=YOUR_API_KEY",
+        "rest_url": "/api/dashboard/employee-status",
+        "authentication": {
+            "websocket": "Pass api_key as query parameter",
+            "rest": "Pass X-API-Key header or api_key query parameter",
+        },
+        "connected_clients": status_manager.connection_count,
+        "message_types": {
+            "all_statuses": "Sent on connection with all current employee statuses",
+            "status_update": "Sent when an employee's status changes",
+        },
+    }
+
+
+# =============================================================================
+# DESKTOP APP DOWNLOAD
+# =============================================================================
+
+DOWNLOADS_DIR = Path("/app/downloads")
+
+
+@app.get("/api/dashboard/download/desktop-app")
+async def download_desktop_app():
+    """
+    Download the Windows desktop application for employee status monitoring.
+
+    Returns the latest JWhiteEmployeeStatus.exe built by CI/CD.
+    """
+    exe_path = DOWNLOADS_DIR / "JWhiteEmployeeStatus.exe"
+
+    if not exe_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Desktop app not available. Build may still be in progress.",
+        )
+
+    return FileResponse(
+        path=str(exe_path),
+        filename="JWhiteEmployeeStatus.exe",
+        media_type="application/octet-stream",
+    )
+
+
+@app.get("/api/dashboard/download/desktop-app/info")
+async def desktop_app_info():
+    """Get information about the desktop app download."""
+    exe_path = DOWNLOADS_DIR / "JWhiteEmployeeStatus.exe"
+
+    if exe_path.exists():
+        stat = exe_path.stat()
+        return {
+            "available": True,
+            "filename": "JWhiteEmployeeStatus.exe",
+            "size_bytes": stat.st_size,
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "download_url": "/api/dashboard/download/desktop-app",
+        }
+    else:
+        return {
+            "available": False,
+            "message": "Desktop app not available. Build may still be in progress.",
+        }

@@ -96,6 +96,56 @@ async def update_ringcentral_dnd(
         return False
 
 
+async def notify_dashboard_status(
+    employee_id: str,
+    employee_name: str,
+    clock_status: str,
+) -> bool:
+    """
+    Notify dashboard service of employee status change for WebSocket broadcast.
+
+    Args:
+        employee_id: Deputy employee ID
+        employee_name: Employee name
+        clock_status: One of: clocked_in, clocked_out, on_break
+
+    Returns:
+        True if successful, False otherwise
+    """
+    endpoint = f"{settings.dashboard_service_url}/api/dashboard/internal/employee-status"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                endpoint,
+                json={
+                    "employee_id": employee_id,
+                    "name": employee_name,
+                    "clock_status": clock_status,
+                },
+                headers={"X-Internal-Key": settings.internal_api_key},
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(
+                    f"Notified dashboard of {employee_name} status: {clock_status} "
+                    f"(connected clients: {result.get('connected_clients', 0)})"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"Failed to notify dashboard for {employee_name}: "
+                    f"{response.status_code} - {response.text}"
+                )
+                return False
+
+    except Exception as e:
+        # Don't fail the main flow if dashboard notification fails
+        logger.warning(f"Error notifying dashboard for {employee_name}: {e}")
+        return False
+
+
 def is_today(timesheet_date: str | None) -> bool:
     """Check if the timesheet date matches today's date."""
     if not timesheet_date:
@@ -173,6 +223,23 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
         if not success:
             logger.error(
                 f"Failed to update RingCentral for {employee_name} after {action_description}"
+            )
+
+        # Notify dashboard service for WebSocket broadcast to desktop apps
+        # Map timesheet action to clock status
+        clock_status_map = {
+            TimesheetAction.CLOCK_IN: "clocked_in",
+            TimesheetAction.CLOCK_OUT: "clocked_out",
+            TimesheetAction.BREAK_START: "on_break",
+            TimesheetAction.BREAK_END: "clocked_in",  # Back to work after break
+        }
+        clock_status = clock_status_map.get(event.action)
+
+        if clock_status:
+            await notify_dashboard_status(
+                employee_id=str(event.employee_id),
+                employee_name=employee_name,
+                clock_status=clock_status,
             )
 
     # Mark as completed so duplicate webhooks are ignored for longer
@@ -320,3 +387,127 @@ async def test_webhook(request: Request):
             else None
         ),
     }
+
+
+@app.get("/api/deputy/employees/clock-status")
+async def get_all_employees_clock_status():
+    """
+    Get current clock status for all mapped employees by querying Deputy API.
+
+    Returns a list of employees with their current clock status:
+    - clocked_in: Employee has an active timesheet (IsInProgress=true) with no active break
+    - on_break: Employee has an active timesheet with an active break
+    - clocked_out: No active timesheet found
+
+    This endpoint is used by dashboard-service on startup to recover state.
+    """
+    from shared import get_all_users
+
+    users = get_all_users()
+    results = []
+
+    # Query Deputy API for all active timesheets (IsInProgress=true)
+    active_timesheets = await _query_active_timesheets()
+
+    # Build a map of employee_id -> timesheet data
+    active_by_employee: dict[str, dict] = {}
+    for ts in active_timesheets:
+        emp_id = str(ts.get("Employee", ""))
+        if emp_id:
+            active_by_employee[emp_id] = ts
+
+    # Determine status for each mapped user
+    for user in users:
+        deputy_id = user.get("deputy_id")
+        name = user.get("name", "Unknown")
+        rc_extension_id = user.get("ringcentral_extension_id")
+
+        if deputy_id in active_by_employee:
+            timesheet = active_by_employee[deputy_id]
+
+            # Check if on break by looking at Slots
+            on_break = _is_on_active_break(timesheet.get("Slots", []))
+
+            if on_break:
+                clock_status = "on_break"
+            else:
+                clock_status = "clocked_in"
+        else:
+            clock_status = "clocked_out"
+
+        results.append({
+            "employee_id": deputy_id,
+            "name": name,
+            "clock_status": clock_status,
+            "ringcentral_extension_id": rc_extension_id,
+        })
+
+    return {
+        "employees": results,
+        "active_timesheets_count": len(active_timesheets),
+    }
+
+
+async def _query_active_timesheets() -> list[dict]:
+    """Query Deputy API for all timesheets where IsInProgress=true."""
+    if not settings.deputy_base_url or not settings.deputy_access_token:
+        logger.warning("Deputy API credentials not configured, cannot query timesheets")
+        return []
+
+    endpoint = f"{settings.deputy_base_url}/api/v1/resource/Timesheet/QUERY"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                endpoint,
+                json={
+                    "search": {
+                        "s1": {"field": "IsInProgress", "data": True, "type": "eq"}
+                    }
+                },
+                headers={
+                    "Authorization": f"Bearer {settings.deputy_access_token}",
+                    "Content-Type": "application/json",
+                },
+            )
+
+            if response.status_code == 200:
+                timesheets = response.json()
+                logger.info(f"Found {len(timesheets)} active timesheets from Deputy")
+                return timesheets
+            else:
+                logger.error(
+                    f"Failed to query Deputy timesheets: {response.status_code} - {response.text}"
+                )
+                return []
+
+    except Exception as e:
+        logger.error(f"Error querying Deputy API: {e}")
+        return []
+
+
+def _is_on_active_break(slots: list) -> bool:
+    """Check if there's an active break in the Slots array."""
+    if not slots:
+        return False
+
+    for slot in slots:
+        if not isinstance(slot, dict):
+            continue
+
+        # Check for break type
+        str_type = str(slot.get("strType", "")).upper()
+        if str_type != "B":
+            continue
+
+        # Check if break is in progress (has start but no end)
+        start = slot.get("intUnixStart")
+        end = slot.get("intUnixEnd")
+        state = str(slot.get("strState", "")).lower()
+
+        if start and not end:
+            return True
+        if "in progress" in state or "started" in state:
+            return True
+
+    return False

@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # RingCentral Service URL (internal Docker network)
     ringcentral_service_url: str = "http://ringcentral-service:8000"
 
+    # Dashboard Service URL (for employee status updates)
+    dashboard_service_url: str = "http://dashboard-service:8000"
+
+    # Internal API key for dashboard service communication
+    internal_api_key: str = "internal-service-key"
+
     # Dedupe Configuration
     dedupe_lock_ttl: int = 30  # Seconds to hold dedupe lock
     dedupe_completed_ttl: int = 3600  # Seconds to remember completed events

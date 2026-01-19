@@ -6,11 +6,14 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
-COPY requirements.txt .
+COPY ./services/workflow-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy shared utilities
+COPY ./shared/ ./shared/
+
 # Copy application code
-COPY src/ ./src/
+COPY ./services/workflow-service/src/ ./src/
 
 # Run the application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

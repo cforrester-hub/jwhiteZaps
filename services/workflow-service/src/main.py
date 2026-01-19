@@ -239,3 +239,23 @@ async def clear_processed_items(workflow_name: str):
 
     logger.warning(f"Cleared {deleted_count} processed items for workflow: {workflow_name}")
     return {"status": "cleared", "workflow_name": workflow_name, "items_deleted": deleted_count}
+
+
+@app.delete("/api/workflows/processed/{workflow_name}/{item_id}")
+async def clear_single_processed_item(workflow_name: str, item_id: str):
+    """
+    Clear a single processed item for a workflow.
+    This allows reprocessing of a specific item on the next run.
+    """
+    from .database import async_session, ProcessedItem
+
+    composite_id = f"{workflow_name}:{item_id}"
+    async with async_session() as session:
+        item = await session.get(ProcessedItem, composite_id)
+        if not item:
+            raise HTTPException(status_code=404, detail=f"Processed item not found: {item_id}")
+        await session.delete(item)
+        await session.commit()
+
+    logger.info(f"Cleared processed item {item_id} for workflow: {workflow_name}")
+    return {"status": "cleared", "workflow_name": workflow_name, "item_id": item_id}

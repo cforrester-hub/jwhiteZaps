@@ -523,3 +523,110 @@ async def find_voicemail_for_call(
     except Exception as e:
         logger.error(f"Failed to find voicemail for call: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# PRESENCE / DND (Do Not Disturb) ENDPOINTS
+# =============================================================================
+
+
+class PresenceResponse(BaseModel):
+    extension_id: str
+    dnd_status: str
+    user_status: str
+    presence_status: Optional[str] = None
+
+
+class UpdateDndRequest(BaseModel):
+    dnd_status: str  # TakeAllCalls, DoNotAcceptDepartmentCalls, etc.
+    user_status: str = "Available"
+
+
+@app.get("/api/ringcentral/extensions/{extension_id}/presence", response_model=PresenceResponse)
+async def get_extension_presence(extension_id: str):
+    """
+    Get the presence/DND status of an extension.
+    """
+    try:
+        client = get_ringcentral_client()
+        presence = await client.get_extension_presence(extension_id)
+
+        return PresenceResponse(
+            extension_id=str(presence.get("extension", {}).get("id", extension_id)),
+            dnd_status=presence.get("dndStatus", "Unknown"),
+            user_status=presence.get("userStatus", "Unknown"),
+            presence_status=presence.get("presenceStatus"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to get presence for extension {extension_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/ringcentral/extensions/{extension_id}/presence", response_model=PresenceResponse)
+async def update_extension_presence(extension_id: str, request: UpdateDndRequest):
+    """
+    Update the DND status of an extension.
+
+    dnd_status options:
+    - TakeAllCalls: Accept all calls including queue calls
+    - DoNotAcceptDepartmentCalls: Accept direct calls only, no queue calls
+    - TakeDepartmentCallsOnly: Accept queue calls only
+    - DoNotAcceptAnyCalls: Reject all calls
+    """
+    try:
+        client = get_ringcentral_client()
+        presence = await client.update_extension_dnd(
+            extension_id=extension_id,
+            dnd_status=request.dnd_status,
+            user_status=request.user_status,
+        )
+
+        return PresenceResponse(
+            extension_id=str(presence.get("extension", {}).get("id", extension_id)),
+            dnd_status=presence.get("dndStatus", "Unknown"),
+            user_status=presence.get("userStatus", "Unknown"),
+            presence_status=presence.get("presenceStatus"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to update presence for extension {extension_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ringcentral/extensions/{extension_id}/available", response_model=PresenceResponse)
+async def set_extension_available(extension_id: str):
+    """
+    Set an extension to accept all calls (clocked in / off break).
+    """
+    try:
+        client = get_ringcentral_client()
+        presence = await client.set_extension_available(extension_id)
+
+        return PresenceResponse(
+            extension_id=str(presence.get("extension", {}).get("id", extension_id)),
+            dnd_status=presence.get("dndStatus", "Unknown"),
+            user_status=presence.get("userStatus", "Unknown"),
+            presence_status=presence.get("presenceStatus"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to set extension {extension_id} available: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ringcentral/extensions/{extension_id}/unavailable", response_model=PresenceResponse)
+async def set_extension_unavailable(extension_id: str):
+    """
+    Set an extension to not accept department/queue calls (clocked out / on break).
+    """
+    try:
+        client = get_ringcentral_client()
+        presence = await client.set_extension_unavailable(extension_id)
+
+        return PresenceResponse(
+            extension_id=str(presence.get("extension", {}).get("id", extension_id)),
+            dnd_status=presence.get("dndStatus", "Unknown"),
+            user_status=presence.get("userStatus", "Unknown"),
+            presence_status=presence.get("presenceStatus"),
+        )
+    except Exception as e:
+        logger.error(f"Failed to set extension {extension_id} unavailable: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

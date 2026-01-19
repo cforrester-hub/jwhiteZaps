@@ -2,8 +2,8 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any
 
+import httpx
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -14,10 +14,14 @@ from .redis_client import (
     mark_dedupe_completed,
 )
 from .timesheet_parser import (
+    DesiredDndStatus,
     ParsedTimesheetEvent,
     TimesheetAction,
     parse_timesheet_webhook,
 )
+
+# Import shared user mappings
+from shared import find_by_deputy_id
 
 settings = get_settings()
 
@@ -46,35 +50,109 @@ app = FastAPI(
 )
 
 
+async def update_ringcentral_dnd(
+    extension_id: str,
+    dnd_status: DesiredDndStatus,
+    employee_name: str,
+) -> bool:
+    """
+    Call RingCentral service to update DND status.
+
+    Args:
+        extension_id: RingCentral extension ID
+        dnd_status: Desired DND status
+        employee_name: Employee name for logging
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Determine which endpoint to call based on desired status
+    if dnd_status == DesiredDndStatus.TAKE_ALL_CALLS:
+        endpoint = f"{settings.ringcentral_service_url}/api/ringcentral/extensions/{extension_id}/available"
+    else:
+        endpoint = f"{settings.ringcentral_service_url}/api/ringcentral/extensions/{extension_id}/unavailable"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(endpoint)
+
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(
+                    f"Updated RingCentral DND for {employee_name} (ext {extension_id}): "
+                    f"{result.get('dnd_status')}"
+                )
+                return True
+            else:
+                logger.error(
+                    f"Failed to update RingCentral DND for {employee_name}: "
+                    f"{response.status_code} - {response.text}"
+                )
+                return False
+
+    except Exception as e:
+        logger.error(f"Error calling RingCentral service for {employee_name}: {e}")
+        return False
+
+
 async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
     """
     Process a timesheet event after acquiring dedupe lock.
 
-    This is where you would:
-    - Look up the employee in user_mappings
-    - Call RingCentral to update DND status
-    - Log the event
-    - etc.
+    - Looks up the employee in user_mappings
+    - Calls RingCentral to update DND status based on clock status
     """
     logger.info(
         f"Processing event: {event.action.value} for employee {event.employee_id}"
     )
 
-    # TODO: Look up employee in shared user_mappings
-    # from shared import find_by_deputy_id
-    # user = find_by_deputy_id(str(event.employee_id))
+    # Look up employee in shared user_mappings
+    user = find_by_deputy_id(str(event.employee_id))
 
-    # TODO: Call RingCentral service to update DND status
-    # if event.desired_dnd_status and user:
-    #     ringcentral_extension_id = user.get("ringcentral_extension_id")
-    #     # POST to ringcentral-service to update DND
-
-    # For now, just log what we would do
-    if event.desired_dnd_status:
-        logger.info(
-            f"Would set DND status to {event.desired_dnd_status.value} "
-            f"for employee {event.employee_id}"
+    if not user:
+        logger.warning(
+            f"No user mapping found for Deputy employee ID {event.employee_id}"
         )
+        # Mark as completed anyway to avoid reprocessing
+        if event.dedupe_key:
+            await mark_dedupe_completed(event.dedupe_key)
+        return
+
+    employee_name = user.get("name", "Unknown")
+    ringcentral_extension_id = user.get("ringcentral_extension_id")
+
+    if not ringcentral_extension_id:
+        logger.warning(
+            f"No RingCentral extension ID for {employee_name} (Deputy ID {event.employee_id})"
+        )
+        if event.dedupe_key:
+            await mark_dedupe_completed(event.dedupe_key)
+        return
+
+    # Update RingCentral DND status
+    if event.desired_dnd_status:
+        action_description = {
+            TimesheetAction.CLOCK_IN: "clocked in",
+            TimesheetAction.CLOCK_OUT: "clocked out",
+            TimesheetAction.BREAK_START: "started break",
+            TimesheetAction.BREAK_END: "ended break",
+        }.get(event.action, event.action.value)
+
+        logger.info(
+            f"{employee_name} {action_description} - "
+            f"setting DND to {event.desired_dnd_status.value}"
+        )
+
+        success = await update_ringcentral_dnd(
+            extension_id=ringcentral_extension_id,
+            dnd_status=event.desired_dnd_status,
+            employee_name=employee_name,
+        )
+
+        if not success:
+            logger.error(
+                f"Failed to update RingCentral for {employee_name} after {action_description}"
+            )
 
     # Mark as completed so duplicate webhooks are ignored for longer
     if event.dedupe_key:

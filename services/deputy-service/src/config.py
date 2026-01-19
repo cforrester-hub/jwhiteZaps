@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Redis Configuration (for dedupe locking)
     redis_url: str = "redis://redis:6379/0"
 
+    # RingCentral Service URL (internal Docker network)
+    ringcentral_service_url: str = "http://ringcentral-service:8000"
+
     # Dedupe Configuration
     dedupe_lock_ttl: int = 30  # Seconds to hold dedupe lock
     dedupe_completed_ttl: int = 3600  # Seconds to remember completed events

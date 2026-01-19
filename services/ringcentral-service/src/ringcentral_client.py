@@ -435,6 +435,90 @@ class RingCentralClient:
             return None
 
 
+    # =========================================================================
+    # PRESENCE / DND (Do Not Disturb) METHODS
+    # =========================================================================
+
+    async def get_extension_presence(self, extension_id: str = "~") -> dict:
+        """
+        Get the presence/DND status of an extension.
+
+        Args:
+            extension_id: The extension ID (use "~" for current user)
+
+        Returns:
+            Presence info including dndStatus, userStatus, presenceStatus
+        """
+        return await self._make_request(
+            "GET",
+            f"/restapi/v1.0/account/~/extension/{extension_id}/presence",
+        )
+
+    async def update_extension_dnd(
+        self,
+        extension_id: str,
+        dnd_status: str,
+        user_status: str = "Available",
+    ) -> dict:
+        """
+        Update the DND (Do Not Disturb) status of an extension.
+
+        Args:
+            extension_id: The extension ID to update
+            dnd_status: One of:
+                - "TakeAllCalls" - Accept all calls including queue calls
+                - "DoNotAcceptDepartmentCalls" - Accept direct calls only, no queue calls
+                - "TakeDepartmentCallsOnly" - Accept queue calls only
+                - "DoNotAcceptAnyCalls" - Reject all calls
+            user_status: One of "Offline", "Busy", "Available" (default: "Available")
+
+        Returns:
+            Updated presence info
+        """
+        logger.info(f"Updating DND status for extension {extension_id}: {dnd_status}")
+
+        return await self._make_request(
+            "PUT",
+            f"/restapi/v1.0/account/~/extension/{extension_id}/presence",
+            json={
+                "dndStatus": dnd_status,
+                "userStatus": user_status,
+            },
+        )
+
+    async def set_extension_available(self, extension_id: str) -> dict:
+        """
+        Set an extension to accept all calls (clocked in / off break).
+
+        Args:
+            extension_id: The extension ID
+
+        Returns:
+            Updated presence info
+        """
+        return await self.update_extension_dnd(
+            extension_id=extension_id,
+            dnd_status="TakeAllCalls",
+            user_status="Available",
+        )
+
+    async def set_extension_unavailable(self, extension_id: str) -> dict:
+        """
+        Set an extension to not accept department/queue calls (clocked out / on break).
+
+        Args:
+            extension_id: The extension ID
+
+        Returns:
+            Updated presence info
+        """
+        return await self.update_extension_dnd(
+            extension_id=extension_id,
+            dnd_status="DoNotAcceptDepartmentCalls",
+            user_status="Available",
+        )
+
+
 # Singleton instance
 _client: Optional[RingCentralClient] = None
 

@@ -20,6 +20,8 @@ from .outgoing_call import (
     format_phone_for_display,
     format_duration,
     build_note_content,
+    is_call_too_recent,
+    CALL_PROCESSING_DELAY_MINUTES,
 )
 from ..http_client import ringcentral, agencyzoom, storage, transcription
 
@@ -220,6 +222,11 @@ async def run():
         # Skip if already processed
         if await is_processed(call_id, "incoming_call"):
             logger.debug(f"Call {call_id} already processed, skipping")
+            continue
+
+        # Skip calls that ended too recently (recording may not be ready)
+        if is_call_too_recent(call):
+            logger.debug(f"Call {call_id} ended less than {CALL_PROCESSING_DELAY_MINUTES} minutes ago, will process later")
             continue
 
         # Skip calls with no result or failed calls

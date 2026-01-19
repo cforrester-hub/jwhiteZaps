@@ -20,6 +20,29 @@ from ..http_client import ringcentral, agencyzoom, storage, transcription
 
 logger = logging.getLogger(__name__)
 
+# Minimum age for calls before processing (allows time for recording to be available)
+CALL_PROCESSING_DELAY_MINUTES = 15
+
+
+def is_call_too_recent(call: dict) -> bool:
+    """Check if a call ended too recently to process (recording may not be ready)."""
+    start_time = call.get("start_time", "")
+    duration = call.get("duration", 0)
+
+    if not start_time:
+        return False  # Can't determine, allow processing
+
+    try:
+        # Parse the start time and add duration to get end time
+        call_start = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+        call_end = call_start + timedelta(seconds=duration)
+
+        # Check if call ended less than CALL_PROCESSING_DELAY_MINUTES ago
+        min_process_time = datetime.now(call_end.tzinfo) - timedelta(minutes=CALL_PROCESSING_DELAY_MINUTES)
+        return call_end > min_process_time
+    except (ValueError, TypeError):
+        return False  # Can't parse, allow processing
+
 
 def format_phone_for_display(phone: str, include_country_code: bool = False) -> str:
     """Format a phone number for display in notes."""
@@ -318,6 +341,11 @@ async def run():
         # Skip if already processed
         if await is_processed(call_id, "outgoing_call"):
             logger.debug(f"Call {call_id} already processed, skipping")
+            continue
+
+        # Skip calls that ended too recently (recording may not be ready)
+        if is_call_too_recent(call):
+            logger.debug(f"Call {call_id} ended less than {CALL_PROCESSING_DELAY_MINUTES} minutes ago, will process later")
             continue
 
         # Skip calls with no result or failed calls

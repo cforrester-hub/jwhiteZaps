@@ -17,7 +17,12 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from . import register_workflow, TriggerType, is_processed, mark_processed
-from .outgoing_call import format_phone_for_display, format_duration
+from .outgoing_call import (
+    format_phone_for_display,
+    format_duration,
+    is_call_too_recent,
+    CALL_PROCESSING_DELAY_MINUTES,
+)
 from ..http_client import ringcentral, agencyzoom, storage, transcription
 
 logger = logging.getLogger(__name__)
@@ -304,6 +309,11 @@ async def run():
         # Skip if already processed
         if await is_processed(call_id, "voicemail"):
             logger.debug(f"Voicemail {call_id} already processed, skipping")
+            continue
+
+        # Skip voicemails that ended too recently (recording may not be ready)
+        if is_call_too_recent(call):
+            logger.debug(f"Voicemail {call_id} ended less than {CALL_PROCESSING_DELAY_MINUTES} minutes ago, will process later")
             continue
 
         # Process the voicemail

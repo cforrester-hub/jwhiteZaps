@@ -358,6 +358,41 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         labels: "service"
 
+  deputy-service:
+    build:
+      context: .
+      dockerfile: ./services/deputy-service/Dockerfile
+    container_name: deputy-service
+    restart: unless-stopped
+    environment:
+      DEPUTY_BASE_URL: ${DEPUTY_BASE_URL}
+      DEPUTY_ACCESS_TOKEN: ${DEPUTY_ACCESS_TOKEN}
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.deputy-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/deputy`)"
+      - "traefik.http.routers.deputy-service.entrypoints=websecure"
+      - "traefik.http.routers.deputy-service.tls.certresolver=letsencrypt"
+      - "traefik.http.services.deputy-service.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/deputy/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
 # =============================================================================
 # NETWORKS
 # =============================================================================

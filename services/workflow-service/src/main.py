@@ -58,8 +58,13 @@ async def lifespan(app: FastAPI):
     # Register cron workflows with scheduler
     for name, config in get_cron_workflows().items():
         if config.cron_expression:
+            # Create a proper async wrapper function for the scheduler
+            # APScheduler needs an actual async function, not a lambda returning a coroutine
+            async def workflow_runner(workflow_name=name):
+                await run_workflow(workflow_name)
+
             add_cron_job(
-                func=lambda n=name: run_workflow(n),
+                func=workflow_runner,
                 cron_expression=config.cron_expression,
                 job_id=name,
                 name=config.description,

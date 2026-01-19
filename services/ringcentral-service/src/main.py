@@ -258,6 +258,20 @@ async def get_call_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/ringcentral/calls/{call_id}/raw")
+async def get_call_raw(call_id: str):
+    """
+    Get raw call log data (for debugging).
+    Shows the complete RingCentral API response including extension info.
+    """
+    try:
+        client = get_ringcentral_client()
+        return await client.get_call_with_details(call_id)
+    except Exception as e:
+        logger.error(f"Failed to get call details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/ringcentral/recordings/{recording_id}")
 async def get_recording(recording_id: str):
     """

@@ -1,0 +1,4 @@
+# Desktop app dependencies
+websocket-client>=1.6.0
+pillow>=10.0.0
+pystray>=0.19.0

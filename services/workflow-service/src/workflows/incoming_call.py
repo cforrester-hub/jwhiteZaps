@@ -185,7 +185,7 @@ async def process_single_call(call: dict) -> dict:
     name="incoming_call",
     description="Sync incoming calls from RingCentral to AgencyZoom",
     trigger_type=TriggerType.CRON,
-    cron_expression="*/5 * * * *",  # Every 5 minutes
+    cron_expression="0,5,10,15,20,25,30,35,40,45,50,55 * * * *",  # Every 5 minutes at :00
     enabled=True,
 )
 async def run():

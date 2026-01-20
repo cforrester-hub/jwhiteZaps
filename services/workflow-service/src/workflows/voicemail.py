@@ -269,7 +269,7 @@ async def process_single_voicemail(call: dict) -> dict:
     name="voicemail",
     description="Create tasks for voicemail calls from RingCentral",
     trigger_type=TriggerType.CRON,
-    cron_expression="*/5 * * * *",  # Every 5 minutes
+    cron_expression="2,7,12,17,22,27,32,37,42,47,52,57 * * * *",  # Every 5 minutes at :02
     enabled=True,
 )
 async def run():

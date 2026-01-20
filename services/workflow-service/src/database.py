@@ -16,10 +16,11 @@ database_url = database_url.replace("sslmode=", "ssl=")
 engine = create_async_engine(
     database_url,
     echo=False,
-    pool_size=5,           # Maximum number of connections to keep in the pool
-    max_overflow=5,        # Allow up to 5 additional connections beyond pool_size
+    pool_size=2,           # Keep pool small for managed DB with limited connections
+    max_overflow=3,        # Allow up to 3 additional connections beyond pool_size
     pool_pre_ping=True,    # Verify connections before use
     pool_recycle=300,      # Recycle connections after 5 minutes
+    pool_timeout=30,       # Wait up to 30s for a connection from the pool
 )
 
 # Session factory

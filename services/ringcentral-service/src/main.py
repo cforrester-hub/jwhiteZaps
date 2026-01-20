@@ -56,8 +56,10 @@ class CallSummary(BaseModel):
     direction: str
     from_number: str
     from_name: Optional[str] = None
+    from_extension_id: Optional[str] = None
     to_number: str
     to_name: Optional[str] = None
+    to_extension_id: Optional[str] = None
     result: str
     has_recording: bool
     recording_id: Optional[str] = None
@@ -154,6 +156,45 @@ async def get_call_log(
         calls = []
         for record in result.get("records", []):
             recording = record.get("recording")
+            from_obj = record.get("from", {})
+            to_obj = record.get("to", {})
+
+            # Get extension info - check legs array for more detail if available
+            from_name = from_obj.get("name")
+            to_name = to_obj.get("name")
+            from_ext_id = from_obj.get("extensionId")
+            to_ext_id = to_obj.get("extensionId")
+
+            # If names not in from/to, check legs array for extension info
+            legs = record.get("legs", [])
+            if legs and (not from_name or not to_name):
+                for leg in legs:
+                    leg_ext = leg.get("extension", {})
+                    leg_from = leg.get("from", {})
+                    leg_to = leg.get("to", {})
+
+                    # Get names from leg if not already set
+                    if not from_name and leg_from.get("name"):
+                        from_name = leg_from.get("name")
+                    if not to_name and leg_to.get("name"):
+                        to_name = leg_to.get("name")
+
+                    # Get extension IDs from leg
+                    if not from_ext_id and leg_from.get("extensionId"):
+                        from_ext_id = str(leg_from.get("extensionId"))
+                    if not to_ext_id and leg_to.get("extensionId"):
+                        to_ext_id = str(leg_to.get("extensionId"))
+
+                    # Also check the extension object on the leg itself
+                    if leg_ext.get("id") and leg_ext.get("name"):
+                        # This extension handled the call
+                        if record.get("direction") == "Outbound" and not from_name:
+                            from_name = leg_ext.get("name")
+                            from_ext_id = str(leg_ext.get("id"))
+                        elif record.get("direction") == "Inbound" and not to_name:
+                            to_name = leg_ext.get("name")
+                            to_ext_id = str(leg_ext.get("id"))
+
             calls.append(
                 CallSummary(
                     id=record.get("id", ""),
@@ -161,10 +202,12 @@ async def get_call_log(
                     start_time=record.get("startTime", ""),
                     duration=record.get("duration", 0),
                     direction=record.get("direction", ""),
-                    from_number=record.get("from", {}).get("phoneNumber", ""),
-                    from_name=record.get("from", {}).get("name"),
-                    to_number=record.get("to", {}).get("phoneNumber", ""),
-                    to_name=record.get("to", {}).get("name"),
+                    from_number=from_obj.get("phoneNumber", ""),
+                    from_name=from_name,
+                    from_extension_id=str(from_ext_id) if from_ext_id else None,
+                    to_number=to_obj.get("phoneNumber", ""),
+                    to_name=to_name,
+                    to_extension_id=str(to_ext_id) if to_ext_id else None,
                     result=record.get("result", ""),
                     has_recording=recording is not None,
                     recording_id=recording.get("id") if recording else None,
@@ -202,16 +245,57 @@ async def get_call_details(
         call_data = await client.get_call_with_details(call_id)
 
         recording_data = call_data.get("recording")
+        from_obj = call_data.get("from", {})
+        to_obj = call_data.get("to", {})
+
+        # Get extension info - check legs array for more detail if available
+        from_name = from_obj.get("name")
+        to_name = to_obj.get("name")
+        from_ext_id = from_obj.get("extensionId")
+        to_ext_id = to_obj.get("extensionId")
+
+        # If names not in from/to, check legs array for extension info
+        legs = call_data.get("legs", [])
+        if legs and (not from_name or not to_name):
+            for leg in legs:
+                leg_ext = leg.get("extension", {})
+                leg_from = leg.get("from", {})
+                leg_to = leg.get("to", {})
+
+                # Get names from leg if not already set
+                if not from_name and leg_from.get("name"):
+                    from_name = leg_from.get("name")
+                if not to_name and leg_to.get("name"):
+                    to_name = leg_to.get("name")
+
+                # Get extension IDs from leg
+                if not from_ext_id and leg_from.get("extensionId"):
+                    from_ext_id = str(leg_from.get("extensionId"))
+                if not to_ext_id and leg_to.get("extensionId"):
+                    to_ext_id = str(leg_to.get("extensionId"))
+
+                # Also check the extension object on the leg itself
+                if leg_ext.get("id") and leg_ext.get("name"):
+                    # This extension handled the call
+                    if call_data.get("direction") == "Outbound" and not from_name:
+                        from_name = leg_ext.get("name")
+                        from_ext_id = str(leg_ext.get("id"))
+                    elif call_data.get("direction") == "Inbound" and not to_name:
+                        to_name = leg_ext.get("name")
+                        to_ext_id = str(leg_ext.get("id"))
+
         call_summary = CallSummary(
             id=call_data.get("id", ""),
             session_id=call_data.get("sessionId", ""),
             start_time=call_data.get("startTime", ""),
             duration=call_data.get("duration", 0),
             direction=call_data.get("direction", ""),
-            from_number=call_data.get("from", {}).get("phoneNumber", ""),
-            from_name=call_data.get("from", {}).get("name"),
-            to_number=call_data.get("to", {}).get("phoneNumber", ""),
-            to_name=call_data.get("to", {}).get("name"),
+            from_number=from_obj.get("phoneNumber", ""),
+            from_name=from_name,
+            from_extension_id=str(from_ext_id) if from_ext_id else None,
+            to_number=to_obj.get("phoneNumber", ""),
+            to_name=to_name,
+            to_extension_id=str(to_ext_id) if to_ext_id else None,
             result=call_data.get("result", ""),
             has_recording=recording_data is not None,
             recording_id=recording_data.get("id") if recording_data else None,

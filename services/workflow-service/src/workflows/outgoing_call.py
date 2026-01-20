@@ -114,18 +114,24 @@ def build_note_content(
 
     from_number = format_phone_for_display(call.get("from_number", "Unknown"))
     to_number = format_phone_for_display(call.get("to_number", "Unknown"))
+    from_name = call.get("from_name")
+    to_name = call.get("to_name")
     result = call.get("result", "Unknown")
     duration = format_duration(call.get("duration", 0))
     date_time = format_datetime_for_display(call.get("start_time"))
     recording_id = call.get("recording_id", "N/A")
     call_id = call.get("id", "Unknown")
 
+    # Format from/to with extension name if available
+    from_display = f"{from_number} ({from_name})" if from_name else from_number
+    to_display = f"{to_number} ({to_name})" if to_name else to_number
+
     # Build HTML note matching Zapier template style
     # Header line: emoji + direction - other party - result
     header = f"📞 {direction} - {other_party} - {result}"
 
     # Build the HTML table - full width, no gaps
-    html = f'''{header}<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_number}</div><div>👤 <b>To:</b> {to_number}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
+    html = f'''{header}<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_display}</div><div>👤 <b>To:</b> {to_display}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
 
     # Add AI summary if available
     if ai_summary:

@@ -141,11 +141,11 @@ def build_note_content(
     html += '''</td><td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;"><strong>RECORDING INFORMATION</strong>'''
 
     if recording_url:
-        html += f'''<div>💾 <b>Recording ID:</b> {recording_id}</div><div>🔗 <b>Recording Link:</b> <a href="{recording_url}" target="_blank">{recording_url}</a></div>'''
+        html += f'''<div>💾 <b>Recording ID:</b> {recording_id}</div><div>🔗 <b>Recording Link:</b> <a href="{recording_url}" target="_blank">Play Recording</a></div><div style="margin-top:10px;font-size:0.9em;color:#666;"><b>Call ID:</b> {call_id}</div>'''
     else:
-        html += '''<div>No recording available</div>'''
+        html += f'''<div>No recording available</div><div style="margin-top:10px;font-size:0.9em;color:#666;"><b>Call ID:</b> {call_id}</div>'''
 
-    html += f'''<div style="margin-top:10px;font-size:0.9em;color:#666;"><b>Call ID:</b> {call_id}</div></td></tr></table>'''
+    html += '''</td></tr></table>'''
 
     return html
 

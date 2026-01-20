@@ -14,6 +14,7 @@ This workflow:
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from . import register_workflow, TriggerType, is_processed, mark_processed
 from ..http_client import ringcentral, agencyzoom, storage, transcription
@@ -78,13 +79,15 @@ def format_duration(seconds: int) -> str:
 
 
 def format_datetime_for_display(iso_datetime: str) -> str:
-    """Format ISO datetime string for display."""
+    """Format ISO datetime string for display in Pacific time."""
     if not iso_datetime:
         return "Unknown"
     try:
-        # Parse ISO format and return formatted date/time
+        # Parse ISO format (UTC) and convert to Pacific time
         dt = datetime.fromisoformat(iso_datetime.replace("Z", "+00:00"))
-        return dt.strftime("%m/%d/%Y %I:%M %p")
+        pacific = ZoneInfo("America/Los_Angeles")
+        dt_pacific = dt.astimezone(pacific)
+        return dt_pacific.strftime("%m/%d/%Y %I:%M %p")
     except (ValueError, AttributeError):
         return iso_datetime[:19] if iso_datetime else "Unknown"
 

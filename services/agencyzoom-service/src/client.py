@@ -520,5 +520,5 @@ async def get_lead_producer_id(lead_id: int) -> Optional[int]:
     if not lead:
         return None
 
-    # Leads typically have an agentId or producerId
-    return lead.get("agentId") or lead.get("producerId")
+    # Leads use assignedTo for the primary producer/agent
+    return lead.get("assignedTo") or lead.get("agentId") or lead.get("producerId")

@@ -48,6 +48,14 @@ class ConnectionTestResponse(BaseModel):
     account_name: str
 
 
+class RecordingInfo(BaseModel):
+    """Info about a single recording segment (one per call leg)."""
+    recording_id: str
+    leg_index: int
+    duration: int
+    extension_name: Optional[str] = None
+
+
 class CallSummary(BaseModel):
     id: str
     session_id: str
@@ -62,7 +70,8 @@ class CallSummary(BaseModel):
     to_extension_id: Optional[str] = None
     result: str
     has_recording: bool
-    recording_id: Optional[str] = None
+    recording_id: Optional[str] = None  # Primary recording (first one found)
+    recordings: list[RecordingInfo] = []  # All recordings from all legs
 
 
 class CallLogResponse(BaseModel):
@@ -90,7 +99,8 @@ class RingSenseResponse(BaseModel):
 
 class CallDetailResponse(BaseModel):
     call: CallSummary
-    recording: Optional[RecordingResponse] = None
+    recording: Optional[RecordingResponse] = None  # Primary recording (first one)
+    recordings: list[RecordingResponse] = []  # All recordings from all legs
     ai_insights: Optional[RingSenseResponse] = None
 
 
@@ -165,35 +175,59 @@ async def get_call_log(
             from_ext_id = from_obj.get("extensionId")
             to_ext_id = to_obj.get("extensionId")
 
-            # If names not in from/to, check legs array for extension info
+            # Check legs array for extension info and recordings
             legs = record.get("legs", [])
-            if legs and (not from_name or not to_name):
-                for leg in legs:
-                    leg_ext = leg.get("extension", {})
-                    leg_from = leg.get("from", {})
-                    leg_to = leg.get("to", {})
+            all_recordings = []
 
-                    # Get names from leg if not already set
-                    if not from_name and leg_from.get("name"):
-                        from_name = leg_from.get("name")
-                    if not to_name and leg_to.get("name"):
-                        to_name = leg_to.get("name")
+            for leg_index, leg in enumerate(legs):
+                leg_ext = leg.get("extension", {})
+                leg_from = leg.get("from", {})
+                leg_to = leg.get("to", {})
 
-                    # Get extension IDs from leg
-                    if not from_ext_id and leg_from.get("extensionId"):
-                        from_ext_id = str(leg_from.get("extensionId"))
-                    if not to_ext_id and leg_to.get("extensionId"):
-                        to_ext_id = str(leg_to.get("extensionId"))
+                # Get names from leg if not already set
+                if not from_name and leg_from.get("name"):
+                    from_name = leg_from.get("name")
+                if not to_name and leg_to.get("name"):
+                    to_name = leg_to.get("name")
 
-                    # Also check the extension object on the leg itself
-                    if leg_ext.get("id") and leg_ext.get("name"):
-                        # This extension handled the call
-                        if record.get("direction") == "Outbound" and not from_name:
-                            from_name = leg_ext.get("name")
-                            from_ext_id = str(leg_ext.get("id"))
-                        elif record.get("direction") == "Inbound" and not to_name:
-                            to_name = leg_ext.get("name")
-                            to_ext_id = str(leg_ext.get("id"))
+                # Get extension IDs from leg
+                if not from_ext_id and leg_from.get("extensionId"):
+                    from_ext_id = str(leg_from.get("extensionId"))
+                if not to_ext_id and leg_to.get("extensionId"):
+                    to_ext_id = str(leg_to.get("extensionId"))
+
+                # Also check the extension object on the leg itself
+                if leg_ext.get("id") and leg_ext.get("name"):
+                    # This extension handled the call
+                    if record.get("direction") == "Outbound" and not from_name:
+                        from_name = leg_ext.get("name")
+                        from_ext_id = str(leg_ext.get("id"))
+                    elif record.get("direction") == "Inbound" and not to_name:
+                        to_name = leg_ext.get("name")
+                        to_ext_id = str(leg_ext.get("id"))
+
+                # Check for recording on this leg (transferred calls have recordings per leg)
+                leg_recording = leg.get("recording")
+                if leg_recording and leg_recording.get("id"):
+                    all_recordings.append(
+                        RecordingInfo(
+                            recording_id=leg_recording.get("id"),
+                            leg_index=leg_index,
+                            duration=leg.get("duration", 0),
+                            extension_name=leg_ext.get("name"),
+                        )
+                    )
+
+            # If no recordings found in legs, check top-level recording
+            if not all_recordings and recording:
+                all_recordings.append(
+                    RecordingInfo(
+                        recording_id=recording.get("id"),
+                        leg_index=0,
+                        duration=record.get("duration", 0),
+                        extension_name=from_name if record.get("direction") == "Outbound" else to_name,
+                    )
+                )
 
             calls.append(
                 CallSummary(
@@ -209,8 +243,9 @@ async def get_call_log(
                     to_name=to_name,
                     to_extension_id=str(to_ext_id) if to_ext_id else None,
                     result=record.get("result", ""),
-                    has_recording=recording is not None,
-                    recording_id=recording.get("id") if recording else None,
+                    has_recording=len(all_recordings) > 0,
+                    recording_id=all_recordings[0].recording_id if all_recordings else None,
+                    recordings=all_recordings,
                 )
             )
 
@@ -254,35 +289,62 @@ async def get_call_details(
         from_ext_id = from_obj.get("extensionId")
         to_ext_id = to_obj.get("extensionId")
 
-        # If names not in from/to, check legs array for extension info
+        # Check legs array for extension info and all recordings
         legs = call_data.get("legs", [])
-        if legs and (not from_name or not to_name):
-            for leg in legs:
-                leg_ext = leg.get("extension", {})
-                leg_from = leg.get("from", {})
-                leg_to = leg.get("to", {})
+        all_recording_infos = []
+        leg_recordings_data = []  # Store raw recording data from legs
 
-                # Get names from leg if not already set
-                if not from_name and leg_from.get("name"):
-                    from_name = leg_from.get("name")
-                if not to_name and leg_to.get("name"):
-                    to_name = leg_to.get("name")
+        for leg_index, leg in enumerate(legs):
+            leg_ext = leg.get("extension", {})
+            leg_from = leg.get("from", {})
+            leg_to = leg.get("to", {})
 
-                # Get extension IDs from leg
-                if not from_ext_id and leg_from.get("extensionId"):
-                    from_ext_id = str(leg_from.get("extensionId"))
-                if not to_ext_id and leg_to.get("extensionId"):
-                    to_ext_id = str(leg_to.get("extensionId"))
+            # Get names from leg if not already set
+            if not from_name and leg_from.get("name"):
+                from_name = leg_from.get("name")
+            if not to_name and leg_to.get("name"):
+                to_name = leg_to.get("name")
 
-                # Also check the extension object on the leg itself
-                if leg_ext.get("id") and leg_ext.get("name"):
-                    # This extension handled the call
-                    if call_data.get("direction") == "Outbound" and not from_name:
-                        from_name = leg_ext.get("name")
-                        from_ext_id = str(leg_ext.get("id"))
-                    elif call_data.get("direction") == "Inbound" and not to_name:
-                        to_name = leg_ext.get("name")
-                        to_ext_id = str(leg_ext.get("id"))
+            # Get extension IDs from leg
+            if not from_ext_id and leg_from.get("extensionId"):
+                from_ext_id = str(leg_from.get("extensionId"))
+            if not to_ext_id and leg_to.get("extensionId"):
+                to_ext_id = str(leg_to.get("extensionId"))
+
+            # Also check the extension object on the leg itself
+            if leg_ext.get("id") and leg_ext.get("name"):
+                # This extension handled the call
+                if call_data.get("direction") == "Outbound" and not from_name:
+                    from_name = leg_ext.get("name")
+                    from_ext_id = str(leg_ext.get("id"))
+                elif call_data.get("direction") == "Inbound" and not to_name:
+                    to_name = leg_ext.get("name")
+                    to_ext_id = str(leg_ext.get("id"))
+
+            # Check for recording on this leg (transferred calls have recordings per leg)
+            leg_recording = leg.get("recording")
+            if leg_recording and leg_recording.get("id"):
+                all_recording_infos.append(
+                    RecordingInfo(
+                        recording_id=leg_recording.get("id"),
+                        leg_index=leg_index,
+                        duration=leg.get("duration", 0),
+                        extension_name=leg_ext.get("name"),
+                    )
+                )
+                leg_recordings_data.append(leg_recording)
+
+        # If no recordings found in legs, check top-level recording
+        if not all_recording_infos and recording_data:
+            all_recording_infos.append(
+                RecordingInfo(
+                    recording_id=recording_data.get("id"),
+                    leg_index=0,
+                    duration=call_data.get("duration", 0),
+                    extension_name=from_name if call_data.get("direction") == "Outbound" else to_name,
+                )
+            )
+            leg_recordings_data.append(recording_data)
 
         call_summary = CallSummary(
             id=call_data.get("id", ""),
@@ -297,23 +359,32 @@ async def get_call_details(
             to_name=to_name,
             to_extension_id=str(to_ext_id) if to_ext_id else None,
             result=call_data.get("result", ""),
-            has_recording=recording_data is not None,
-            recording_id=recording_data.get("id") if recording_data else None,
+            has_recording=len(all_recording_infos) > 0,
+            recording_id=all_recording_infos[0].recording_id if all_recording_infos else None,
+            recordings=all_recording_infos,
         )
 
         response = CallDetailResponse(call=call_summary)
 
-        # Get recording if available and requested
-        if include_recording and recording_data:
-            content_uri = recording_data.get("contentUri", "")
-            if content_uri:
-                download_url = await client.get_recording_content_url(content_uri)
-                response.recording = RecordingResponse(
-                    recording_id=recording_data.get("id", ""),
-                    duration=recording_data.get("duration", 0),
-                    content_url=download_url,
-                    content_type=recording_data.get("contentType", "audio/mpeg"),
-                )
+        # Get all recordings if available and requested
+        if include_recording and leg_recordings_data:
+            all_recording_responses = []
+            for rec_data in leg_recordings_data:
+                content_uri = rec_data.get("contentUri", "")
+                if content_uri:
+                    download_url = await client.get_recording_content_url(content_uri)
+                    all_recording_responses.append(
+                        RecordingResponse(
+                            recording_id=rec_data.get("id", ""),
+                            duration=rec_data.get("duration", 0),
+                            content_url=download_url,
+                            content_type=rec_data.get("contentType", "audio/mpeg"),
+                        )
+                    )
+
+            if all_recording_responses:
+                response.recording = all_recording_responses[0]  # Primary recording
+                response.recordings = all_recording_responses  # All recordings
 
         # Get AI insights if available and requested
         if include_ai_insights and recording_data:

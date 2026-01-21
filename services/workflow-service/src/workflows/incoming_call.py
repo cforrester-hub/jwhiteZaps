@@ -56,14 +56,15 @@ async def process_single_call(call: dict) -> dict:
 
     logger.info(f"Found {len(customers)} customers and {len(leads)} leads for {from_number}")
 
-    # Get call details including recording and AI insights
-    recording_url = None
+    # Get call details including all recordings and AI insights
+    recording_urls = []  # List of (url, extension_name) tuples for all segments
     ai_summary = None
     action_items = []
-    recording_id = call.get("recording_id")
-    content_url = None
 
-    if recording_id:
+    # Check if call has any recordings (could be multiple for transferred calls)
+    has_recordings = call.get("recording_id") or call.get("recordings")
+
+    if has_recordings:
         try:
             # Get full call details with AI insights
             call_details = await ringcentral.get_call_details(
@@ -72,59 +73,88 @@ async def process_single_call(call: dict) -> dict:
                 include_ai_insights=True,
             )
 
-            # Upload recording to storage
-            recording_info = call_details.get("recording")
-            if recording_info and recording_info.get("content_url"):
-                content_url = recording_info.get("content_url")
-                content_type = recording_info.get("content_type", "audio/mpeg")
+            # Process all recordings (may be multiple for transferred calls)
+            all_recordings = call_details.get("recordings", [])
 
-                # Determine file extension
-                ext = "mp3"
-                if "wav" in content_type:
-                    ext = "wav"
-                elif "ogg" in content_type:
-                    ext = "ogg"
+            # Fallback to single recording if recordings array not available
+            if not all_recordings:
+                single_rec = call_details.get("recording")
+                if single_rec:
+                    all_recordings = [single_rec]
 
-                # Build filename with date
-                call_date = call.get("start_time", "")[:10].replace("-", "/")
-                filename = f"{call_id}.{ext}"
-                folder = f"recordings/{call_date}"
+            logger.info(f"Call {call_id} has {len(all_recordings)} recording segment(s)")
 
-                try:
-                    upload_result = await storage.upload_from_url(
-                        url=content_url,
-                        filename=filename,
-                        folder=folder,
-                        content_type=content_type,
-                        public=True,
-                    )
-                    recording_url = upload_result.get("url")
-                    logger.info(f"Uploaded recording to {recording_url}")
-                except Exception as e:
-                    logger.error(f"Failed to upload recording: {e}")
+            # Get recording info from call summary for extension names
+            call_recording_infos = call.get("recordings", [])
 
-            # Try RingSense first for AI summary
+            for rec_index, recording_info in enumerate(all_recordings):
+                if recording_info and recording_info.get("content_url"):
+                    content_url = recording_info.get("content_url")
+                    content_type = recording_info.get("content_type", "audio/mpeg")
+                    rec_id = recording_info.get("recording_id", f"rec{rec_index}")
+
+                    # Get extension name from call recording info if available
+                    extension_name = None
+                    if rec_index < len(call_recording_infos):
+                        extension_name = call_recording_infos[rec_index].get("extension_name")
+
+                    # Determine file extension
+                    ext = "mp3"
+                    if "wav" in content_type:
+                        ext = "wav"
+                    elif "ogg" in content_type:
+                        ext = "ogg"
+
+                    # Build filename with date and segment index
+                    call_date = call.get("start_time", "")[:10].replace("-", "/")
+                    if len(all_recordings) > 1:
+                        filename = f"{call_id}_part{rec_index + 1}.{ext}"
+                    else:
+                        filename = f"{call_id}.{ext}"
+                    folder = f"recordings/{call_date}"
+
+                    try:
+                        upload_result = await storage.upload_from_url(
+                            url=content_url,
+                            filename=filename,
+                            folder=folder,
+                            content_type=content_type,
+                            public=True,
+                        )
+                        rec_url = upload_result.get("url")
+                        recording_urls.append((rec_url, extension_name))
+                        logger.info(f"Uploaded recording segment {rec_index + 1} to {rec_url}")
+                    except Exception as e:
+                        logger.error(f"Failed to upload recording segment {rec_index + 1}: {e}")
+
+            # Try RingSense first for AI summary (uses first/primary recording)
             ai_insights = call_details.get("ai_insights")
             if ai_insights and ai_insights.get("available"):
                 ai_summary = ai_insights.get("summary")
 
-            # If no RingSense summary, use transcription service
-            if not ai_summary and content_url:
-                logger.info("RingSense not available, using transcription service")
-                try:
-                    # Build context for better summarization
-                    context = f"Inbound call from {from_number}"
+            # If no RingSense summary, use transcription service on first recording
+            if not ai_summary and all_recordings:
+                first_rec = all_recordings[0]
+                first_content_url = first_rec.get("content_url") if first_rec else None
 
-                    transcription_result = await transcription.transcribe_and_summarize(
-                        audio_url=content_url,
-                        context=context,
-                        filename=f"{call_id}.{ext}" if 'ext' in dir() else "audio.mp3",
-                    )
-                    ai_summary = transcription_result.get("summary")
-                    action_items = transcription_result.get("action_items", [])
-                    logger.info(f"Transcription complete: {len(ai_summary or '')} char summary, {len(action_items)} action items")
-                except Exception as e:
-                    logger.warning(f"Transcription service failed, continuing without summary: {e}")
+                if first_content_url:
+                    logger.info("RingSense not available, using transcription service")
+                    try:
+                        # Build context for better summarization
+                        context = f"Inbound call from {from_number}"
+                        if len(all_recordings) > 1:
+                            context += f" (call had {len(all_recordings)} segments due to transfer)"
+
+                        transcription_result = await transcription.transcribe_and_summarize(
+                            audio_url=first_content_url,
+                            context=context,
+                            filename=f"{call_id}.mp3",
+                        )
+                        ai_summary = transcription_result.get("summary")
+                        action_items = transcription_result.get("action_items", [])
+                        logger.info(f"Transcription complete: {len(ai_summary or '')} char summary, {len(action_items)} action items")
+                    except Exception as e:
+                        logger.warning(f"Transcription service failed, continuing without summary: {e}")
 
         except Exception as e:
             logger.error(f"Failed to get call details: {e}")
@@ -133,7 +163,7 @@ async def process_single_call(call: dict) -> dict:
     note_content = build_note_content(
         call_data={"call": call},
         direction="Inbound",
-        recording_url=recording_url,
+        recording_urls=recording_urls,
         ai_summary=ai_summary,
         action_items=action_items,
     )

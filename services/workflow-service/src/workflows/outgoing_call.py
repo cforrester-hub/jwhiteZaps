@@ -78,6 +78,36 @@ def format_duration(seconds: int) -> str:
         return f"{hours}h {minutes}m"
 
 
+def is_internal_call(call: dict) -> bool:
+    """
+    Check if a call is internal (extension-to-extension).
+
+    Internal calls have both parties as internal extensions, identified by:
+    - Both from_extension_id and to_extension_id being set, OR
+    - Both phone numbers being short (less than 10 digits, typical for extensions)
+    """
+    from_ext_id = call.get("from_extension_id")
+    to_ext_id = call.get("to_extension_id")
+
+    # If both have extension IDs, it's an internal call
+    if from_ext_id and to_ext_id:
+        return True
+
+    # Also check phone number length - internal extensions are usually short
+    from_number = call.get("from_number", "")
+    to_number = call.get("to_number", "")
+
+    # Strip non-digits to get the actual number length
+    from_digits = "".join(c for c in from_number if c.isdigit())
+    to_digits = "".join(c for c in to_number if c.isdigit())
+
+    # External US numbers are 10-11 digits, internal extensions are typically 3-4 digits
+    from_is_internal = len(from_digits) < 7
+    to_is_internal = len(to_digits) < 7
+
+    return from_is_internal and to_is_internal
+
+
 def format_datetime_for_display(iso_datetime: str) -> str:
     """Format ISO datetime string for display in Pacific time."""
     if not iso_datetime:
@@ -355,6 +385,13 @@ async def run():
         # Skip calls that ended too recently (recording may not be ready)
         if is_call_too_recent(call):
             logger.debug(f"Call {call_id} ended less than {CALL_PROCESSING_DELAY_MINUTES} minutes ago, will process later")
+            continue
+
+        # Skip internal (extension-to-extension) calls
+        if is_internal_call(call):
+            logger.debug(f"Call {call_id} is internal call, skipping")
+            await mark_processed(call_id, "outgoing_call", success=True, details="Skipped: internal call")
+            skipped_count += 1
             continue
 
         # Skip calls with no result or failed calls

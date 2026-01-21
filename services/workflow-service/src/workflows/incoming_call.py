@@ -21,6 +21,7 @@ from .outgoing_call import (
     format_duration,
     build_note_content,
     is_call_too_recent,
+    is_internal_call,
     CALL_PROCESSING_DELAY_MINUTES,
 )
 from ..http_client import ringcentral, agencyzoom, storage, transcription
@@ -227,6 +228,13 @@ async def run():
         # Skip calls that ended too recently (recording may not be ready)
         if is_call_too_recent(call):
             logger.debug(f"Call {call_id} ended less than {CALL_PROCESSING_DELAY_MINUTES} minutes ago, will process later")
+            continue
+
+        # Skip internal (extension-to-extension) calls
+        if is_internal_call(call):
+            logger.debug(f"Call {call_id} is internal call, skipping")
+            await mark_processed(call_id, "incoming_call", success=True, details="Skipped: internal call")
+            skipped_count += 1
             continue
 
         # Skip calls with no result or failed calls

@@ -37,6 +37,9 @@ def normalize_phone(phone: str) -> str:
     Returns:
         10-digit phone number (e.g., "8057946787")
     """
+    if not phone:
+        return ""
+
     # Strip all non-digit characters
     digits = re.sub(r"\D", "", phone)
 
@@ -45,6 +48,42 @@ def normalize_phone(phone: str) -> str:
         digits = digits[1:]
 
     return digits
+
+
+def _customer_matches_phone(customer: dict, normalized_phone: str) -> bool:
+    """
+    Check if a customer has a phone number matching the searched phone.
+
+    Args:
+        customer: Customer dict from AgencyZoom API
+        normalized_phone: The normalized phone number we searched for
+
+    Returns:
+        True if customer's phone or secondaryPhone matches
+    """
+    customer_phones = [
+        normalize_phone(customer.get("phone") or ""),
+        normalize_phone(customer.get("secondaryPhone") or ""),
+    ]
+    return normalized_phone in customer_phones
+
+
+def _lead_matches_phone(lead: dict, normalized_phone: str) -> bool:
+    """
+    Check if a lead has a phone number matching the searched phone.
+
+    Args:
+        lead: Lead dict from AgencyZoom API
+        normalized_phone: The normalized phone number we searched for
+
+    Returns:
+        True if lead's phone or secondaryPhone matches
+    """
+    lead_phones = [
+        normalize_phone(lead.get("phone") or ""),
+        normalize_phone(lead.get("secondaryPhone") or ""),
+    ]
+    return normalized_phone in lead_phones
 
 
 async def _make_request(method: str, endpoint: str, **kwargs) -> httpx.Response:
@@ -233,12 +272,14 @@ async def search_by_phone(phone: str) -> dict:
     Search for both customers and leads by phone number.
 
     This is the main function for the outgoing call workflow.
+    Results are verified to ensure the returned customers/leads actually
+    have a phone number matching what we searched for.
 
     Args:
         phone: Phone number to search for
 
     Returns:
-        dict with 'customers' and 'leads' lists
+        dict with 'customers' and 'leads' lists (verified matches only)
     """
     normalized = normalize_phone(phone)
     logger.info(f"Searching by phone: {phone} (normalized: {normalized})")
@@ -247,14 +288,37 @@ async def search_by_phone(phone: str) -> dict:
     customers_result = await search_customers(phone=normalized)
     leads_result = await search_leads(phone=normalized)
 
+    # Get raw results from API
+    raw_customers = customers_result.get("customers", [])
+    raw_leads = leads_result.get("leads", [])
+
+    # Verify each result actually has a matching phone number
+    # AgencyZoom may return fuzzy matches that don't actually match
+    verified_customers = [
+        c for c in raw_customers if _customer_matches_phone(c, normalized)
+    ]
+    verified_leads = [
+        l for l in raw_leads if _lead_matches_phone(l, normalized)
+    ]
+
+    # Log if we filtered out any non-matching results
+    if len(verified_customers) < len(raw_customers):
+        filtered_count = len(raw_customers) - len(verified_customers)
+        logger.warning(
+            f"Filtered out {filtered_count} customer(s) that didn't match phone {normalized}"
+        )
+    if len(verified_leads) < len(raw_leads):
+        filtered_count = len(raw_leads) - len(verified_leads)
+        logger.warning(
+            f"Filtered out {filtered_count} lead(s) that didn't match phone {normalized}"
+        )
+
     return {
         "phone": phone,
         "normalized_phone": normalized,
-        "customers": customers_result.get("customers", []),
-        "leads": leads_result.get("leads", []),
-        "has_match": bool(
-            customers_result.get("customers") or leads_result.get("leads")
-        ),
+        "customers": verified_customers,
+        "leads": verified_leads,
+        "has_match": bool(verified_customers or verified_leads),
     }
 
 

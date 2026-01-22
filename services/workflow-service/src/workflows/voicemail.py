@@ -318,6 +318,16 @@ async def run():
 
         # Process the voicemail
         try:
+            # IMPORTANT: Mark as "processing" BEFORE creating tasks to prevent duplicates
+            # If we crash after creating a task but before marking processed, we'd create
+            # duplicate tasks on the next run. By marking first, we ensure idempotency.
+            await mark_processed(
+                call_id,
+                "voicemail",
+                success=True,
+                details="processing",
+            )
+
             process_result = await process_single_voicemail(call)
 
             if process_result["status"] == "success":
@@ -329,14 +339,29 @@ async def run():
                 )
                 processed_count += 1
             else:
-                # Error occurred - DO NOT mark as processed, will retry
-                logger.warning(
-                    f"Voicemail {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
+                # Error occurred - mark as failed so we can track it, but don't retry
+                # to avoid creating duplicate tasks
+                await mark_processed(
+                    call_id,
+                    "voicemail",
+                    success=False,
+                    details=f"error: {process_result.get('reason', 'Unknown')}",
                 )
                 error_count += 1
 
         except Exception as e:
-            logger.error(f"Error processing voicemail {call_id}, will retry: {e}")
+            # Exception occurred - the voicemail is already marked as "processing"
+            # so it won't be retried. Log the error for debugging.
+            logger.error(f"Error processing voicemail {call_id}: {e}")
+            try:
+                await mark_processed(
+                    call_id,
+                    "voicemail",
+                    success=False,
+                    details=f"exception: {str(e)[:200]}",
+                )
+            except Exception:
+                pass  # If we can't update the status, at least it's marked as processing
             error_count += 1
 
     logger.info(

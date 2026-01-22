@@ -178,6 +178,7 @@ async def get_call_log(
             # Check legs array for extension info and recordings
             legs = record.get("legs", [])
             all_recordings = []
+            seen_recording_ids = set()  # Track unique recording IDs to avoid duplicates
 
             for leg_index, leg in enumerate(legs):
                 leg_ext = leg.get("extension", {})
@@ -207,27 +208,33 @@ async def get_call_log(
                         to_ext_id = str(leg_ext.get("id"))
 
                 # Check for recording on this leg (transferred calls have recordings per leg)
+                # Deduplicate by recording_id - same recording can appear in multiple legs
                 leg_recording = leg.get("recording")
                 if leg_recording and leg_recording.get("id"):
-                    all_recordings.append(
-                        RecordingInfo(
-                            recording_id=leg_recording.get("id"),
-                            leg_index=leg_index,
-                            duration=leg.get("duration", 0),
-                            extension_name=leg_ext.get("name"),
+                    rec_id = leg_recording.get("id")
+                    if rec_id not in seen_recording_ids:
+                        seen_recording_ids.add(rec_id)
+                        all_recordings.append(
+                            RecordingInfo(
+                                recording_id=rec_id,
+                                leg_index=leg_index,
+                                duration=leg.get("duration", 0),
+                                extension_name=leg_ext.get("name"),
+                            )
                         )
-                    )
 
             # If no recordings found in legs, check top-level recording
             if not all_recordings and recording:
-                all_recordings.append(
-                    RecordingInfo(
-                        recording_id=recording.get("id"),
-                        leg_index=0,
-                        duration=record.get("duration", 0),
-                        extension_name=from_name if record.get("direction") == "Outbound" else to_name,
+                rec_id = recording.get("id")
+                if rec_id and rec_id not in seen_recording_ids:
+                    all_recordings.append(
+                        RecordingInfo(
+                            recording_id=rec_id,
+                            leg_index=0,
+                            duration=record.get("duration", 0),
+                            extension_name=from_name if record.get("direction") == "Outbound" else to_name,
+                        )
                     )
-                )
 
             calls.append(
                 CallSummary(
@@ -293,6 +300,7 @@ async def get_call_details(
         legs = call_data.get("legs", [])
         all_recording_infos = []
         leg_recordings_data = []  # Store raw recording data from legs
+        seen_recording_ids = set()  # Track unique recording IDs to avoid duplicates
 
         for leg_index, leg in enumerate(legs):
             leg_ext = leg.get("extension", {})
@@ -322,29 +330,35 @@ async def get_call_details(
                     to_ext_id = str(leg_ext.get("id"))
 
             # Check for recording on this leg (transferred calls have recordings per leg)
+            # Deduplicate by recording_id - same recording can appear in multiple legs
             leg_recording = leg.get("recording")
             if leg_recording and leg_recording.get("id"):
-                all_recording_infos.append(
-                    RecordingInfo(
-                        recording_id=leg_recording.get("id"),
-                        leg_index=leg_index,
-                        duration=leg.get("duration", 0),
-                        extension_name=leg_ext.get("name"),
+                rec_id = leg_recording.get("id")
+                if rec_id not in seen_recording_ids:
+                    seen_recording_ids.add(rec_id)
+                    all_recording_infos.append(
+                        RecordingInfo(
+                            recording_id=rec_id,
+                            leg_index=leg_index,
+                            duration=leg.get("duration", 0),
+                            extension_name=leg_ext.get("name"),
+                        )
                     )
-                )
-                leg_recordings_data.append(leg_recording)
+                    leg_recordings_data.append(leg_recording)
 
         # If no recordings found in legs, check top-level recording
         if not all_recording_infos and recording_data:
-            all_recording_infos.append(
-                RecordingInfo(
-                    recording_id=recording_data.get("id"),
-                    leg_index=0,
-                    duration=call_data.get("duration", 0),
-                    extension_name=from_name if call_data.get("direction") == "Outbound" else to_name,
+            rec_id = recording_data.get("id")
+            if rec_id and rec_id not in seen_recording_ids:
+                all_recording_infos.append(
+                    RecordingInfo(
+                        recording_id=rec_id,
+                        leg_index=0,
+                        duration=call_data.get("duration", 0),
+                        extension_name=from_name if call_data.get("direction") == "Outbound" else to_name,
+                    )
                 )
-            )
-            leg_recordings_data.append(recording_data)
+                leg_recordings_data.append(recording_data)
 
         call_summary = CallSummary(
             id=call_data.get("id", ""),

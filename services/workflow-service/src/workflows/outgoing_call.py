@@ -82,18 +82,12 @@ def is_internal_call(call: dict) -> bool:
     """
     Check if a call is internal (extension-to-extension).
 
-    Internal calls have both parties as internal extensions, identified by:
-    - Both from_extension_id and to_extension_id being set, OR
-    - Both phone numbers being short (less than 10 digits, typical for extensions)
+    Internal calls have BOTH parties with short extension numbers (< 7 digits).
+    External calls have at least one party with a full phone number (10+ digits).
+
+    Note: We can't rely solely on extension IDs because external calls to
+    call queues/groups also have both from_extension_id and to_extension_id set.
     """
-    from_ext_id = call.get("from_extension_id")
-    to_ext_id = call.get("to_extension_id")
-
-    # If both have extension IDs, it's an internal call
-    if from_ext_id and to_ext_id:
-        return True
-
-    # Also check phone number length - internal extensions are usually short
     from_number = call.get("from_number", "")
     to_number = call.get("to_number", "")
 
@@ -102,10 +96,15 @@ def is_internal_call(call: dict) -> bool:
     to_digits = "".join(c for c in to_number if c.isdigit())
 
     # External US numbers are 10-11 digits, internal extensions are typically 3-4 digits
-    from_is_internal = len(from_digits) < 7
-    to_is_internal = len(to_digits) < 7
+    from_is_external = len(from_digits) >= 7
+    to_is_external = len(to_digits) >= 7
 
-    return from_is_internal and to_is_internal
+    # If EITHER party has an external phone number, it's NOT an internal call
+    if from_is_external or to_is_external:
+        return False
+
+    # Both parties have short numbers - this is an internal call
+    return True
 
 
 def format_datetime_for_display(iso_datetime: str) -> str:

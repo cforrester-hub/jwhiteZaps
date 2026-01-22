@@ -73,6 +73,8 @@ def add_cron_job(
         id=job_id,
         name=name or job_id,
         replace_existing=True,
+        max_instances=1,  # Prevent concurrent runs - critical to avoid duplicate notes
+        coalesce=True,    # If multiple runs missed, only run once
     )
     logger.info(f"Added cron job: {name or job_id} ({cron_expression})")
 
@@ -106,6 +108,8 @@ def add_interval_job(
         id=job_id,
         name=name or job_id,
         replace_existing=True,
+        max_instances=1,  # Prevent concurrent runs
+        coalesce=True,    # If multiple runs missed, only run once
     )
     logger.info(f"Added interval job: {name or job_id} (every {hours}h {minutes}m {seconds}s)")
 

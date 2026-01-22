@@ -412,11 +412,11 @@ async def run():
     """
     logger.info("Starting outgoing_call workflow")
 
-    # Fetch calls from the last 48 hours
+    # Fetch calls from the last 12 hours
     # We process with a delay to ensure recordings are available
     try:
         calls_response = await ringcentral.get_calls(
-            date_from=(datetime.utcnow() - timedelta(days=2)).isoformat() + "Z",
+            date_from=(datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z",
             date_to=datetime.utcnow().isoformat() + "Z",
             direction="Outbound",
             per_page=100,

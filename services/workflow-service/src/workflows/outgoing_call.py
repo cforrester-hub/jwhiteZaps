@@ -462,20 +462,10 @@ async def run():
 
         # Process the call
         try:
-            # IMPORTANT: Mark as "processing" BEFORE creating notes to prevent duplicates
-            # If we crash after creating notes but before marking processed, we'd create
-            # duplicate notes on the next run. By marking first, we ensure idempotency.
-            await mark_processed(
-                call_id,
-                "outgoing_call",
-                success=True,
-                details="processing",
-            )
-
             process_result = await process_single_call(call)
 
             if process_result["status"] == "success":
-                # Update with final result
+                # Successfully created notes - mark as processed
                 await mark_processed(
                     call_id,
                     "outgoing_call",
@@ -484,7 +474,7 @@ async def run():
                 )
                 processed_count += 1
             elif process_result["status"] == "skipped" and process_result.get("reason") == "no_match":
-                # No customer/lead found in AgencyZoom
+                # No customer/lead found in AgencyZoom - mark as processed so we don't keep checking
                 await mark_processed(
                     call_id,
                     "outgoing_call",
@@ -493,29 +483,15 @@ async def run():
                 )
                 skipped_count += 1
             else:
-                # Error occurred - mark as failed so we can track it, but don't retry
-                # to avoid creating duplicate notes
-                await mark_processed(
-                    call_id,
-                    "outgoing_call",
-                    success=False,
-                    details=f"error: {process_result.get('reason', 'Unknown')}",
+                # Error occurred - DO NOT mark as processed, will retry on next run
+                logger.warning(
+                    f"Call {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
                 )
                 error_count += 1
 
         except Exception as e:
-            # Exception occurred - the call is already marked as "processing"
-            # so it won't be retried. Log the error for debugging.
-            logger.error(f"Error processing call {call_id}: {e}")
-            try:
-                await mark_processed(
-                    call_id,
-                    "outgoing_call",
-                    success=False,
-                    details=f"exception: {str(e)[:200]}",
-                )
-            except Exception:
-                pass  # If we can't update the status, at least it's marked as processing
+            # Exception occurred - DO NOT mark as processed, will retry on next run
+            logger.error(f"Error processing call {call_id}, will retry: {e}")
             error_count += 1
 
     logger.info(

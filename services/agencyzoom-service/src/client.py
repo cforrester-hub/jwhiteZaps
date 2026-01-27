@@ -61,6 +61,10 @@ def _customer_matches_phone(customer: dict, normalized_phone: str) -> bool:
     Returns:
         True if customer's phone or secondaryPhone matches
     """
+    # Empty/invalid phone should never match anyone
+    if not normalized_phone or len(normalized_phone) < 7:
+        return False
+
     customer_phones = [
         normalize_phone(customer.get("phone") or ""),
         normalize_phone(customer.get("secondaryPhone") or ""),
@@ -79,6 +83,10 @@ def _lead_matches_phone(lead: dict, normalized_phone: str) -> bool:
     Returns:
         True if lead's phone or secondaryPhone matches
     """
+    # Empty/invalid phone should never match anyone
+    if not normalized_phone or len(normalized_phone) < 7:
+        return False
+
     lead_phones = [
         normalize_phone(lead.get("phone") or ""),
         normalize_phone(lead.get("secondaryPhone") or ""),

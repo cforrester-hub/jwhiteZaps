@@ -42,9 +42,16 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
     Returns a dict with the processing result.
     """
     call_id = call.get("id")
-    from_number = call.get("from_number")
+    from_number = call.get("from_number", "")
 
     logger.info(f"Processing incoming call {call_id} from {from_number}")
+
+    # Validate we have a real phone number to search on
+    # Empty/blocked caller IDs should be skipped - we can't match them in AgencyZoom
+    phone_digits = "".join(c for c in from_number if c.isdigit())
+    if len(phone_digits) < 7:
+        logger.info(f"Call {call_id} has invalid/blocked caller ID '{from_number}', skipping")
+        return {"status": "skipped", "reason": "invalid_phone"}
 
     # Search AgencyZoom for customer/lead by phone number (caller's number)
     try:
@@ -330,13 +337,14 @@ async def run():
                         details=f"notes={process_result['notes_created']}",
                     )
                 processed_count += 1
-            elif process_result["status"] == "skipped" and process_result.get("reason") == "no_match":
-                # No customer/lead found in AgencyZoom - mark as processed so we don't keep checking
+            elif process_result["status"] == "skipped":
+                # Skipped for various reasons - mark as processed so we don't keep checking
+                skip_reason = process_result.get("reason", "unknown")
                 await mark_processed(
                     call_id,
                     "incoming_call",
                     success=True,
-                    details="no_match_in_agencyzoom",
+                    details=f"skipped:{skip_reason}",
                 )
                 skipped_count += 1
             else:

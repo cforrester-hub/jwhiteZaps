@@ -29,9 +29,15 @@ from ..http_client import ringcentral, agencyzoom, storage, transcription
 logger = logging.getLogger(__name__)
 
 
-async def process_single_call(call: dict) -> dict:
+async def process_single_call(call: dict, mark_as_processed_callback=None) -> dict:
     """
     Process a single incoming call.
+
+    Args:
+        call: The call data dict from RingCentral
+        mark_as_processed_callback: Optional async callback to mark the call as processed
+            immediately after AgencyZoom confirms note creation. This prevents duplicates
+            even if later steps fail.
 
     Returns a dict with the processing result.
     """
@@ -185,6 +191,10 @@ async def process_single_call(call: dict) -> dict:
                     )
                     notes_created += 1
                     logger.info(f"Created note for customer {customer_id}")
+                    # CRITICAL: Mark as processed IMMEDIATELY after AZ confirms note creation
+                    # This prevents duplicates even if later steps fail
+                    if mark_as_processed_callback and notes_created == 1:
+                        await mark_as_processed_callback()
                 except Exception as e:
                     logger.error(f"Failed to create customer note: {e}")
     elif leads:
@@ -199,6 +209,10 @@ async def process_single_call(call: dict) -> dict:
                     )
                     notes_created += 1
                     logger.info(f"Created note for lead {lead_id}")
+                    # CRITICAL: Mark as processed IMMEDIATELY after AZ confirms note creation
+                    # This prevents duplicates even if later steps fail
+                    if mark_as_processed_callback and notes_created == 1:
+                        await mark_as_processed_callback()
                 except Exception as e:
                     logger.error(f"Failed to create lead note: {e}")
 
@@ -281,16 +295,40 @@ async def run():
 
         # Process the call
         try:
-            process_result = await process_single_call(call)
+            # Track if we've already marked this call as processed (via callback)
+            call_marked_processed = False
+
+            async def mark_call_processed():
+                nonlocal call_marked_processed
+                if not call_marked_processed:
+                    await mark_processed(
+                        call_id,
+                        "incoming_call",
+                        success=True,
+                        details="note_created",
+                    )
+                    call_marked_processed = True
+                    logger.info(f"Marked call {call_id} as processed immediately after AZ confirmation")
+
+            process_result = await process_single_call(call, mark_as_processed_callback=mark_call_processed)
 
             if process_result["status"] == "success":
-                # Successfully created notes - mark as processed
-                await mark_processed(
-                    call_id,
-                    "incoming_call",
-                    success=True,
-                    details=f"notes={process_result['notes_created']}",
-                )
+                # Update with final details if not already marked
+                if not call_marked_processed:
+                    await mark_processed(
+                        call_id,
+                        "incoming_call",
+                        success=True,
+                        details=f"notes={process_result['notes_created']}",
+                    )
+                else:
+                    # Update the details with final note count (upsert will update existing)
+                    await mark_processed(
+                        call_id,
+                        "incoming_call",
+                        success=True,
+                        details=f"notes={process_result['notes_created']}",
+                    )
                 processed_count += 1
             elif process_result["status"] == "skipped" and process_result.get("reason") == "no_match":
                 # No customer/lead found in AgencyZoom - mark as processed so we don't keep checking
@@ -302,11 +340,15 @@ async def run():
                 )
                 skipped_count += 1
             else:
-                # Error occurred - DO NOT mark as processed, will retry on next run
-                logger.warning(
-                    f"Call {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
-                )
-                error_count += 1
+                # Error occurred - only retry if we haven't already created a note
+                if call_marked_processed:
+                    logger.warning(f"Call {call_id} had error after note was created, not retrying")
+                    error_count += 1
+                else:
+                    logger.warning(
+                        f"Call {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
+                    )
+                    error_count += 1
 
         except Exception as e:
             # Exception occurred - DO NOT mark as processed, will retry on next run

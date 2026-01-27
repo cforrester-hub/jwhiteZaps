@@ -97,9 +97,15 @@ def build_task_content(
     return html
 
 
-async def process_single_voicemail(call: dict) -> dict:
+async def process_single_voicemail(call: dict, mark_as_processed_callback=None) -> dict:
     """
     Process a single voicemail call.
+
+    Args:
+        call: The call data dict from RingCentral
+        mark_as_processed_callback: Optional async callback to mark the call as processed
+            immediately after AgencyZoom confirms task creation. This prevents duplicates
+            even if later steps fail.
 
     Returns a dict with the processing result.
     """
@@ -255,6 +261,10 @@ async def process_single_voicemail(call: dict) -> dict:
             time_specific=True,
         )
         logger.info(f"Created task for voicemail {call_id}")
+        # CRITICAL: Mark as processed IMMEDIATELY after AZ confirms task creation
+        # This prevents duplicates even if later steps fail
+        if mark_as_processed_callback:
+            await mark_as_processed_callback()
     except Exception as e:
         logger.error(f"Failed to create task: {e}")
         return {"status": "error", "reason": f"Task creation failed: {e}"}
@@ -328,9 +338,25 @@ async def run():
 
         # Process the voicemail
         try:
-            process_result = await process_single_voicemail(call)
+            # Track if we've already marked this call as processed (via callback)
+            call_marked_processed = False
+
+            async def mark_call_processed():
+                nonlocal call_marked_processed
+                if not call_marked_processed:
+                    await mark_processed(
+                        call_id,
+                        "voicemail",
+                        success=True,
+                        details="task_created",
+                    )
+                    call_marked_processed = True
+                    logger.info(f"Marked voicemail {call_id} as processed immediately after AZ confirmation")
+
+            process_result = await process_single_voicemail(call, mark_as_processed_callback=mark_call_processed)
 
             if process_result["status"] == "success":
+                # Update with final details (upsert will update existing)
                 await mark_processed(
                     call_id,
                     "voicemail",
@@ -339,11 +365,15 @@ async def run():
                 )
                 processed_count += 1
             else:
-                # Error occurred - DO NOT mark as processed, will retry on next run
-                logger.warning(
-                    f"Voicemail {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
-                )
-                error_count += 1
+                # Error occurred - only retry if we haven't already created a task
+                if call_marked_processed:
+                    logger.warning(f"Voicemail {call_id} had error after task was created, not retrying")
+                    error_count += 1
+                else:
+                    logger.warning(
+                        f"Voicemail {call_id} had error, will retry: {process_result.get('reason', 'Unknown')}"
+                    )
+                    error_count += 1
 
         except Exception as e:
             # Exception occurred - DO NOT mark as processed, will retry on next run

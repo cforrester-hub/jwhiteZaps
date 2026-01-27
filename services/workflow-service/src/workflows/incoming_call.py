@@ -207,7 +207,7 @@ async def process_single_call(call: dict) -> dict:
         "customers_matched": len(customers),
         "leads_matched": len(leads),
         "notes_created": notes_created,
-        "recording_uploaded": recording_url is not None,
+        "recording_uploaded": len(recording_urls) > 0,
         "has_ai_summary": ai_summary is not None,
     }
 

@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from . import register_workflow, TriggerType, is_processed, mark_processed
+from . import register_workflow, TriggerType, is_processed, mark_processed, get_processed_ids
 from .outgoing_call import (
     format_phone_for_display,
     format_duration,
@@ -111,14 +111,19 @@ async def process_single_voicemail(call: dict) -> dict:
     logger.info(f"Processing voicemail {call_id} from {from_number}")
 
     # Search AgencyZoom for customer/lead by phone number
-    try:
-        search_result = await agencyzoom.search_by_phone(from_number)
-    except Exception as e:
-        logger.error(f"Failed to search AgencyZoom: {e}")
-        return {"status": "error", "reason": f"AgencyZoom search failed: {e}"}
+    # If search fails or phone number is invalid, we'll use the fallback
+    customers = []
+    leads = []
 
-    customers = search_result.get("customers", [])
-    leads = search_result.get("leads", [])
+    # Only search if we have a valid phone number (at least 7 digits)
+    phone_digits = "".join(c for c in (from_number or "") if c.isdigit())
+    if len(phone_digits) >= 7:
+        try:
+            search_result = await agencyzoom.search_by_phone(from_number)
+            customers = search_result.get("customers", [])
+            leads = search_result.get("leads", [])
+        except Exception as e:
+            logger.warning(f"AgencyZoom search failed for {from_number}, using fallback: {e}")
 
     # Determine assignment
     customer_id = None
@@ -280,10 +285,11 @@ async def run():
     """
     logger.info("Starting voicemail workflow")
 
-    # Fetch calls from the last 12 hours
+    # Fetch calls from the last 4 hours
+    # We process with a 15-min delay to ensure recordings are available
     try:
         calls_response = await ringcentral.get_calls(
-            date_from=(datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z",
+            date_from=(datetime.utcnow() - timedelta(hours=4)).isoformat() + "Z",
             date_to=datetime.utcnow().isoformat() + "Z",
             direction="Inbound",
             per_page=100,
@@ -299,6 +305,11 @@ async def run():
     voicemail_calls = [c for c in calls if c.get("result") == "Voicemail"]
     logger.info(f"Found {len(voicemail_calls)} voicemail calls")
 
+    # Batch check which voicemails are already processed (single DB query instead of N queries)
+    all_voicemail_ids = [call.get("id") for call in voicemail_calls]
+    already_processed = await get_processed_ids(all_voicemail_ids, "voicemail")
+    logger.info(f"Already processed: {len(already_processed)} of {len(voicemail_calls)} voicemails")
+
     processed_count = 0
     skipped_count = 0
     error_count = 0
@@ -306,9 +317,8 @@ async def run():
     for call in voicemail_calls:
         call_id = call.get("id")
 
-        # Skip if already processed
-        if await is_processed(call_id, "voicemail"):
-            logger.debug(f"Voicemail {call_id} already processed, skipping")
+        # Skip if already processed (fast set lookup, no DB query)
+        if call_id in already_processed:
             continue
 
         # Skip voicemails that ended too recently (recording may not be ready)

@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from . import register_workflow, TriggerType, is_processed, mark_processed
+from . import register_workflow, TriggerType, is_processed, mark_processed, get_processed_ids
 from .outgoing_call import (
     format_phone_for_display,
     format_duration,
@@ -227,11 +227,11 @@ async def run():
     """
     logger.info("Starting incoming_call workflow")
 
-    # Fetch calls from the last 12 hours
-    # We process with a delay to ensure recordings are available
+    # Fetch calls from the last 4 hours
+    # We process with a 15-min delay to ensure recordings are available
     try:
         calls_response = await ringcentral.get_calls(
-            date_from=(datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z",
+            date_from=(datetime.utcnow() - timedelta(hours=4)).isoformat() + "Z",
             date_to=datetime.utcnow().isoformat() + "Z",
             direction="Inbound",
             per_page=100,
@@ -243,6 +243,11 @@ async def run():
     calls = calls_response.get("calls", [])
     logger.info(f"Found {len(calls)} incoming calls")
 
+    # Batch check which calls are already processed (single DB query instead of N queries)
+    all_call_ids = [call.get("id") for call in calls]
+    already_processed = await get_processed_ids(all_call_ids, "incoming_call")
+    logger.info(f"Already processed: {len(already_processed)} of {len(calls)} calls")
+
     processed_count = 0
     skipped_count = 0
     error_count = 0
@@ -250,9 +255,8 @@ async def run():
     for call in calls:
         call_id = call.get("id")
 
-        # Skip if already processed
-        if await is_processed(call_id, "incoming_call"):
-            logger.debug(f"Call {call_id} already processed, skipping")
+        # Skip if already processed (fast set lookup, no DB query)
+        if call_id in already_processed:
             continue
 
         # Skip calls that ended too recently (recording may not be ready)

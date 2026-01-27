@@ -7,16 +7,18 @@ This service handles:
 - Manual workflow execution (via API)
 """
 
-import logging
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from .config import get_settings
 from .database import init_db
 from .http_client import close_client
+from .logging_config import setup_logging, get_logger
 from .scheduler import (
     start_scheduler,
     shutdown_scheduler,
@@ -36,13 +38,57 @@ from .workflows import example_workflow  # noqa: F401
 from .workflows import outgoing_call  # noqa: F401
 from .workflows import incoming_call  # noqa: F401
 
-# Configure logging
-settings = get_settings()
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+# Configure structured JSON logging
+setup_logging()
+logger = get_logger(__name__)
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log all HTTP requests and responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+
+        # Log request
+        logger.info(
+            "request_started",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "query": str(request.query_params) if request.query_params else None,
+                "client_ip": request.client.host if request.client else None,
+            },
+        )
+
+        try:
+            response = await call_next(request)
+            duration_ms = (time.time() - start_time) * 1000
+
+            # Log response
+            logger.info(
+                "request_completed",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration_ms, 2),
+                },
+            )
+
+            return response
+
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(
+                "request_failed",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "duration_ms": round(duration_ms, 2),
+                    "error": str(e),
+                },
+            )
+            raise
 
 
 @asynccontextmanager
@@ -90,6 +136,9 @@ app = FastAPI(
     openapi_url="/api/workflows/openapi.json",
     lifespan=lifespan,
 )
+
+# Add request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Include webhook routes
 app.include_router(webhook_router, prefix="/api/workflows")

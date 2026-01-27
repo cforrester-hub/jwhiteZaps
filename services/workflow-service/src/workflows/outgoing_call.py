@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from . import register_workflow, TriggerType, is_processed, mark_processed
+from . import register_workflow, TriggerType, is_processed, mark_processed, get_processed_ids
 from ..http_client import ringcentral, agencyzoom, storage, transcription
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,15 @@ def is_call_too_recent(call: dict) -> bool:
 
 def format_phone_for_display(phone: str, include_country_code: bool = False) -> str:
     """Format a phone number for display in notes."""
+    if not phone:
+        return "Unknown"
+
     # Remove non-digit characters
     digits = "".join(c for c in phone if c.isdigit())
+
+    # Handle empty or invalid phone numbers (no digits)
+    if not digits:
+        return "Unknown"
 
     # Format as (XXX) XXX-XXXX for 10-digit US numbers
     if len(digits) == 10:
@@ -133,6 +140,7 @@ def build_note_content(
     Build the note content for AgencyZoom using HTML format.
 
     Matches the Zapier template format with call information and recording details.
+    Uses different color schemes for inbound vs outbound calls for easy visual distinction.
 
     Args:
         call_data: Dict containing call information under "call" key
@@ -143,6 +151,22 @@ def build_note_content(
         action_items: List of action items extracted from the call
     """
     call = call_data.get("call", {})
+
+    # Direction-based color schemes for visual distinction
+    if direction == "Inbound":
+        # Blue/green theme for incoming calls
+        header_bg = "#0066cc"  # Blue header bar
+        header_icon = "📥"
+        header_label = "INCOMING CALL"
+        call_info_bg = "#e5f3ff"  # Light blue
+        recording_bg = "#e5fff0"  # Light green
+    else:
+        # Orange/purple theme for outgoing calls
+        header_bg = "#cc6600"  # Orange header bar
+        header_icon = "📤"
+        header_label = "OUTGOING CALL"
+        call_info_bg = "#fff6e5"  # Light orange
+        recording_bg = "#f5eaff"  # Light purple
 
     # Determine the "other party" based on direction
     if direction == "Outbound":
@@ -164,12 +188,12 @@ def build_note_content(
     from_display = f"{from_number} ({from_name})" if from_name else from_number
     to_display = f"{to_number} ({to_name})" if to_name else to_number
 
-    # Build HTML note matching Zapier template style
-    # Header line: emoji + direction - other party - result
-    header = f"📞 {direction} - {other_party} - {result}"
+    # Build HTML note with colored header bar and direction-specific colors
+    html = f'''<div style="background:{header_bg};color:white;padding:8px 12px;font-weight:bold;font-size:14px;border-radius:4px 4px 0 0;">{header_icon} {header_label}</div>'''
+    html += f'''<div style="padding:4px 12px;background:#f8f8f8;border-bottom:1px solid #ddd;font-size:13px;">📞 {direction} - {other_party} - {result}</div>'''
 
     # Build the HTML table - full width, no gaps
-    html = f'''{header}<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:#fff6e5;padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_display}</div><div>👤 <b>To:</b> {to_display}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
+    html += f'''<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:{call_info_bg};padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_display}</div><div>👤 <b>To:</b> {to_display}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
 
     # Add AI summary if available
     if ai_summary:
@@ -182,7 +206,7 @@ def build_note_content(
             html += f'''<li>{item}</li>'''
         html += '''</ul></div>'''
 
-    html += '''</td><td style="width:40%;vertical-align:top;background:#f5eaff;padding:10px;box-sizing:border-box;"><strong>RECORDING INFORMATION</strong>'''
+    html += f'''</td><td style="width:40%;vertical-align:top;background:{recording_bg};padding:10px;box-sizing:border-box;"><strong>RECORDING INFORMATION</strong>'''
 
     # Handle multiple recordings (transferred calls) or single recording
     if recording_urls and len(recording_urls) > 0:
@@ -411,11 +435,11 @@ async def run():
     """
     logger.info("Starting outgoing_call workflow")
 
-    # Fetch calls from the last 12 hours
-    # We process with a delay to ensure recordings are available
+    # Fetch calls from the last 4 hours
+    # We process with a 15-min delay to ensure recordings are available
     try:
         calls_response = await ringcentral.get_calls(
-            date_from=(datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z",
+            date_from=(datetime.utcnow() - timedelta(hours=4)).isoformat() + "Z",
             date_to=datetime.utcnow().isoformat() + "Z",
             direction="Outbound",
             per_page=100,
@@ -427,6 +451,11 @@ async def run():
     calls = calls_response.get("calls", [])
     logger.info(f"Found {len(calls)} outgoing calls")
 
+    # Batch check which calls are already processed (single DB query instead of N queries)
+    all_call_ids = [call.get("id") for call in calls]
+    already_processed = await get_processed_ids(all_call_ids, "outgoing_call")
+    logger.info(f"Already processed: {len(already_processed)} of {len(calls)} calls")
+
     processed_count = 0
     skipped_count = 0
     error_count = 0
@@ -434,9 +463,8 @@ async def run():
     for call in calls:
         call_id = call.get("id")
 
-        # Skip if already processed
-        if await is_processed(call_id, "outgoing_call"):
-            logger.debug(f"Call {call_id} already processed, skipping")
+        # Skip if already processed (fast set lookup, no DB query)
+        if call_id in already_processed:
             continue
 
         # Skip calls that ended too recently (recording may not be ready)

@@ -115,6 +115,30 @@ async def is_processed(item_id: str, workflow_name: str) -> bool:
         return result is not None
 
 
+async def get_processed_ids(item_ids: list[str], workflow_name: str) -> set[str]:
+    """
+    Batch check which items have been processed.
+
+    Returns a set of item_ids that have already been processed.
+    Much more efficient than calling is_processed() in a loop.
+    """
+    if not item_ids:
+        return set()
+
+    from sqlalchemy import select
+
+    composite_ids = [f"{workflow_name}:{item_id}" for item_id in item_ids]
+
+    async with async_session() as session:
+        stmt = select(ProcessedItem.id).where(ProcessedItem.id.in_(composite_ids))
+        result = await session.execute(stmt)
+        processed_composite_ids = {row[0] for row in result.fetchall()}
+
+    # Convert back to original item_ids (strip workflow prefix)
+    prefix = f"{workflow_name}:"
+    return {cid[len(prefix):] for cid in processed_composite_ids}
+
+
 async def mark_processed(
     item_id: str,
     workflow_name: str,

@@ -10,7 +10,16 @@
 # - Uses pre-built images from GitHub Container Registry
 # - Removes the local PostgreSQL container (use managed DB instead)
 # - Configures services to use external DATABASE_URL
+# - Configures centralized logging via Loki
 # =============================================================================
+
+# Common logging configuration for all services
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+    labels: "service"
 
 services:
   # Disable the local PostgreSQL container in production
@@ -28,8 +37,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    logging:
-      driver: json-file  # Use default logging in prod (Loki requires extra setup)
+    logging: *default-logging
 
   # Update ringcentral-service for production - use pre-built image
   ringcentral-service:
@@ -49,8 +57,7 @@ services:
       - "traefik.http.routers.ringcentral-service.entrypoints=websecure"
       - "traefik.http.routers.ringcentral-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.ringcentral-service.loadbalancer.server.port=8000"
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Update workflow-service for production - use pre-built image
   workflow-service:
@@ -76,8 +83,7 @@ services:
       - storage-service
       - agencyzoom-service
       - transcription-service
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Storage service for DigitalOcean Spaces - use pre-built image
   storage-service:
@@ -97,8 +103,7 @@ services:
       - "traefik.http.routers.storage-service.entrypoints=websecure"
       - "traefik.http.routers.storage-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.storage-service.loadbalancer.server.port=8000"
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # AgencyZoom service - use pre-built image
   agencyzoom-service:
@@ -117,8 +122,7 @@ services:
       - "traefik.http.routers.agencyzoom-service.entrypoints=websecure"
       - "traefik.http.routers.agencyzoom-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.agencyzoom-service.loadbalancer.server.port=8000"
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Dashboard service - use pre-built image
   dashboard-service:
@@ -142,8 +146,7 @@ services:
       - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
     depends_on:
       - deputy-service
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Deputy service - use pre-built image
   deputy-service:
@@ -167,8 +170,7 @@ services:
       - "traefik.http.services.deputy-service.loadbalancer.server.port=8000"
     depends_on:
       - ringcentral-service
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Static file server for downloads (desktop app, etc.)
   downloads:
@@ -185,8 +187,7 @@ services:
       - "traefik.http.middlewares.downloads-strip.stripprefix.prefixes=/downloads"
       - "traefik.http.routers.downloads.middlewares=downloads-strip"
       - "traefik.http.services.downloads.loadbalancer.server.port=80"
-    logging:
-      driver: json-file
+    logging: *default-logging
 
   # Transcription service - use pre-built image
   transcription-service:
@@ -205,5 +206,4 @@ services:
       - "traefik.http.routers.transcription-service.entrypoints=websecure"
       - "traefik.http.routers.transcription-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.transcription-service.loadbalancer.server.port=8000"
-    logging:
-      driver: json-file
+    logging: *default-logging

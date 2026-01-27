@@ -1,168 +1,117 @@
 # CLAUDE.md
 
-> **Note:** This file serves as persistent memory across Claude sessions. It is automatically updated with project context, decisions, and preferences learned during development.
+> **Note:** This file serves as persistent memory across Claude sessions.
 
 ## Project Overview
 Microservice Zapier Replacement - A containerized stack to replace Zapier automations with self-hosted microservices on DigitalOcean.
 
-**Motivation:**
-- Cost reduction from Zapier subscription
-- RingCentral trigger issues in Zapier requiring custom solution
-- Greater control and flexibility over automation workflows
-
 ## Tech Stack
-- Language: Python 3.11+
-- Framework: FastAPI (async, auto OpenAPI docs, API-centric)
-- Containerization: Docker + docker-compose
-- Deployment: DigitalOcean (single droplet)
-- CI/CD: GitHub Actions
-- Container Registry: GitHub Container Registry (ghcr.io)
-- IDE: PyCharm
-- Version Control: Git + GitHub
+- Python 3.11+ with FastAPI (async)
+- PostgreSQL (async via SQLAlchemy + asyncpg)
+- Docker + docker-compose
+- DigitalOcean (droplet + managed DB + Spaces)
+- GitHub Actions CI/CD
+- Traefik reverse proxy
 
 ## Domains
-- **Local development:** localhost
-- **Production:** https://jwhitezaps.atoaz.com
+- Local: localhost
+- Production: https://jwhitezaps.atoaz.com
 
-## Shared Infrastructure (Decided)
-- **Reverse proxy:** Traefik (native Docker integration, auto-discovery, auto SSL)
-- **Database:** PostgreSQL (managed service in prod, containerized locally) + Redis (caching/queues)
-- **Logging:** Loki + Grafana (lightweight)
-- **Scheduler:** Built into microservices (some cron-based, some webhook-based)
+## Services
 
-## Project Structure
-```
-/
-├── docker-compose.yml           # Base config (includes containerized PostgreSQL)
-├── docker-compose.override.yml  # Local dev overrides (auto-loaded by docker-compose)
-├── docker-compose.prod.yml      # Production overrides (excludes local PostgreSQL)
-├── .env.example                 # Environment variable template
-├── .env                         # Your local env vars (git-ignored)
-├── .github/
-│   └── workflows/
-│       └── deploy.yml           # GitHub Actions CI/CD pipeline
-├── .gitignore
-├── grafana/
-│   └── provisioning/
-│       └── datasources/
-│           └── loki.yml         # Auto-configures Loki in Grafana
-├── scripts/
-│   └── droplet-setup.sh         # Fresh droplet setup script
-├── services/
-│   └── test-service/            # Test microservice (validates stack)
-│       ├── Dockerfile
-│       ├── requirements.txt
-│       └── src/
-│           ├── main.py          # FastAPI app with endpoints
-│           ├── config.py        # Settings from env vars
-│           ├── database.py      # PostgreSQL connection
-│           ├── redis_client.py  # Redis connection
-│           └── scheduler.py     # Cron job scheduler
-└── CLAUDE.md                    # This file (persistent memory)
-```
+| Service | Purpose |
+|---------|---------|
+| ringcentral-service | RingCentral API (calls, recordings, voicemails, DND) |
+| agencyzoom-service | AgencyZoom API (customers, leads, notes, tasks) |
+| storage-service | DigitalOcean Spaces uploads |
+| transcription-service | OpenAI Whisper + GPT summarization |
+| workflow-service | Workflow orchestration + cron scheduler |
+| deputy-service | Deputy webhooks to RingCentral DND |
+| dashboard-service | Employee status dashboard |
 
-## Quick Start (Local Development)
+## Workflows (workflow-service)
+
+| Workflow | Schedule | Description |
+|----------|----------|-------------|
+| incoming_call | Every 5 min (:00) | Inbound calls to AgencyZoom notes |
+| outgoing_call | Every 5 min (:01) | Outbound calls to AgencyZoom notes |
+| voicemail | Every 5 min (:02) | Voicemails to AgencyZoom notes + tasks |
+
+Features:
+- 15-min delay for recording availability
+- Skips internal extension-to-extension calls
+- Multiple recordings for transferred calls
+- AI summarization (RingSense or Whisper fallback)
+- Tracks processed items in PostgreSQL
+
+## Key Implementation Details
+
+### Multiple Recordings (Transferred Calls)
+- Extracts recordings from all legs in call log
+- Uploads each segment: callid_part1.mp3, callid_part2.mp3
+- Shows all recording links with extension names
+
+### Internal Call Detection
+Skipped when:
+- Both from_extension_id and to_extension_id set, OR
+- Both phone numbers < 7 digits
+
+### Database Connection Pooling
+- pool_size=2, max_overflow=3
+- pool_pre_ping=True, pool_recycle=300
+- Staggered workflow schedules to avoid exhaustion
+
+### Timezone
+- RingCentral times are UTC
+- Display: Pacific (America/Los_Angeles)
+
+### Logging Strategy
+- **Format**: Structured JSON logging (workflow-service)
+- **Driver**: json-file with rotation (10MB max, 3 files)
+- **Middleware**: Request/response logging on all HTTP endpoints
+- **Infrastructure**: Loki + Grafana available at grafana.${DOMAIN}
+- **View logs**: `docker compose logs -f workflow-service`
+- **Log levels**: Controlled via LOG_LEVEL env var (default: INFO)
+
+Key log fields:
+- `timestamp`, `level`, `service`, `logger`, `source`
+- Request logs: `method`, `path`, `status_code`, `duration_ms`
+- Workflow logs: `call_id`, `workflow_name`, `notes_created`
+
+## Commands
+
 ```bash
-# 1. Copy env template and fill in values
-cp .env.example .env
-
-# 2. Start all services (builds images on first run)
+# Local dev
 docker-compose up -d --build
 
-# 3. Check services are running
-docker-compose ps
-
-# 4. Test the stack
-curl http://localhost/api/test/health
-curl http://localhost/api/test/health/ready
-curl http://localhost/api/test/db
-curl http://localhost/api/test/redis
-```
-
-## Development Commands
-```bash
-# Start all services
-docker-compose up -d
-
-# Start specific service
-docker-compose up -d <service-name>
-
 # View logs (all services)
-docker-compose logs -f
+docker compose logs -f workflow-service
 
-# View logs (specific service)
-docker-compose logs -f test-service
+# View logs with timestamps and filtering
+docker compose logs -f --since 1h workflow-service | grep -i error
 
-# Rebuild after code changes
-docker-compose up -d --build test-service
+# Search logs for specific call ID
+docker compose logs workflow-service 2>&1 | grep "chEF8Z9Qlp5CjUA"
 
-# Stop all services
-docker-compose down
+# Production force update
+docker compose pull && docker compose up -d --force-recreate
 
-# Stop and remove volumes (reset data)
-docker-compose down -v
+# Check recent workflow runs
+docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|processed)"
 ```
 
-## Local URLs
-- **Test Service API:** http://localhost/api/test/
-- **Test Service Docs:** http://localhost/api/test/docs
-- **Traefik Dashboard:** http://localhost:8080
-- **Grafana:** http://localhost:3000
-- **PostgreSQL:** localhost:5432
-- **Redis:** localhost:6379
+## API Endpoints
 
-## Architecture Notes
-- Each microservice = 1 Docker container
-- Shared resources (DB, logging, messaging) run as separate containers
-- All services communicate via internal Docker network
-- Reverse proxy (Traefik) handles external routing
-- Trigger types vary per microservice: cron-based or webhook-based
+### Workflow Service
+- GET /api/workflow/workflows - List workflows
+- POST /api/workflow/workflows/{name}/run - Trigger workflow
+- DELETE /api/workflow/processed/{workflow}/{id} - Reprocess item
 
-**First microservice:** RingCentral integration (full replacement, cron-based to avoid RingCentral webhook restrictions)
-
-**Development approach:**
-1. Build base stack with test microservice first
-2. Validate everything works locally and deploys to DigitalOcean
-3. Then build actual RingCentral microservice
-
-## Coding Conventions
-<!-- To be established -->
-
-## Environment Setup
-
-### Local Development
-- PyCharm + Docker Desktop
-- **Everything runs in containers** - no local installs needed
-- PostgreSQL container included (local testing only)
-- Just run `docker-compose up -d` and the full stack starts
-
-### Production Droplet
-- **Spec:** Ubuntu 24.04 LTS, Regular 2 vCPU, 4GB RAM ($24/mo)
-- **Setup:** Run `scripts/droplet-setup.sh` on fresh droplet
-- Managed PostgreSQL (container excluded via `docker-compose.prod.yml`)
-- Deploy command: `docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
-
-### GitHub Repository Secrets (Settings > Secrets > Actions)
-Required for deployment:
-- `DEPLOY_HOST` - DigitalOcean droplet IP address
-- `DEPLOY_USER` - SSH username (usually `root`)
-- `SSH_PRIVATE_KEY` - SSH private key for droplet access
-- `GHCR_TOKEN` - GitHub token with `packages:write` scope (or use default GITHUB_TOKEN)
-
-## Decisions Log
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-01-14 | Traefik for reverse proxy | Native Docker integration, auto SSL |
-| 2026-01-14 | Loki + Grafana for logging | Lightweight for single droplet |
-| 2026-01-14 | Full Zapier replacement approach | Zapier trigger already broken, more control |
-| 2026-01-14 | Cron for RingCentral trigger | Avoid RingCentral webhook restrictions |
-| 2026-01-14 | PostgreSQL managed in prod | Offload DB management, containerized for local dev |
-| 2026-01-14 | FastAPI for microservices | Async, auto OpenAPI, API-centric focus |
-| 2026-01-14 | Domain: jwhitezaps.atoaz.com | Production domain for Traefik SSL |
-| 2026-01-14 | GitHub over GitLab | Better DigitalOcean integration, simpler CI/CD, larger community |
+### RingCentral Service
+- GET /api/ringcentral/calls - Fetch call logs
+- GET /api/ringcentral/calls/{id} - Call details
+- GET /api/ringcentral/calls/{id}/raw - Debug raw response
 
 ## User Context
-- Solo developer, personal project for own company
-- Newer to Python/FastAPI - provide clear explanations
-- Project focus: APIs and connecting web services (Zapier replacement)
-- Cloud deployment is a priority
+- Insurance agency automation project
+- Key integrations: RingCentral, AgencyZoom, Deputy

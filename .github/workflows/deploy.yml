@@ -294,6 +294,9 @@ jobs:
           script: |
             cd ~/app
 
+            # Ensure Loki Docker logging plugin is installed
+            docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions 2>/dev/null || docker plugin enable loki 2>/dev/null || true
+
             # Log in to GitHub Container Registry
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 

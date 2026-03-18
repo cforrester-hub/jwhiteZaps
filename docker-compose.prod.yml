@@ -15,8 +15,9 @@
 
 # Common logging configuration for all services
 x-logging: &default-logging
-  driver: json-file
+  driver: loki
   options:
+    loki-url: "http://localhost:3100/loki/api/v1/push"
     max-size: "10m"
     max-file: "3"
     labels: "service"

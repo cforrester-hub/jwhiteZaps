@@ -124,6 +124,12 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-asyncio
 
+      - name: Install pipeline-dashboard dependencies
+        run: |
+          cd services/pipeline-dashboard
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
       - name: Run tests
         run: |
           cd services/test-service
@@ -219,6 +225,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/deputy-service:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/deputy-service:latest
+
+      - name: Build and push pipeline-dashboard
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/pipeline-dashboard
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/pipeline-dashboard:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/pipeline-dashboard:latest
 
       - name: Build and push transcription-service
         uses: docker/build-push-action@v5

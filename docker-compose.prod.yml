@@ -189,6 +189,28 @@ services:
       - "traefik.http.services.downloads.loadbalancer.server.port=80"
     logging: *default-logging
 
+  # Pipeline dashboard - use pre-built image
+  pipeline-dashboard:
+    image: ghcr.io/cforrester-hub/pipeline-dashboard:latest
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AGENCYZOOM_API_URL: ${AGENCYZOOM_API_URL:-https://api.agencyzoom.com}
+      AGENCYZOOM_USERNAME: ${AGENCYZOOM_USERNAME}
+      AGENCYZOOM_PASSWORD: ${AGENCYZOOM_PASSWORD}
+      SESSION_EXPIRY_HOURS: ${PD_SESSION_EXPIRY_HOURS:-8}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pipeline-dashboard.rule=Host(`${DOMAIN}`) && PathPrefix(`/pipeline`)"
+      - "traefik.http.routers.pipeline-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.pipeline-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pipeline-dashboard.loadbalancer.server.port=8000"
+    depends_on: []
+    logging: *default-logging
+
   # Transcription service - use pre-built image
   transcription-service:
     image: ghcr.io/cforrester-hub/transcription-service:latest

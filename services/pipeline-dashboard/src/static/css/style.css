@@ -237,16 +237,6 @@ body {
     text-transform: capitalize;
 }
 
-.pipeline-select {
-    opacity: 0.5;
-    transition: opacity 0.2s;
-}
-
-.pipeline-select-active,
-.pipeline-select:focus {
-    opacity: 1;
-}
-
 /* ===== KANBAN BOARD ===== */
 .kanban-board {
     display: flex;

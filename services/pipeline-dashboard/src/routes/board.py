@@ -38,9 +38,9 @@ async def get_all_boards(request: Request, view: str = "all"):
         return auth_redirect
 
     async with async_session() as db:
-        # Get all pipelines ordered by seq
+        # Get all pipelines ordered alphabetically
         result = await db.execute(
-            select(Pipeline).order_by(Pipeline.seq)
+            select(Pipeline).order_by(Pipeline.name)
         )
         pipelines = result.scalars().all()
 

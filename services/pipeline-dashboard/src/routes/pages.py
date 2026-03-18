@@ -39,15 +39,12 @@ async def board_page(request: Request):
     if user is None:
         return RedirectResponse(url="/pipeline/login", status_code=302)
 
-    # Fetch available pipelines
+    # Fetch available pipelines, sorted alphabetically
     async with async_session() as db:
         result = await db.execute(
-            select(Pipeline).order_by(Pipeline.seq)
+            select(Pipeline).order_by(Pipeline.name)
         )
         pipelines = result.scalars().all()
-
-    # Default to first pipeline
-    default_pipeline_id = pipelines[0].id if pipelines else None
 
     return templates.TemplateResponse(
         "board.html",
@@ -55,6 +52,5 @@ async def board_page(request: Request):
             "request": request,
             "user": user,
             "pipelines": pipelines,
-            "default_pipeline_id": default_pipeline_id,
         },
     )

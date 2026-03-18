@@ -8,14 +8,12 @@
             <h1 class="nav-title">Pipeline Dashboard</h1>
         </div>
         <div class="nav-center">
-            <div class="view-toggle">
-                <button class="btn-toggle active" data-view="all-pipelines" onclick="showAllPipelines(this)">All Pipelines</button>
-                <select id="pipeline-select" class="pipeline-select" onchange="showSinglePipeline()">
-                    {% for pipeline in pipelines %}
-                    <option value="{{ pipeline.id }}">{{ pipeline.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+            <select id="pipeline-select" class="pipeline-select" onchange="loadBoard()">
+                <option value="all" selected>All Pipelines</option>
+                {% for pipeline in pipelines %}
+                <option value="{{ pipeline.id }}">{{ pipeline.name }}</option>
+                {% endfor %}
+            </select>
             <div class="view-toggle">
                 <button class="btn-toggle" data-view="my" onclick="switchLeadView('my', this)">My Leads</button>
                 <button class="btn-toggle active" data-view="all" onclick="switchLeadView('all', this)">All Leads</button>
@@ -55,7 +53,6 @@
 
 <script>
     let currentLeadView = 'all';
-    let currentPipelineView = 'all-pipelines';
 
     function switchLeadView(view, btn) {
         currentLeadView = view;
@@ -64,31 +61,9 @@
         loadBoard();
     }
 
-    function showAllPipelines(btn) {
-        currentPipelineView = 'all-pipelines';
-        // Highlight the All Pipelines button, dim the select
-        btn.classList.add('active');
-        document.getElementById('pipeline-select').classList.remove('pipeline-select-active');
-        loadBoard();
-    }
-
-    function showSinglePipeline() {
-        currentPipelineView = 'single';
-        // Dim the All Pipelines button, highlight select
-        document.querySelector('[data-view="all-pipelines"]').classList.remove('active');
-        document.getElementById('pipeline-select').classList.add('pipeline-select-active');
-        loadBoard();
-    }
-
     function loadBoard() {
-        let url;
-        if (currentPipelineView === 'all-pipelines') {
-            url = '/pipeline/api/board/all?view=' + currentLeadView;
-        } else {
-            const pipelineId = document.getElementById('pipeline-select').value;
-            if (!pipelineId) return;
-            url = '/pipeline/api/board/' + pipelineId + '?view=' + currentLeadView;
-        }
+        const pipelineId = document.getElementById('pipeline-select').value;
+        const url = '/pipeline/api/board/' + pipelineId + '?view=' + currentLeadView;
         htmx.ajax('GET', url, {
             target: '#kanban-board',
             swap: 'innerHTML',

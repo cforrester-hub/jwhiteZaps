@@ -1,7 +1,7 @@
 <div class="lead-card">
     <div class="lead-card-header">
         <span class="lead-name">{{ lead.firstname or '' }} {{ lead.lastname or '' }}</span>
-        <a href="https://app.agencyzoom.com/leads/{{ lead.id }}"
+        <a href="https://app.agencyzoom.com/lead/index?id={{ lead.id }}"
            target="_blank"
            class="az-link"
            title="Open in AgencyZoom">&#x2197;</a>

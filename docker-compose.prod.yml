@@ -208,7 +208,6 @@ services:
       - "traefik.http.routers.pipeline-dashboard.entrypoints=websecure"
       - "traefik.http.routers.pipeline-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.services.pipeline-dashboard.loadbalancer.server.port=8000"
-    depends_on: []
     logging: *default-logging
 
   # Transcription service - use pre-built image

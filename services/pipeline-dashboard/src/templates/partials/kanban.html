@@ -1,0 +1,23 @@
+<div class="kanban-board">
+    {% for stage in stages %}
+    <div class="kanban-column">
+        <div class="column-header">
+            <h3>{{ stage.name }}</h3>
+            <span class="lead-count">{{ leads_by_stage.get(stage.id|string, [])|length }}</span>
+        </div>
+        <div class="column-body">
+            {% for lead in leads_by_stage.get(stage.id|string, []) %}
+            {% include "partials/lead_card.html" %}
+            {% endfor %}
+            {% if not leads_by_stage.get(stage.id|string, []) %}
+            <div class="empty-column">No leads</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% if not stages %}
+    <div class="empty-state">
+        <p>No stages found for this pipeline.</p>
+    </div>
+    {% endif %}
+</div>

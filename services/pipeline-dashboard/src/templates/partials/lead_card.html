@@ -1,0 +1,26 @@
+<div class="lead-card">
+    <div class="lead-card-header">
+        <span class="lead-name">{{ lead.firstname or '' }} {{ lead.lastname or '' }}</span>
+        <a href="https://app.agencyzoom.com/leads/{{ lead.id }}"
+           target="_blank"
+           class="az-link"
+           title="Open in AgencyZoom">&#x2197;</a>
+    </div>
+    {% if lead.lead_type %}
+    <div class="lead-type">{{ lead.lead_type }}</div>
+    {% endif %}
+    <div class="lead-details">
+        {% if lead.premium %}
+        <span class="lead-amount">${{ "{:,.0f}".format(lead.premium) }}</span>
+        {% endif %}
+        {% if lead.phone %}
+        <span class="lead-phone">{{ lead.phone }}</span>
+        {% endif %}
+    </div>
+    {% if lead.assign_to_firstname %}
+    <div class="lead-agent">{{ lead.assign_to_firstname }} {{ lead.assign_to_lastname or '' }}</div>
+    {% endif %}
+    {% if lead.enter_stage_date %}
+    <div class="lead-date">{{ lead.enter_stage_date[:10] if lead.enter_stage_date else '' }}</div>
+    {% endif %}
+</div>

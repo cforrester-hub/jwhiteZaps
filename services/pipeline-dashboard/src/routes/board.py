@@ -29,9 +29,68 @@ def _require_auth(request: Request, user):
     return None
 
 
+@router.get("/pipeline/api/board/all", response_class=HTMLResponse)
+async def get_all_boards(request: Request, view: str = "all"):
+    """Return kanban boards for ALL pipelines."""
+    user = await get_current_user(request)
+    auth_redirect = _require_auth(request, user)
+    if auth_redirect:
+        return auth_redirect
+
+    async with async_session() as db:
+        # Get all pipelines ordered by seq
+        result = await db.execute(
+            select(Pipeline).order_by(Pipeline.seq)
+        )
+        pipelines = result.scalars().all()
+
+        # Get all stages ordered by pipeline then seq
+        result = await db.execute(
+            select(Stage).order_by(Stage.pipeline_id, Stage.seq)
+        )
+        all_stages = result.scalars().all()
+
+        # Build lead query
+        lead_query = select(Lead)
+        if view == "my" and user.az_user_id:
+            lead_query = lead_query.where(
+                Lead.assigned_to == int(user.az_user_id)
+            )
+        lead_query = lead_query.order_by(Lead.enter_stage_date.desc())
+        result = await db.execute(lead_query)
+        all_leads = result.scalars().all()
+
+    # Group stages by pipeline
+    stages_by_pipeline = {}
+    for stage in all_stages:
+        pid = str(stage.pipeline_id)
+        if pid not in stages_by_pipeline:
+            stages_by_pipeline[pid] = []
+        stages_by_pipeline[pid].append(stage)
+
+    # Group leads by stage
+    leads_by_stage = {}
+    for lead in all_leads:
+        stage_key = str(lead.stage_id)
+        if stage_key not in leads_by_stage:
+            leads_by_stage[stage_key] = []
+        leads_by_stage[stage_key].append(lead)
+
+    return templates.TemplateResponse(
+        "partials/kanban_all.html",
+        {
+            "request": request,
+            "pipelines": pipelines,
+            "stages_by_pipeline": stages_by_pipeline,
+            "leads_by_stage": leads_by_stage,
+            "view": view,
+        },
+    )
+
+
 @router.get("/pipeline/api/board/{pipeline_id}", response_class=HTMLResponse)
-async def get_board(request: Request, pipeline_id: str, view: str = "my"):
-    """Return kanban board HTML partial for a pipeline."""
+async def get_board(request: Request, pipeline_id: str, view: str = "all"):
+    """Return kanban board HTML partial for a single pipeline."""
     user = await get_current_user(request)
     auth_redirect = _require_auth(request, user)
     if auth_redirect:
@@ -50,7 +109,6 @@ async def get_board(request: Request, pipeline_id: str, view: str = "my"):
         lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
         if view == "my" and user.az_user_id:
-            # Filter to leads assigned to this user
             lead_query = lead_query.where(
                 Lead.assigned_to == int(user.az_user_id)
             )

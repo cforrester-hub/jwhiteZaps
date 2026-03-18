@@ -1,0 +1,31 @@
+{% for pipeline in pipelines %}
+<div class="pipeline-section">
+    <div class="pipeline-header">
+        <h2>{{ pipeline.name }}</h2>
+        <span class="pipeline-type">{{ pipeline.type or '' }}</span>
+    </div>
+    <div class="kanban-board">
+        {% for stage in stages_by_pipeline.get(pipeline.id|string, []) %}
+        <div class="kanban-column">
+            <div class="column-header">
+                <h3>{{ stage.name }}</h3>
+                <span class="lead-count">{{ leads_by_stage.get(stage.id|string, [])|length }}</span>
+            </div>
+            <div class="column-body">
+                {% for lead in leads_by_stage.get(stage.id|string, []) %}
+                {% include "partials/lead_card.html" %}
+                {% endfor %}
+                {% if not leads_by_stage.get(stage.id|string, []) %}
+                <div class="empty-column">No leads</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% if not pipelines %}
+<div class="empty-state">
+    <p>No pipelines found. Data will appear after the next sync.</p>
+</div>
+{% endif %}

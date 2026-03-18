@@ -8,17 +8,17 @@
             <h1 class="nav-title">Pipeline Dashboard</h1>
         </div>
         <div class="nav-center">
-            <select id="pipeline-select" class="pipeline-select">
-                {% for pipeline in pipelines %}
-                <option value="{{ pipeline.id }}"
-                        {% if pipeline.id == default_pipeline_id %}selected{% endif %}>
-                    {{ pipeline.name }}
-                </option>
-                {% endfor %}
-            </select>
             <div class="view-toggle">
-                <button class="btn-toggle active" data-view="my" onclick="switchView('my', this)">My Leads</button>
-                <button class="btn-toggle" data-view="all" onclick="switchView('all', this)">All Leads</button>
+                <button class="btn-toggle active" data-view="all-pipelines" onclick="showAllPipelines(this)">All Pipelines</button>
+                <select id="pipeline-select" class="pipeline-select" onchange="showSinglePipeline()">
+                    {% for pipeline in pipelines %}
+                    <option value="{{ pipeline.id }}">{{ pipeline.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="view-toggle">
+                <button class="btn-toggle" data-view="my" onclick="switchLeadView('my', this)">My Leads</button>
+                <button class="btn-toggle active" data-view="all" onclick="switchLeadView('all', this)">All Leads</button>
             </div>
         </div>
         <div class="nav-right">
@@ -41,12 +41,10 @@
 
     <!-- Kanban board container -->
     <div id="kanban-board"
-         {% if default_pipeline_id %}
-         hx-get="/pipeline/api/board/{{ default_pipeline_id }}?view=my"
+         hx-get="/pipeline/api/board/all?view=all"
          hx-trigger="load"
          hx-swap="innerHTML"
-         hx-indicator="#loading"
-         {% endif %}>
+         hx-indicator="#loading">
         {% if not pipelines %}
         <div class="empty-state">
             <p>No pipelines found. Data will appear after the next sync.</p>
@@ -56,28 +54,46 @@
 </div>
 
 <script>
-    let currentView = 'my';
+    let currentLeadView = 'all';
+    let currentPipelineView = 'all-pipelines';
 
-    function switchView(view, btn) {
-        currentView = view;
-        // Update toggle buttons
-        document.querySelectorAll('.btn-toggle').forEach(b => b.classList.remove('active'));
+    function switchLeadView(view, btn) {
+        currentLeadView = view;
+        document.querySelectorAll('[data-view="my"], [data-view="all"]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        // Reload board
+        loadBoard();
+    }
+
+    function showAllPipelines(btn) {
+        currentPipelineView = 'all-pipelines';
+        // Highlight the All Pipelines button, dim the select
+        btn.classList.add('active');
+        document.getElementById('pipeline-select').classList.remove('pipeline-select-active');
+        loadBoard();
+    }
+
+    function showSinglePipeline() {
+        currentPipelineView = 'single';
+        // Dim the All Pipelines button, highlight select
+        document.querySelector('[data-view="all-pipelines"]').classList.remove('active');
+        document.getElementById('pipeline-select').classList.add('pipeline-select-active');
         loadBoard();
     }
 
     function loadBoard() {
-        const pipelineId = document.getElementById('pipeline-select').value;
-        if (!pipelineId) return;
-        htmx.ajax('GET', '/pipeline/api/board/' + pipelineId + '?view=' + currentView, {
+        let url;
+        if (currentPipelineView === 'all-pipelines') {
+            url = '/pipeline/api/board/all?view=' + currentLeadView;
+        } else {
+            const pipelineId = document.getElementById('pipeline-select').value;
+            if (!pipelineId) return;
+            url = '/pipeline/api/board/' + pipelineId + '?view=' + currentLeadView;
+        }
+        htmx.ajax('GET', url, {
             target: '#kanban-board',
             swap: 'innerHTML',
             indicator: '#loading'
         });
     }
-
-    // Wire up pipeline select change
-    document.getElementById('pipeline-select').addEventListener('change', loadBoard);
 </script>
 {% endblock %}

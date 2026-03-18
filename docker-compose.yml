@@ -333,6 +333,43 @@ services:
         loki-url: "http://localhost:3100/loki/api/v1/push"
         labels: "service"
 
+  pipeline-dashboard:
+    build:
+      context: ./services/pipeline-dashboard
+      dockerfile: Dockerfile
+    container_name: pipeline-dashboard
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zapier}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapier_replacement}
+      AGENCYZOOM_API_URL: ${AGENCYZOOM_API_URL:-https://api.agencyzoom.com}
+      AGENCYZOOM_USERNAME: ${AGENCYZOOM_USERNAME}
+      AGENCYZOOM_PASSWORD: ${AGENCYZOOM_PASSWORD}
+      SESSION_EXPIRY_HOURS: ${PD_SESSION_EXPIRY_HOURS:-8}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks:
+      - internal
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pipeline-dashboard.rule=Host(`${DOMAIN}`) && PathPrefix(`/pipeline`)"
+      - "traefik.http.routers.pipeline-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.pipeline-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pipeline-dashboard.loadbalancer.server.port=8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/pipeline/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://localhost:3100/loki/api/v1/push"
+        labels: "service"
+
   transcription-service:
     build:
       context: ./services/transcription-service

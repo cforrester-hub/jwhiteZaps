@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}{{ user.display_name }} - Pipeline Dashboard{% endblock %}
+{% block body %}
+<div class="dashboard">
+    <!-- Top nav bar -->
+    <nav class="nav-bar">
+        <div class="nav-left">
+            <h1 class="nav-title">Pipeline Dashboard</h1>
+        </div>
+        <div class="nav-center">
+            <select id="pipeline-select" class="pipeline-select">
+                {% for pipeline in pipelines %}
+                <option value="{{ pipeline.id }}"
+                        {% if pipeline.id == default_pipeline_id %}selected{% endif %}>
+                    {{ pipeline.name }}
+                </option>
+                {% endfor %}
+            </select>
+            <div class="view-toggle">
+                <button class="btn-toggle active" data-view="my" onclick="switchView('my', this)">My Leads</button>
+                <button class="btn-toggle" data-view="all" onclick="switchView('all', this)">All Leads</button>
+            </div>
+        </div>
+        <div class="nav-right">
+            <span class="user-name">{{ user.display_name }}</span>
+            <span id="sync-status"
+                  hx-get="/pipeline/api/sync-status"
+                  hx-trigger="load, every 60s"
+                  hx-swap="innerHTML">
+            </span>
+            <form action="/pipeline/api/logout" method="post" style="display:inline;">
+                <button type="submit" class="btn-logout">Logout</button>
+            </form>
+        </div>
+    </nav>
+
+    <!-- Loading indicator -->
+    <div id="loading" class="htmx-indicator">
+        <div class="loading-bar"></div>
+    </div>
+
+    <!-- Kanban board container -->
+    <div id="kanban-board"
+         {% if default_pipeline_id %}
+         hx-get="/pipeline/api/board/{{ default_pipeline_id }}?view=my"
+         hx-trigger="load"
+         hx-swap="innerHTML"
+         hx-indicator="#loading"
+         {% endif %}>
+        {% if not pipelines %}
+        <div class="empty-state">
+            <p>No pipelines found. Data will appear after the next sync.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    let currentView = 'my';
+
+    function switchView(view, btn) {
+        currentView = view;
+        // Update toggle buttons
+        document.querySelectorAll('.btn-toggle').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // Reload board
+        loadBoard();
+    }
+
+    function loadBoard() {
+        const pipelineId = document.getElementById('pipeline-select').value;
+        if (!pipelineId) return;
+        htmx.ajax('GET', '/pipeline/api/board/' + pipelineId + '?view=' + currentView, {
+            target: '#kanban-board',
+            swap: 'innerHTML',
+            indicator: '#loading'
+        });
+    }
+
+    // Wire up pipeline select change
+    document.getElementById('pipeline-select').addEventListener('change', loadBoard);
+</script>
+{% endblock %}

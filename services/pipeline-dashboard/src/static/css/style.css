@@ -655,6 +655,23 @@ body {
     text-align: right;
 }
 
+.lead-search-input {
+    padding: 6px 10px;
+    border: 1px solid #3a3a4a;
+    border-radius: 6px;
+    background: #23233a;
+    color: #e0e0e0;
+    font-size: 13px;
+    width: 160px;
+    outline: none;
+}
+.lead-search-input:focus {
+    border-color: #6c5ce7;
+}
+.lead-search-input::placeholder {
+    color: #888;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
     .nav-bar {

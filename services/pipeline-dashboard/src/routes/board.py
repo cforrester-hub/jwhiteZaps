@@ -62,7 +62,7 @@ BUCKET_BOUNDS = {
 }
 
 
-def _apply_filters(lead_query, user, view: str, producers: str = "", activity_buckets: str = ""):
+def _apply_filters(lead_query, user, view: str, producers: str = "", activity_buckets: str = "", search: str = ""):
     """Apply all filters to a lead query."""
     if view == "my":
         lead_query = _apply_my_leads_filter(lead_query, user)
@@ -106,6 +106,18 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_bu
             if conditions:
                 lead_query = lead_query.where(or_(*conditions))
 
+    if search and len(search) >= 2:
+        tokens = [t.strip().lower() for t in search.split() if len(t.strip()) >= 2]
+        if tokens:
+            for token in tokens:
+                pattern = f"{token}%"
+                lead_query = lead_query.where(
+                    or_(
+                        func.lower(Lead.firstname).like(pattern),
+                        func.lower(Lead.lastname).like(pattern),
+                    )
+                )
+
     return lead_query
 
 
@@ -148,6 +160,7 @@ async def get_filter_counts(
     view: str = "all",
     producers: str = "",
     activity_buckets: str = "",
+    search: str = "",
 ):
     """Return lead counts for filter items (producers and activity buckets)."""
     user = await get_current_user(request)
@@ -174,6 +187,16 @@ async def get_filter_counts(
         # Fetch all leads matching base filters
         result = await db.execute(base_query)
         all_leads = result.scalars().all()
+
+    # Apply search filter to base results
+    if search and len(search) >= 2:
+        tokens = [t.strip().lower() for t in search.split() if len(t.strip()) >= 2]
+        if tokens:
+            def _matches_search(lead):
+                fn = (lead.firstname or "").lower()
+                ln = (lead.lastname or "").lower()
+                return all(fn.startswith(t) or ln.startswith(t) for t in tokens)
+            all_leads = [l for l in all_leads if _matches_search(l)]
 
     now = datetime.utcnow()
     today_str = now.strftime("%Y-%m-%d")
@@ -302,6 +325,7 @@ async def get_all_boards(
     view: str = "all",
     producers: str = "",
     activity_buckets: str = "",
+    search: str = "",
 ):
     """Return kanban boards for ALL pipelines."""
     user = await get_current_user(request)
@@ -324,7 +348,7 @@ async def get_all_boards(
 
         # Build lead query
         lead_query = select(Lead)
-        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets)
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets, search)
         lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
@@ -367,6 +391,7 @@ async def get_board(
     view: str = "all",
     producers: str = "",
     activity_buckets: str = "",
+    search: str = "",
 ):
     """Return kanban board HTML partial for a single pipeline."""
     user = await get_current_user(request)
@@ -392,7 +417,7 @@ async def get_board(
         else:
             lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
-        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets)
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets, search)
         lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()

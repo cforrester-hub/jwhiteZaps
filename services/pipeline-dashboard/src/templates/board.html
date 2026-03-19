@@ -70,6 +70,15 @@
                 </div>
             </div>
 
+            <!-- Name search filter -->
+            <div class="filter-section">
+                <div class="filter-label">Search</div>
+                <input type="text" id="lead-search" class="lead-search-input"
+                       placeholder="Lead name..."
+                       oninput="onSearchInput()"
+                       autocomplete="off">
+            </div>
+
             <!-- View toggle (uses producer filter) -->
             <div class="filter-section">
                 <div class="filter-label">View</div>
@@ -106,6 +115,7 @@
     const filterState = {
         producers: [],
         activityBuckets: [],
+        search: '',
         panelOpen: false,
         myLeadsActive: false,
     };
@@ -289,6 +299,30 @@
         });
     }
 
+    let searchTimer = null;
+
+    function onSearchInput() {
+        clearTimeout(searchTimer);
+        const value = document.getElementById('lead-search').value.trim();
+
+        // Clear immediately if input emptied
+        if (value.length === 0 && filterState.search !== '') {
+            filterState.search = '';
+            updateFilterBadge();
+            loadBoard();
+            return;
+        }
+
+        // Require at least 2 characters
+        if (value.length < 2) return;
+
+        searchTimer = setTimeout(function() {
+            filterState.search = value;
+            updateFilterBadge();
+            loadBoard();
+        }, 1000);
+    }
+
     function toggleMyLeads() {
         filterState.myLeadsActive = true;
         document.getElementById('btn-my-leads').classList.add('active');
@@ -327,6 +361,7 @@
         let count = 0;
         if (filterState.producers.length > 0) count++;
         if (filterState.activityBuckets.length > 0) count++;
+        if (filterState.search) count++;
 
         const badge = document.getElementById('filter-badge');
         const btn = document.getElementById('btn-filters');
@@ -350,6 +385,9 @@
         if (filterState.activityBuckets.length > 0) {
             url += '&activity_buckets=' + encodeURIComponent(filterState.activityBuckets.join(','));
         }
+        if (filterState.search) {
+            url += '&search=' + encodeURIComponent(filterState.search);
+        }
 
         htmx.ajax('GET', url, {
             target: '#kanban-board',
@@ -371,6 +409,9 @@
             }
             if (filterState.activityBuckets.length > 0) {
                 url += '&activity_buckets=' + encodeURIComponent(filterState.activityBuckets.join(','));
+            }
+            if (filterState.search) {
+                url += '&search=' + encodeURIComponent(filterState.search);
             }
 
             const resp = await fetch(url);

@@ -7,6 +7,7 @@
 {% if pipeline_lead_count.count > 0 %}
 <div class="pipeline-section" id="pipeline-{{ pipeline.id }}">
     <div class="pipeline-header">
+        <button class="btn-pipeline-toggle" onclick="togglePipeline('{{ pipeline.id }}')">−</button>
         <h2>{{ pipeline.name }}</h2>
         <span class="pipeline-type">{{ pipeline.type or '' }}</span>
     </div>

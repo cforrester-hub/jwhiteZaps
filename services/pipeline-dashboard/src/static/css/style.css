@@ -450,6 +450,9 @@ body {
     background: #f8f9fa;
     border-bottom: 1px solid #e0e0e0;
     flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .stat-card {
@@ -685,6 +688,50 @@ body {
 }
 .lead-search-input::placeholder {
     color: #888;
+}
+
+/* ===== PIPELINE COLLAPSE ===== */
+.pipeline-section.collapsed .kanban-board {
+    display: none;
+}
+
+.btn-pipeline-toggle {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.btn-pipeline-toggle:hover {
+    background: #e8eaed;
+    border-color: #999;
+}
+
+.btn-collapse-all {
+    padding: 6px 12px;
+    border: 1px solid #3a3a5e;
+    border-radius: 6px;
+    background: #16213e;
+    color: #aaa;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.btn-collapse-all:hover {
+    color: #fff;
+    border-color: #555;
 }
 
 /* ===== RESPONSIVE ===== */

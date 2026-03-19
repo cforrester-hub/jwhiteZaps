@@ -14,6 +14,7 @@
                 <option value="{{ pipeline.id }}">{{ pipeline.name }}</option>
                 {% endfor %}
             </select>
+            <button id="btn-collapse-all" class="btn-collapse-all" onclick="toggleAllPipelines()">− Collapse All</button>
         </div>
         <div class="nav-right">
             <button id="btn-filters" class="btn-filters" onclick="toggleFilterPanel()">
@@ -120,6 +121,47 @@
         myLeadsActive: false,
     };
 
+    const collapseState = {};  // pipeline_id -> boolean (true = collapsed)
+
+    function togglePipeline(pipelineId) {
+        collapseState[pipelineId] = !collapseState[pipelineId];
+        const section = document.getElementById('pipeline-' + pipelineId);
+        if (section) {
+            section.classList.toggle('collapsed', collapseState[pipelineId]);
+            const btn = section.querySelector('.btn-pipeline-toggle');
+            if (btn) btn.textContent = collapseState[pipelineId] ? '+' : '−';
+        }
+        updateCollapseAllButton();
+    }
+
+    function toggleAllPipelines() {
+        const sections = document.querySelectorAll('.pipeline-section');
+        const allCollapsed = Array.from(sections).every(s => s.classList.contains('collapsed'));
+        sections.forEach(s => {
+            const pid = s.id.replace('pipeline-', '');
+            if (allCollapsed) {
+                s.classList.remove('collapsed');
+                collapseState[pid] = false;
+                const btn = s.querySelector('.btn-pipeline-toggle');
+                if (btn) btn.textContent = '−';
+            } else {
+                s.classList.add('collapsed');
+                collapseState[pid] = true;
+                const btn = s.querySelector('.btn-pipeline-toggle');
+                if (btn) btn.textContent = '+';
+            }
+        });
+        updateCollapseAllButton();
+    }
+
+    function updateCollapseAllButton() {
+        const btn = document.getElementById('btn-collapse-all');
+        if (!btn) return;
+        const sections = document.querySelectorAll('.pipeline-section');
+        const allCollapsed = sections.length > 0 && Array.from(sections).every(s => s.classList.contains('collapsed'));
+        btn.textContent = allCollapsed ? '+ Expand All' : '− Collapse All';
+    }
+
     let allProducers = [];
 
     // Distinct, colorblind-friendly palette for producer card borders
@@ -145,10 +187,22 @@
         });
     }
 
-    // Apply colors after every HTMX swap (board reload)
+    // Apply colors and collapse state after every HTMX swap (board reload)
     document.addEventListener('htmx:afterSwap', function(e) {
         if (e.detail.target.id === 'kanban-board') {
             applyProducerColors();
+            // Re-apply collapse state after board reload
+            Object.keys(collapseState).forEach(pid => {
+                if (collapseState[pid]) {
+                    const section = document.getElementById('pipeline-' + pid);
+                    if (section) {
+                        section.classList.add('collapsed');
+                        const btn = section.querySelector('.btn-pipeline-toggle');
+                        if (btn) btn.textContent = '+';
+                    }
+                }
+            });
+            updateCollapseAllButton();
         }
     });
 
@@ -377,6 +431,10 @@
 
     function loadBoard() {
         const pipelineId = document.getElementById('pipeline-select').value;
+        const collapseBtn = document.getElementById('btn-collapse-all');
+        if (collapseBtn) {
+            collapseBtn.style.display = pipelineId === 'all' ? '' : 'none';
+        }
         let url = '/pipeline/api/board/' + pipelineId + '?view=all';
 
         if (filterState.producers.length > 0) {

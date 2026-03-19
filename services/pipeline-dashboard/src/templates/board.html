@@ -269,10 +269,10 @@
         document.getElementById('btn-all-leads').classList.add('active');
         document.getElementById('btn-my-leads').classList.remove('active');
 
-        // Clear producer filter
+        // Check all producers (all checked = no filter = show everyone)
         filterState.producers = [];
         document.querySelectorAll('#producer-checkboxes input').forEach(cb => {
-            cb.checked = false;
+            cb.checked = true;
         });
 
         updateProducerDisplay();

@@ -29,6 +29,28 @@ def _require_auth(request: Request, user):
     return None
 
 
+def _apply_my_leads_filter(lead_query, user):
+    """Apply 'My Leads' filter using assigned_to ID or name match."""
+    # Try numeric ID match first
+    if user.az_user_id:
+        try:
+            user_id_int = int(user.az_user_id)
+            logger.info(f"My Leads filter: assigned_to={user_id_int} for user '{user.display_name}'")
+            return lead_query.where(Lead.assigned_to == user_id_int)
+        except (ValueError, TypeError):
+            logger.warning(f"az_user_id '{user.az_user_id}' is not numeric, falling back to name match")
+
+    # Fallback: match by first name from display_name
+    if user.display_name:
+        first_name = user.display_name.split()[0] if user.display_name.strip() else None
+        if first_name:
+            logger.info(f"My Leads filter: name match on firstname='{first_name}'")
+            return lead_query.where(Lead.assign_to_firstname == first_name)
+
+    logger.warning(f"My Leads filter: no user_id or name available, showing all leads")
+    return lead_query
+
+
 @router.get("/pipeline/api/board/all", response_class=HTMLResponse)
 async def get_all_boards(request: Request, view: str = "all"):
     """Return kanban boards for ALL pipelines."""
@@ -52,10 +74,8 @@ async def get_all_boards(request: Request, view: str = "all"):
 
         # Build lead query
         lead_query = select(Lead)
-        if view == "my" and user.az_user_id:
-            lead_query = lead_query.where(
-                Lead.assigned_to == int(user.az_user_id)
-            )
+        if view == "my":
+            lead_query = _apply_my_leads_filter(lead_query, user)
         lead_query = lead_query.order_by(Lead.enter_stage_date.desc())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
@@ -114,10 +134,8 @@ async def get_board(request: Request, pipeline_id: str, view: str = "all"):
         else:
             lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
-        if view == "my" and user.az_user_id:
-            lead_query = lead_query.where(
-                Lead.assigned_to == int(user.az_user_id)
-            )
+        if view == "my":
+            lead_query = _apply_my_leads_filter(lead_query, user)
 
         lead_query = lead_query.order_by(Lead.enter_stage_date.desc())
         result = await db.execute(lead_query)

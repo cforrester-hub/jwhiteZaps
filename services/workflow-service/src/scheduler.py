@@ -30,10 +30,10 @@ def start_scheduler():
 
 
 def shutdown_scheduler():
-    """Shutdown the scheduler gracefully."""
+    """Shutdown the scheduler immediately without waiting for running jobs."""
     global scheduler
     if scheduler and scheduler.running:
-        scheduler.shutdown()
+        scheduler.shutdown(wait=False)
         logger.info("Scheduler shut down")
 
 

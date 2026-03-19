@@ -14,12 +14,12 @@
                 <option value="{{ pipeline.id }}">{{ pipeline.name }}</option>
                 {% endfor %}
             </select>
-            <div class="view-toggle">
-                <button class="btn-toggle" data-view="my" onclick="switchLeadView('my', this)">My Leads</button>
-                <button class="btn-toggle active" data-view="all" onclick="switchLeadView('all', this)">All Leads</button>
-            </div>
         </div>
         <div class="nav-right">
+            <button id="btn-filters" class="btn-filters" onclick="toggleFilterPanel()">
+                &#9776; Filters
+                <span id="filter-badge" class="filter-badge" style="display:none;">0</span>
+            </button>
             <span class="user-name">{{ user.display_name }}</span>
             <span id="sync-status"
                   hx-get="/pipeline/api/sync-status"
@@ -31,6 +31,54 @@
             </form>
         </div>
     </nav>
+
+    <!-- Collapsible filter panel -->
+    <div id="filter-panel" class="filter-panel">
+        <div class="filter-panel-inner">
+            <!-- Producer filter -->
+            <div class="filter-section">
+                <div class="filter-label">Producer</div>
+                <div class="producer-dropdown" id="producer-dropdown">
+                    <div class="producer-trigger" onclick="toggleProducerMenu(event)">
+                        <span id="producer-display">All Producers</span>
+                        <span style="color:#666;font-size:10px;">&#9662;</span>
+                    </div>
+                    <div class="producer-menu" id="producer-menu">
+                        <div id="producer-checkboxes">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="producer-actions">
+                            <span class="select-all" onclick="selectAllProducers()">Select All</span>
+                            <span class="clear-all" onclick="clearAllProducers()">Clear</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Last Activity filter -->
+            <div class="filter-section">
+                <div class="filter-label">Last Activity</div>
+                <div class="activity-pills">
+                    <span class="activity-pill active" data-days="" onclick="setActivityDays(this)">Any</span>
+                    <span class="activity-pill" data-days="1" onclick="setActivityDays(this)">1d</span>
+                    <span class="activity-pill" data-days="3" onclick="setActivityDays(this)">3d</span>
+                    <span class="activity-pill" data-days="7" onclick="setActivityDays(this)">7d</span>
+                    <span class="activity-pill" data-days="14" onclick="setActivityDays(this)">14d</span>
+                    <span class="activity-pill" data-days="30" onclick="setActivityDays(this)">30d</span>
+                    <span class="activity-pill" data-days="90" onclick="setActivityDays(this)">90d</span>
+                </div>
+            </div>
+
+            <!-- View toggle (relocated) -->
+            <div class="filter-section">
+                <div class="filter-label">View</div>
+                <div class="view-toggle">
+                    <button class="btn-toggle" data-view="my" onclick="switchLeadView('my', this)">My Leads</button>
+                    <button class="btn-toggle active" data-view="all" onclick="switchLeadView('all', this)">All Leads</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Loading indicator -->
     <div id="loading" class="htmx-indicator">
@@ -52,18 +100,143 @@
 </div>
 
 <script>
-    let currentLeadView = 'all';
+    const filterState = {
+        leadView: 'all',
+        producers: [],
+        activityDays: '',
+        panelOpen: false,
+    };
+
+    let allProducers = [];
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadProducers();
+    });
+
+    async function loadProducers() {
+        try {
+            const resp = await fetch('/pipeline/api/producers');
+            allProducers = await resp.json();
+            renderProducerCheckboxes();
+        } catch (e) {
+            console.error('Failed to load producers:', e);
+        }
+    }
+
+    function renderProducerCheckboxes() {
+        const container = document.getElementById('producer-checkboxes');
+        container.innerHTML = allProducers.map(p => {
+            const name = p.firstname + ' ' + p.lastname;
+            return '<label><input type="checkbox" value="' + p.firstname + '"' +
+                   ' onchange="onProducerChange()"> ' + name + '</label>';
+        }).join('');
+    }
+
+    function toggleFilterPanel() {
+        filterState.panelOpen = !filterState.panelOpen;
+        document.getElementById('filter-panel').classList.toggle('open', filterState.panelOpen);
+    }
+
+    function toggleProducerMenu(event) {
+        event.stopPropagation();
+        document.getElementById('producer-menu').classList.toggle('open');
+    }
+
+    document.addEventListener('click', function(e) {
+        const dropdown = document.getElementById('producer-dropdown');
+        if (dropdown && !dropdown.contains(e.target)) {
+            document.getElementById('producer-menu').classList.remove('open');
+        }
+    });
+
+    function onProducerChange() {
+        const checkboxes = document.querySelectorAll('#producer-checkboxes input[type="checkbox"]');
+        const checked = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+        if (checked.length === allProducers.length || checked.length === 0) {
+            filterState.producers = [];
+        } else {
+            filterState.producers = checked;
+        }
+
+        updateProducerDisplay();
+        updateFilterBadge();
+        loadBoard();
+    }
+
+    function selectAllProducers() {
+        document.querySelectorAll('#producer-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = true);
+        filterState.producers = [];
+        updateProducerDisplay();
+        updateFilterBadge();
+        loadBoard();
+    }
+
+    function clearAllProducers() {
+        document.querySelectorAll('#producer-checkboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+        filterState.producers = [];
+        updateProducerDisplay();
+        updateFilterBadge();
+        loadBoard();
+    }
+
+    function updateProducerDisplay() {
+        const display = document.getElementById('producer-display');
+        if (filterState.producers.length === 0) {
+            display.textContent = 'All Producers';
+        } else if (filterState.producers.length <= 2) {
+            display.textContent = filterState.producers.map(f => {
+                const p = allProducers.find(ap => ap.firstname === f);
+                return f + (p && p.lastname ? ' ' + p.lastname[0] + '.' : '');
+            }).join(', ');
+        } else {
+            display.textContent = filterState.producers.length + ' selected';
+        }
+    }
+
+    function setActivityDays(pill) {
+        document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        filterState.activityDays = pill.dataset.days;
+        updateFilterBadge();
+        loadBoard();
+    }
 
     function switchLeadView(view, btn) {
-        currentLeadView = view;
+        filterState.leadView = view;
         document.querySelectorAll('[data-view="my"], [data-view="all"]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         loadBoard();
     }
 
+    function updateFilterBadge() {
+        let count = 0;
+        if (filterState.producers.length > 0) count++;
+        if (filterState.activityDays !== '') count++;
+
+        const badge = document.getElementById('filter-badge');
+        const btn = document.getElementById('btn-filters');
+        if (count > 0) {
+            badge.textContent = count;
+            badge.style.display = 'inline';
+            btn.classList.add('active');
+        } else {
+            badge.style.display = 'none';
+            btn.classList.remove('active');
+        }
+    }
+
     function loadBoard() {
         const pipelineId = document.getElementById('pipeline-select').value;
-        const url = '/pipeline/api/board/' + pipelineId + '?view=' + currentLeadView;
+        let url = '/pipeline/api/board/' + pipelineId + '?view=' + filterState.leadView;
+
+        if (filterState.producers.length > 0) {
+            url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
+        }
+        if (filterState.activityDays) {
+            url += '&activity_days=' + filterState.activityDays;
+        }
+
         htmx.ajax('GET', url, {
             target: '#kanban-board',
             swap: 'innerHTML',

@@ -1,26 +1,41 @@
 <div class="lead-card" {% if lead.assign_to_firstname %}data-producer="{{ lead.assign_to_firstname }}"{% endif %}>
-    <div class="lead-card-header">
-        <span class="lead-name">{{ lead.firstname or '' }} {{ lead.lastname or '' }}</span>
-        <a href="https://app.agencyzoom.com/lead/index?id={{ lead.id }}"
-           target="_blank"
-           class="az-link"
-           title="Open in AgencyZoom">&#x2197;</a>
+    <div class="lead-card-layout">
+        <div class="lead-card-left">
+            <div class="lead-card-header">
+                <span class="lead-name">{{ lead.firstname or '' }} {{ lead.lastname or '' }}</span>
+                <a href="https://app.agencyzoom.com/lead/index?id={{ lead.id }}"
+                   target="_blank"
+                   class="az-link"
+                   title="Open in AgencyZoom">&#x2197;</a>
+            </div>
+            {% if lead.lead_type %}
+            <div class="lead-type">{{ lead.lead_type }}</div>
+            {% endif %}
+            <div class="lead-details">
+                {% if lead.premium %}
+                <span class="lead-amount">${{ "{:,.0f}".format(lead.premium) }}</span>
+                {% endif %}
+                {% if lead.phone %}
+                <span class="lead-phone">{{ lead.phone }}</span>
+                {% endif %}
+            </div>
+            {% if lead.assign_to_firstname %}
+            <div class="lead-agent">{{ lead.assign_to_firstname }} {{ lead.assign_to_lastname or '' }}</div>
+            {% endif %}
+        </div>
+        <div class="lead-card-dates">
+            {% if lead.last_activity_date %}
+            <div class="lead-date-item">
+                <span class="lead-date-label">Activity</span>
+                <span class="lead-date-value">{{ lead.last_activity_date[:10] }}</span>
+            </div>
+            {% endif %}
+            {% if lead.enter_stage_date %}
+            <div class="lead-date-item">
+                <span class="lead-date-label">Entered</span>
+                <span class="lead-date-value">{{ lead.enter_stage_date[:10] }}</span>
+            </div>
+            {% endif %}
+        </div>
     </div>
-    {% if lead.lead_type %}
-    <div class="lead-type">{{ lead.lead_type }}</div>
-    {% endif %}
-    <div class="lead-details">
-        {% if lead.premium %}
-        <span class="lead-amount">${{ "{:,.0f}".format(lead.premium) }}</span>
-        {% endif %}
-        {% if lead.phone %}
-        <span class="lead-phone">{{ lead.phone }}</span>
-        {% endif %}
-    </div>
-    {% if lead.assign_to_firstname %}
-    <div class="lead-agent">{{ lead.assign_to_firstname }} {{ lead.assign_to_lastname or '' }}</div>
-    {% endif %}
-    {% if lead.last_activity_date or lead.enter_stage_date %}
-    <div class="lead-date">{{ (lead.last_activity_date or lead.enter_stage_date)[:10] }}</div>
-    {% endif %}
 </div>

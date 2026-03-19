@@ -373,14 +373,47 @@ body {
 
 .lead-phone { color: #555; }
 
+.lead-card-layout {
+    display: flex;
+    gap: 10px;
+}
+
+.lead-card-left {
+    flex: 1;
+    min-width: 0;
+}
+
+.lead-card-dates {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
+    flex-shrink: 0;
+}
+
+.lead-date-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.lead-date-label {
+    font-size: 9px;
+    color: #bbb;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    line-height: 1;
+}
+
+.lead-date-value {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.3;
+}
+
 .lead-agent {
     font-size: 11px;
     color: #888;
-}
-
-.lead-date {
-    font-size: 11px;
-    color: #aaa;
 }
 
 /* ===== EMPTY STATE ===== */

@@ -192,12 +192,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if desktop app artifact exists
+        id: desktop-check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            const found = artifacts.data.artifacts.some(a => a.name === 'desktop-app');
+            core.setOutput('exists', found.toString());
+
       - name: Download desktop app artifact
+        if: steps.desktop-check.outputs.exists == 'true'
         uses: actions/download-artifact@v4
         with:
           name: desktop-app
           path: ./desktop-app-dist
-        continue-on-error: true  # Don't fail deploy if desktop app wasn't built
 
       - name: Copy files to server
         uses: appleboy/scp-action@v0.1.7
@@ -209,7 +222,7 @@ jobs:
           target: "~/app"
 
       - name: Copy desktop app to server
-        if: hashFiles('desktop-app-dist/JWhiteEmployeeStatus.exe') != ''
+        if: steps.desktop-check.outputs.exists == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -235,13 +248,10 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Pull latest images WHILE services are still running
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
 
             # Recreate only containers with new images (near-zero downtime)
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans --quiet-pull
 
             # Cleanup old images
             docker image prune -f
-
-            # Show status
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps

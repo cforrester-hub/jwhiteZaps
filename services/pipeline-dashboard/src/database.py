@@ -60,6 +60,27 @@ class Session(Base):
     )
 
 
+class Employee(Base):
+    """Cached AgencyZoom employees."""
+
+    __tablename__ = "pd_employees"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    firstname = Column(String(255), nullable=True)
+    lastname = Column(String(255), nullable=True)
+    email = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True)
+    is_producer = Column(Integer, default=0)
+    is_active = Column(Integer, default=0)
+    is_owner = Column(Integer, default=0)
+    user_id = Column(Integer, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_employees_email", "email"),
+    )
+
+
 class Pipeline(Base):
     """Cached AgencyZoom pipelines."""
 

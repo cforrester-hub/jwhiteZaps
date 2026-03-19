@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import distinct, func, select
 
 from ..auth import get_current_user
-from ..database import Lead, Pipeline, Stage, async_session
+from ..database import Employee, Lead, Pipeline, Stage, async_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -188,6 +188,29 @@ async def get_filter_counts(
         "producers": sorted(producer_counts.values(), key=lambda p: p["firstname"]),
         "activity": buckets,
     })
+
+
+@router.get("/pipeline/api/me")
+async def get_current_user_producer(request: Request):
+    """Return the current user's producer firstname by matching login email to employees."""
+    user = await get_current_user(request)
+    if user is None:
+        return {"firstname": "", "lastname": "", "email": ""}
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(Employee).where(Employee.email == user.az_username)
+        )
+        employee = result.scalar_one_or_none()
+
+    if employee:
+        return {
+            "firstname": employee.firstname or "",
+            "lastname": employee.lastname or "",
+            "email": employee.email or "",
+        }
+
+    return {"firstname": "", "lastname": "", "email": user.az_username}
 
 
 @router.get("/pipeline/api/producers")

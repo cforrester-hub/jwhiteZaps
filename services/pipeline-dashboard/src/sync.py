@@ -8,10 +8,11 @@ from sqlalchemy import delete, text
 from .az_client import (
     _rate_limit_delay,
     fetch_all_leads_for_pipeline,
+    fetch_employees,
     fetch_pipelines_and_stages,
     system_login,
 )
-from .database import Lead, Pipeline, Stage, async_session
+from .database import Employee, Lead, Pipeline, Stage, async_session
 
 logger = logging.getLogger(__name__)
 
@@ -149,5 +150,32 @@ async def sync_all():
                 stale_count = result.rowcount
                 if stale_count > 0:
                     logger.info(f"Removed {stale_count} stale leads from {len(synced_pipeline_ids)} synced pipelines")
+
+    # Step 4: Sync employees
+    await _rate_limit_delay()
+    try:
+        employees_data = await fetch_employees(jwt)
+        logger.info(f"Fetched {len(employees_data)} employees from AgencyZoom")
+
+        async with async_session() as session:
+            async with session.begin():
+                for emp in employees_data:
+                    emp_id = emp.get("id")
+                    if emp_id is None:
+                        continue
+                    await session.merge(Employee(
+                        id=emp_id,
+                        firstname=emp.get("firstname"),
+                        lastname=emp.get("lastname"),
+                        email=emp.get("email"),
+                        phone=emp.get("phone"),
+                        is_producer=1 if emp.get("isProducer") else 0,
+                        is_active=1 if emp.get("isActive") else 0,
+                        is_owner=1 if emp.get("isOwner") else 0,
+                        user_id=emp.get("userId"),
+                        synced_at=sync_start,
+                    ))
+    except Exception as e:
+        logger.error(f"Failed to sync employees: {e}")
 
     logger.info(f"Sync complete: {len(pipelines_data)} pipelines, {total_leads} leads")

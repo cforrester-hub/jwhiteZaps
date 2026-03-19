@@ -100,8 +100,7 @@
 </div>
 
 <script>
-    const currentUserDisplayName = '{{ user.display_name or "" }}';
-    let currentUserProducerName = '';  // Resolved after producers load
+    let currentUserProducerName = '';  // Resolved from /api/me after load
 
     const filterState = {
         producers: [],
@@ -149,19 +148,14 @@
 
     async function loadProducers() {
         try {
-            const resp = await fetch('/pipeline/api/producers');
-            allProducers = await resp.json();
-
-            // Match current user to a producer by first name from display_name,
-            // or by checking if display_name contains a producer's firstname
-            const displayParts = currentUserDisplayName.toLowerCase().split(/[\s@]+/);
-            for (const p of allProducers) {
-                const fn = p.firstname.toLowerCase();
-                if (displayParts.includes(fn) || currentUserDisplayName.toLowerCase().includes(fn + ' ' + (p.lastname || '').toLowerCase())) {
-                    currentUserProducerName = p.firstname;
-                    break;
-                }
-            }
+            // Load producers and current user identity in parallel
+            const [producersResp, meResp] = await Promise.all([
+                fetch('/pipeline/api/producers'),
+                fetch('/pipeline/api/me'),
+            ]);
+            allProducers = await producersResp.json();
+            const me = await meResp.json();
+            currentUserProducerName = me.firstname || '';
 
             renderProducerCheckboxes();
         } catch (e) {

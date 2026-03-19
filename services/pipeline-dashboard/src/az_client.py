@@ -153,6 +153,15 @@ async def fetch_producers(jwt: str) -> list[dict]:
     return data.get("producers", [])
 
 
+async def fetch_employees(jwt: str) -> list[dict]:
+    """
+    Fetch list of employees from AgencyZoom.
+
+    Returns: [{"id": 1, "firstname": "...", "lastname": "...", "email": "...", ...}]
+    """
+    return await _make_request("GET", "/v1/api/employees", jwt)
+
+
 async def fetch_pipelines_and_stages(jwt: str) -> list[dict]:
     """
     Fetch all pipelines with their stages.

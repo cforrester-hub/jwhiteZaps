@@ -107,6 +107,7 @@ class Lead(Base):
     premium = Column(Float, nullable=True)
     quoted = Column(Float, nullable=True)
     enter_stage_date = Column(String(50), nullable=True)
+    last_activity_date = Column(String(50), nullable=True)
     contact_date = Column(String(50), nullable=True)
     lead_source_name = Column(String(255), nullable=True)
     workflow_name = Column(String(255), nullable=True)

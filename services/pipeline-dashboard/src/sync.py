@@ -121,6 +121,7 @@ async def sync_all():
                         premium=lead.get("premium"),
                         quoted=lead.get("quoted"),
                         enter_stage_date=lead.get("enterStageDate"),
+                        last_activity_date=lead.get("lastActivityDate"),
                         contact_date=lead.get("contactDate"),
                         lead_source_name=lead.get("leadSourceName"),
                         workflow_name=lead.get("workflowName"),

@@ -4,7 +4,7 @@
         <div class="stat-label">Total Leads</div>
     </div>
     {% for pc in pipeline_counts %}
-    <div class="stat-card">
+    <div class="stat-card stat-clickable" onclick="document.getElementById('pipeline-{{ pc.id }}').scrollIntoView({behavior: 'smooth', block: 'start'})">
         <div class="stat-value">{{ pc.count }}</div>
         <div class="stat-label">{{ pc.name }}</div>
     </div>

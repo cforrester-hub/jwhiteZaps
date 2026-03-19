@@ -97,6 +97,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden;
 }
 
 /* Nav bar */
@@ -218,6 +219,12 @@ body {
 @keyframes shimmer {
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
+}
+
+#kanban-board {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* ===== PIPELINE SECTIONS ===== */
@@ -394,12 +401,24 @@ body {
     padding: 12px 24px;
     background: #f8f9fa;
     border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
 }
 
 .stat-card {
     display: flex;
     align-items: baseline;
     gap: 6px;
+}
+
+.stat-clickable {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.stat-clickable:hover {
+    background: #e8eaed;
 }
 
 .stat-value {

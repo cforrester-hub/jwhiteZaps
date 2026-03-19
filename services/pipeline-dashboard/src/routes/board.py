@@ -99,7 +99,7 @@ def _compute_stats(leads, pipelines=None, stages=None):
             pid = str(p.id)
             count = counts_by_pid.get(pid, 0)
             if count > 0:
-                pipeline_counts.append({"name": p.name, "count": count})
+                pipeline_counts.append({"id": pid, "name": p.name, "count": count})
 
     return {
         "total_leads": total,

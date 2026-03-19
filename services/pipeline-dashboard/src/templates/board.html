@@ -69,12 +69,12 @@
                 </div>
             </div>
 
-            <!-- View toggle (relocated) -->
+            <!-- View toggle (uses producer filter) -->
             <div class="filter-section">
                 <div class="filter-label">View</div>
                 <div class="view-toggle">
-                    <button class="btn-toggle" data-view="my" onclick="switchLeadView('my', this)">My Leads</button>
-                    <button class="btn-toggle active" data-view="all" onclick="switchLeadView('all', this)">All Leads</button>
+                    <button class="btn-toggle" id="btn-my-leads" onclick="toggleMyLeads()">My Leads</button>
+                    <button class="btn-toggle active" id="btn-all-leads" onclick="showAllLeads()">All Leads</button>
                 </div>
             </div>
         </div>
@@ -87,7 +87,7 @@
 
     <!-- Kanban board container -->
     <div id="kanban-board"
-         hx-get="/pipeline/api/board/all?view=all"
+         hx-get="/pipeline/api/board/all"
          hx-trigger="load"
          hx-swap="innerHTML"
          hx-indicator="#loading">
@@ -100,11 +100,13 @@
 </div>
 
 <script>
+    const currentUserFirstName = '{{ user.display_name.split()[0] if user.display_name else "" }}';
+
     const filterState = {
-        leadView: 'all',
         producers: [],
         activityDays: '',
         panelOpen: false,
+        myLeadsActive: false,
     };
 
     let allProducers = [];
@@ -194,6 +196,13 @@
             filterState.producers = checked;
         }
 
+        // Sync My/All Leads toggle with producer selection
+        const isMyLeads = filterState.producers.length === 1 &&
+                          filterState.producers[0] === currentUserFirstName;
+        filterState.myLeadsActive = isMyLeads;
+        document.getElementById('btn-my-leads').classList.toggle('active', isMyLeads);
+        document.getElementById('btn-all-leads').classList.toggle('active', filterState.producers.length === 0);
+
         updateProducerDisplay();
         updateFilterBadge();
         loadBoard();
@@ -237,10 +246,37 @@
         loadBoard();
     }
 
-    function switchLeadView(view, btn) {
-        filterState.leadView = view;
-        document.querySelectorAll('[data-view="my"], [data-view="all"]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+    function toggleMyLeads() {
+        filterState.myLeadsActive = true;
+        document.getElementById('btn-my-leads').classList.add('active');
+        document.getElementById('btn-all-leads').classList.remove('active');
+
+        // Set producer filter to just the current user
+        filterState.producers = currentUserFirstName ? [currentUserFirstName] : [];
+
+        // Update checkboxes to match
+        document.querySelectorAll('#producer-checkboxes input').forEach(cb => {
+            cb.checked = (cb.value === currentUserFirstName);
+        });
+
+        updateProducerDisplay();
+        updateFilterBadge();
+        loadBoard();
+    }
+
+    function showAllLeads() {
+        filterState.myLeadsActive = false;
+        document.getElementById('btn-all-leads').classList.add('active');
+        document.getElementById('btn-my-leads').classList.remove('active');
+
+        // Clear producer filter
+        filterState.producers = [];
+        document.querySelectorAll('#producer-checkboxes input').forEach(cb => {
+            cb.checked = false;
+        });
+
+        updateProducerDisplay();
+        updateFilterBadge();
         loadBoard();
     }
 
@@ -263,7 +299,7 @@
 
     function loadBoard() {
         const pipelineId = document.getElementById('pipeline-select').value;
-        let url = '/pipeline/api/board/' + pipelineId + '?view=' + filterState.leadView;
+        let url = '/pipeline/api/board/' + pipelineId + '?view=all';
 
         if (filterState.producers.length > 0) {
             url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
@@ -286,7 +322,7 @@
         try {
             const pipelineId = document.getElementById('pipeline-select').value;
             let url = '/pipeline/api/filter-counts?pipeline_id=' + pipelineId +
-                      '&view=' + filterState.leadView;
+                      '&view=all';
             if (filterState.producers.length > 0) {
                 url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
             }

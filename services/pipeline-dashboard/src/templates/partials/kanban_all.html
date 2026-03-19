@@ -1,6 +1,11 @@
 {% include "partials/stats_bar.html" %}
 {% for pipeline in pipelines %}
-<div class="pipeline-section">
+{% set pipeline_lead_count = namespace(count=0) %}
+{% for stage in stages_by_pipeline.get(pipeline.id|string, []) %}
+    {% set pipeline_lead_count.count = pipeline_lead_count.count + leads_by_stage.get(stage.id|string, [])|length %}
+{% endfor %}
+{% if pipeline_lead_count.count > 0 %}
+<div class="pipeline-section" id="pipeline-{{ pipeline.id }}">
     <div class="pipeline-header">
         <h2>{{ pipeline.name }}</h2>
         <span class="pipeline-type">{{ pipeline.type or '' }}</span>
@@ -24,6 +29,7 @@
         {% endfor %}
     </div>
 </div>
+{% endif %}
 {% endfor %}
 {% if not pipelines %}
 <div class="empty-state">

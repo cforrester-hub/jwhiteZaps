@@ -16,9 +16,21 @@ from .database import Employee, Lead, Pipeline, Stage, async_session
 
 logger = logging.getLogger(__name__)
 
+sync_in_progress = False
+
 
 async def sync_all():
     """Main sync job: fetch pipelines, stages, and leads from AgencyZoom."""
+    global sync_in_progress
+    sync_in_progress = True
+    try:
+        await _sync_all_inner()
+    finally:
+        sync_in_progress = False
+
+
+async def _sync_all_inner():
+    """Inner sync logic."""
     sync_start = datetime.utcnow()
     logger.info("Starting pipeline data sync")
 

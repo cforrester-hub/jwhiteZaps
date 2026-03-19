@@ -178,6 +178,21 @@ body {
     border-radius: 12px;
 }
 
+.sync-badge.syncing {
+    color: #4ecca3;
+    cursor: default;
+}
+
+.sync-icon.spinning {
+    display: inline-block;
+    animation: spin-icon 1.5s linear infinite;
+}
+
+@keyframes spin-icon {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .sync-clickable {
     cursor: pointer;
     transition: all 0.2s;

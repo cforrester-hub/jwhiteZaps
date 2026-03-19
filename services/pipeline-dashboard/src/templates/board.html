@@ -23,7 +23,7 @@
             <span class="user-name">{{ user.display_name }}</span>
             <span id="sync-status"
                   hx-get="/pipeline/api/sync-status"
-                  hx-trigger="load, every 60s"
+                  hx-trigger="load"
                   hx-swap="innerHTML">
             </span>
             <form action="/pipeline/api/logout" method="post" style="display:inline;">
@@ -459,22 +459,15 @@
             if (data.status === 'rate_limited') {
                 badge.innerHTML = '&#x21bb; ' + data.message;
                 setTimeout(() => {
-                    badge.style.pointerEvents = '';
-                    // Refresh sync status from server
                     htmx.ajax('GET', '/pipeline/api/sync-status', {
                         target: '#sync-status', swap: 'innerHTML'
                     });
                 }, 3000);
             } else if (data.status === 'started') {
-                badge.innerHTML = '&#x21bb; Syncing...';
-                // Poll for completion by refreshing sync status after delay
-                setTimeout(() => {
-                    badge.style.pointerEvents = '';
-                    htmx.ajax('GET', '/pipeline/api/sync-status', {
-                        target: '#sync-status', swap: 'innerHTML'
-                    });
-                    loadBoard();
-                }, 30000);  // Refresh after 30s (sync takes time due to AZ rate limits)
+                // Refresh badge — server will return syncing state with 3s auto-poll
+                htmx.ajax('GET', '/pipeline/api/sync-status', {
+                    target: '#sync-status', swap: 'innerHTML'
+                });
             }
         } catch (e) {
             badge.innerHTML = '&#x21bb; Sync failed';
@@ -482,5 +475,19 @@
             console.error('Sync error:', e);
         }
     }
+
+    // Detect sync completion and reload board
+    document.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target.id === 'sync-status') {
+            const badge = document.getElementById('sync-badge');
+            if (badge && !badge.classList.contains('syncing') && window._wasSyncing) {
+                window._wasSyncing = false;
+                loadBoard();
+            }
+            if (badge && badge.classList.contains('syncing')) {
+                window._wasSyncing = true;
+            }
+        }
+    });
 </script>
 {% endblock %}

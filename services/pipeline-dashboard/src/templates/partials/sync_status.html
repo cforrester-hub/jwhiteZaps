@@ -1,4 +1,13 @@
-<span class="sync-badge sync-clickable"
+{% if syncing %}
+<span class="sync-badge syncing" id="sync-badge"
+      hx-get="/pipeline/api/sync-status"
+      hx-trigger="every 3s"
+      hx-swap="outerHTML"><span class="sync-icon spinning">&#x21bb;</span> Syncing...</span>
+{% else %}
+<span class="sync-badge sync-clickable" id="sync-badge"
       title="Click to sync data from AgencyZoom"
       onclick="triggerSync(this)"
-      id="sync-badge">&#x21bb; {{ sync_text }}</span>
+      hx-get="/pipeline/api/sync-status"
+      hx-trigger="every 60s"
+      hx-swap="outerHTML">&#x21bb; {{ sync_text }}</span>
+{% endif %}

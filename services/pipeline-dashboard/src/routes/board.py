@@ -105,8 +105,14 @@ async def get_board(request: Request, pipeline_id: str, view: str = "all"):
         )
         stages = result.scalars().all()
 
-        # Build lead query
-        lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
+        # Get stage IDs for this pipeline
+        stage_ids = [s.id for s in stages]
+
+        # Query leads by stage_id (more reliable than pipeline_id)
+        if stage_ids:
+            lead_query = select(Lead).where(Lead.stage_id.in_(stage_ids))
+        else:
+            lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
         if view == "my" and user.az_user_id:
             lead_query = lead_query.where(

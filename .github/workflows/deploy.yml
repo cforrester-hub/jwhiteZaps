@@ -250,8 +250,8 @@ jobs:
             # Pull latest images WHILE services are still running
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
 
-            # Recreate only containers with new images (near-zero downtime)
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans --quiet-pull
+            # Recreate all containers with latest images
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate --remove-orphans --quiet-pull
 
             # Cleanup old images
             docker image prune -f

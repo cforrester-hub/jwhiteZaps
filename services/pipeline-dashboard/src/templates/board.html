@@ -111,6 +111,7 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         loadProducers();
+        loadFilterCounts();
     });
 
     async function loadProducers() {
@@ -123,12 +124,14 @@
         }
     }
 
-    function renderProducerCheckboxes() {
+    function renderProducerCheckboxes(countsMap) {
         const container = document.getElementById('producer-checkboxes');
         container.innerHTML = allProducers.map(p => {
             const name = p.firstname + ' ' + p.lastname;
+            const count = countsMap ? (countsMap[p.firstname] || 0) : '';
+            const countHtml = count !== '' ? '<span class="producer-count">(' + count + ')</span>' : '';
             return '<label><input type="checkbox" value="' + p.firstname + '"' +
-                   ' onchange="onProducerChange()"> ' + name + '</label>';
+                   ' onchange="onProducerChange()"> ' + name + countHtml + '</label>';
         }).join('');
     }
 
@@ -242,6 +245,54 @@
             swap: 'innerHTML',
             indicator: '#loading'
         });
+
+        loadFilterCounts();
+    }
+
+    // --- Filter Counts ---
+    async function loadFilterCounts() {
+        try {
+            const pipelineId = document.getElementById('pipeline-select').value;
+            let url = '/pipeline/api/filter-counts?pipeline_id=' + pipelineId +
+                      '&view=' + filterState.leadView;
+            if (filterState.producers.length > 0) {
+                url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
+            }
+            if (filterState.activityDays) {
+                url += '&activity_days=' + filterState.activityDays;
+            }
+
+            const resp = await fetch(url);
+            const data = await resp.json();
+
+            // Update producer counts
+            const countsMap = {};
+            data.producers.forEach(p => { countsMap[p.firstname] = p.count; });
+            // Re-render checkboxes with counts, preserving checked state
+            const checkedSet = new Set(
+                Array.from(document.querySelectorAll('#producer-checkboxes input:checked')).map(cb => cb.value)
+            );
+            renderProducerCheckboxes(countsMap);
+            document.querySelectorAll('#producer-checkboxes input').forEach(cb => {
+                if (checkedSet.has(cb.value)) cb.checked = true;
+            });
+
+            // Update activity pill counts
+            document.querySelectorAll('.activity-pill').forEach(pill => {
+                const days = pill.dataset.days;
+                const key = days || null;
+                let countText = '';
+                if (key && data.activity[key] !== undefined) {
+                    countText = ' (' + data.activity[key] + ')';
+                }
+                const label = pill.dataset.days === '' ? 'Any' :
+                              pill.dataset.days.endsWith('+') ? pill.dataset.days.replace('+', 'd+') :
+                              pill.dataset.days + 'd';
+                pill.textContent = label + countText;
+            });
+        } catch (e) {
+            console.error('Failed to load filter counts:', e);
+        }
     }
 
     // --- Manual Sync ---

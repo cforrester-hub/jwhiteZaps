@@ -387,6 +387,39 @@ body {
     width: 100%;
 }
 
+/* ===== STATS BAR ===== */
+.stats-bar {
+    display: flex;
+    gap: 16px;
+    padding: 12px 24px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.stat-card {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.stat-card + .stat-card {
+    padding-left: 16px;
+    border-left: 1px solid #ddd;
+}
+
 /* ===== FILTER PANEL ===== */
 .btn-filters {
     display: flex;
@@ -547,6 +580,19 @@ body {
     background: #6c5ce7;
     border-color: #6c5ce7;
     color: #fff;
+}
+
+.filter-count {
+    font-size: 10px;
+    opacity: 0.7;
+}
+
+.producer-menu .producer-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: #888;
+    min-width: 20px;
+    text-align: right;
 }
 
 /* ===== RESPONSIVE ===== */

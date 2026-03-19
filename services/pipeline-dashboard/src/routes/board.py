@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import distinct, func, select
 
@@ -73,6 +73,101 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_da
             lead_query = lead_query.where(Lead.last_activity_date >= cutoff)
 
     return lead_query
+
+
+def _compute_stats(leads):
+    """Compute summary stats from a list of leads."""
+    total = len(leads)
+    total_premium = sum(l.premium for l in leads if l.premium)
+    avg_premium = total_premium / total if total > 0 else 0
+    return {
+        "total_leads": total,
+        "total_premium": total_premium,
+        "avg_premium": avg_premium,
+    }
+
+
+@router.get("/pipeline/api/filter-counts")
+async def get_filter_counts(
+    request: Request,
+    pipeline_id: str = "all",
+    view: str = "all",
+    producers: str = "",
+    activity_days: str = "",
+):
+    """Return lead counts for filter items (producers and activity buckets)."""
+    user = await get_current_user(request)
+    if user is None:
+        return JSONResponse({"producers": [], "activity": {}})
+
+    async with async_session() as db:
+        # Base query respecting pipeline + view filters (but NOT producer/activity)
+        if pipeline_id == "all":
+            base_query = select(Lead)
+        else:
+            result = await db.execute(
+                select(Stage.id).where(Stage.pipeline_id == pipeline_id)
+            )
+            stage_ids = [r[0] for r in result.all()]
+            if stage_ids:
+                base_query = select(Lead).where(Lead.stage_id.in_(stage_ids))
+            else:
+                base_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
+
+        if view == "my":
+            base_query = _apply_my_leads_filter(base_query, user)
+
+        # Fetch all leads matching base filters
+        result = await db.execute(base_query)
+        all_leads = result.scalars().all()
+
+    now = datetime.utcnow()
+
+    # Producer counts (apply activity filter but not producer filter)
+    filtered_for_producers = all_leads
+    if activity_days:
+        if activity_days.endswith("+"):
+            days = int(activity_days[:-1])
+            cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+            filtered_for_producers = [l for l in all_leads if l.last_activity_date and l.last_activity_date <= cutoff]
+        elif activity_days.isdigit():
+            days = int(activity_days)
+            cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+            filtered_for_producers = [l for l in all_leads if l.last_activity_date and l.last_activity_date >= cutoff]
+
+    producer_counts = {}
+    for lead in filtered_for_producers:
+        if lead.assign_to_firstname:
+            key = lead.assign_to_firstname
+            if key not in producer_counts:
+                producer_counts[key] = {"firstname": key, "lastname": lead.assign_to_lastname or "", "count": 0}
+            producer_counts[key]["count"] += 1
+
+    # Activity bucket counts (apply producer filter but not activity filter)
+    filtered_for_activity = all_leads
+    if producers:
+        producer_list = [p.strip() for p in producers.split(",") if p.strip()]
+        if producer_list:
+            filtered_for_activity = [l for l in all_leads if l.assign_to_firstname in producer_list]
+
+    buckets = {"1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0}
+    for lead in filtered_for_activity:
+        if not lead.last_activity_date:
+            buckets["90+"] += 1
+            continue
+        date_str = lead.last_activity_date[:10]
+        for days_str, days_val in [("1", 1), ("3", 3), ("7", 7), ("14", 14), ("30", 30)]:
+            cutoff = (now - timedelta(days=days_val)).strftime("%Y-%m-%d")
+            if date_str >= cutoff:
+                buckets[days_str] += 1
+        cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+        if date_str <= cutoff_90:
+            buckets["90+"] += 1
+
+    return JSONResponse({
+        "producers": sorted(producer_counts.values(), key=lambda p: p["firstname"]),
+        "activity": buckets,
+    })
 
 
 @router.get("/pipeline/api/producers")
@@ -150,6 +245,8 @@ async def get_all_boards(
             leads_by_stage[stage_key] = []
         leads_by_stage[stage_key].append(lead)
 
+    stats = _compute_stats(all_leads)
+
     return templates.TemplateResponse(
         "partials/kanban_all.html",
         {
@@ -158,6 +255,7 @@ async def get_all_boards(
             "stages_by_pipeline": stages_by_pipeline,
             "leads_by_stage": leads_by_stage,
             "view": view,
+            **stats,
         },
     )
 
@@ -207,6 +305,8 @@ async def get_board(
             leads_by_stage[stage_key] = []
         leads_by_stage[stage_key].append(lead)
 
+    stats = _compute_stats(all_leads)
+
     return templates.TemplateResponse(
         "partials/kanban.html",
         {
@@ -215,6 +315,7 @@ async def get_board(
             "leads_by_stage": leads_by_stage,
             "pipeline_id": pipeline_id,
             "view": view,
+            **stats,
         },
     )
 

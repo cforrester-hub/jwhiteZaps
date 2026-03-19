@@ -75,15 +75,35 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_da
     return lead_query
 
 
-def _compute_stats(leads):
+def _compute_stats(leads, pipelines=None, stages=None):
     """Compute summary stats from a list of leads."""
     total = len(leads)
-    total_premium = sum(l.premium for l in leads if l.premium)
-    avg_premium = total_premium / total if total > 0 else 0
+
+    # Per-pipeline lead counts
+    pipeline_counts = []
+    if pipelines and stages:
+        # Build stage_id -> pipeline_id map
+        stage_to_pipeline = {}
+        for s in stages:
+            stage_to_pipeline[str(s.id)] = str(s.pipeline_id)
+
+        # Count leads per pipeline
+        counts_by_pid = {}
+        for lead in leads:
+            pid = stage_to_pipeline.get(str(lead.stage_id), "")
+            counts_by_pid[pid] = counts_by_pid.get(pid, 0) + 1
+
+        # Build ordered list matching pipeline display order
+        pipeline_name_map = {str(p.id): p.name for p in pipelines}
+        for p in pipelines:
+            pid = str(p.id)
+            count = counts_by_pid.get(pid, 0)
+            if count > 0:
+                pipeline_counts.append({"name": p.name, "count": count})
+
     return {
         "total_leads": total,
-        "total_premium": total_premium,
-        "avg_premium": avg_premium,
+        "pipeline_counts": pipeline_counts,
     }
 
 
@@ -245,7 +265,7 @@ async def get_all_boards(
             leads_by_stage[stage_key] = []
         leads_by_stage[stage_key].append(lead)
 
-    stats = _compute_stats(all_leads)
+    stats = _compute_stats(all_leads, pipelines=pipelines, stages=all_stages)
 
     return templates.TemplateResponse(
         "partials/kanban_all.html",

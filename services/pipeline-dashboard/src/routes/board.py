@@ -53,12 +53,12 @@ def _apply_my_leads_filter(lead_query, user):
 
 
 BUCKET_BOUNDS = {
-    "today": (0, 1),
-    "1": (1, 3),
-    "3": (3, 7),
-    "7": (7, 14),
-    "14": (14, 30),
-    "30": (30, 90),
+    "today": (0, 0),
+    "1": (1, 2),
+    "3": (3, 6),
+    "7": (7, 13),
+    "14": (14, 29),
+    "30": (30, 89),
     "90+": (90, None),
 }
 
@@ -88,9 +88,10 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_bu
                 uppers = [BUCKET_BOUNDS[k][1] for k in bounded_keys]
                 min_lower = min(lowers)
                 max_upper = max(uppers)
-                # Use < next_day instead of <= today to handle datetime strings
-                # (e.g. "2026-03-19T14:30:00" > "2026-03-19" in string comparison)
+                # Older boundary: inclusive (>=)
                 upper_cutoff = (now - timedelta(days=max_upper)).strftime("%Y-%m-%d")
+                # Newer boundary: +1 day with < to capture all datetimes on that day
+                # (e.g. "2026-03-19T14:30:00" < "2026-03-20" works correctly)
                 lower_cutoff = (now - timedelta(days=min_lower) + timedelta(days=1)).strftime("%Y-%m-%d")
                 conditions.append(
                     (Lead.last_activity_date >= upper_cutoff) & (Lead.last_activity_date < lower_cutoff)
@@ -244,7 +245,7 @@ async def get_filter_counts(
 
     buckets = {"today": 0, "1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0}
     # Ordered bucket boundaries for exclusive assignment
-    ordered_bounds = [("today", 0, 1), ("1", 1, 3), ("3", 3, 7), ("7", 7, 14), ("14", 14, 30), ("30", 30, 90)]
+    ordered_bounds = [("today", 0, 0), ("1", 1, 2), ("3", 3, 6), ("7", 7, 13), ("14", 14, 29), ("30", 30, 89)]
 
     for lead in filtered_for_activity:
         if not lead.last_activity_date:

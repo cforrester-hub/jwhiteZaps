@@ -20,7 +20,7 @@
     {% if lead.assign_to_firstname %}
     <div class="lead-agent">{{ lead.assign_to_firstname }} {{ lead.assign_to_lastname or '' }}</div>
     {% endif %}
-    {% if lead.enter_stage_date %}
-    <div class="lead-date">{{ lead.enter_stage_date[:10] if lead.enter_stage_date else '' }}</div>
+    {% if lead.last_activity_date or lead.enter_stage_date %}
+    <div class="lead-date">{{ (lead.last_activity_date or lead.enter_stage_date)[:10] }}</div>
     {% endif %}
 </div>

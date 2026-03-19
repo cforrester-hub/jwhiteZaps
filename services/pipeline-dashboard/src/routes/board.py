@@ -88,14 +88,12 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_bu
                 uppers = [BUCKET_BOUNDS[k][1] for k in bounded_keys]
                 min_lower = min(lowers)
                 max_upper = max(uppers)
-                # Activity date >= (now - max_upper days) AND < (now - min_lower days + 1 day for today bucket)
+                # Use < next_day instead of <= today to handle datetime strings
+                # (e.g. "2026-03-19T14:30:00" > "2026-03-19" in string comparison)
                 upper_cutoff = (now - timedelta(days=max_upper)).strftime("%Y-%m-%d")
-                lower_cutoff = (now - timedelta(days=min_lower)).strftime("%Y-%m-%d")
-                # lead.last_activity_date >= upper_cutoff (older boundary)
-                # lead.last_activity_date <= lower_cutoff (newer boundary)
-                # For "today" bucket (min_lower=0): lower_cutoff = today, so activity_date <= today
+                lower_cutoff = (now - timedelta(days=min_lower) + timedelta(days=1)).strftime("%Y-%m-%d")
                 conditions.append(
-                    (Lead.last_activity_date >= upper_cutoff) & (Lead.last_activity_date <= lower_cutoff)
+                    (Lead.last_activity_date >= upper_cutoff) & (Lead.last_activity_date < lower_cutoff)
                 )
 
             if includes_90_plus:

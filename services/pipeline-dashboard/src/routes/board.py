@@ -1,12 +1,12 @@
 """Board routes: kanban board HTMX partials."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
 
 from ..auth import get_current_user
 from ..database import Lead, Pipeline, Stage, async_session
@@ -51,8 +51,57 @@ def _apply_my_leads_filter(lead_query, user):
     return lead_query
 
 
+def _apply_filters(lead_query, user, view: str, producers: str = "", activity_days: str = ""):
+    """Apply all filters to a lead query."""
+    if view == "my":
+        lead_query = _apply_my_leads_filter(lead_query, user)
+
+    if producers:
+        producer_list = [p.strip() for p in producers.split(",") if p.strip()]
+        if producer_list:
+            lead_query = lead_query.where(Lead.assign_to_firstname.in_(producer_list))
+
+    if activity_days and activity_days.isdigit():
+        days = int(activity_days)
+        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+        lead_query = lead_query.where(Lead.last_activity_date >= cutoff)
+
+    return lead_query
+
+
+@router.get("/pipeline/api/producers")
+async def get_producers(request: Request):
+    """Return distinct producer names from leads."""
+    user = await get_current_user(request)
+    if user is None:
+        return []
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(
+                Lead.assign_to_firstname,
+                Lead.assign_to_lastname,
+            )
+            .where(Lead.assign_to_firstname.isnot(None))
+            .where(Lead.assign_to_firstname != "")
+            .distinct()
+            .order_by(Lead.assign_to_firstname)
+        )
+        rows = result.all()
+
+    return [
+        {"firstname": r[0], "lastname": r[1] or ""}
+        for r in rows
+    ]
+
+
 @router.get("/pipeline/api/board/all", response_class=HTMLResponse)
-async def get_all_boards(request: Request, view: str = "all"):
+async def get_all_boards(
+    request: Request,
+    view: str = "all",
+    producers: str = "",
+    activity_days: str = "",
+):
     """Return kanban boards for ALL pipelines."""
     user = await get_current_user(request)
     auth_redirect = _require_auth(request, user)
@@ -74,9 +123,8 @@ async def get_all_boards(request: Request, view: str = "all"):
 
         # Build lead query
         lead_query = select(Lead)
-        if view == "my":
-            lead_query = _apply_my_leads_filter(lead_query, user)
-        lead_query = lead_query.order_by(Lead.enter_stage_date.desc())
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_days)
+        lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
 
@@ -109,7 +157,13 @@ async def get_all_boards(request: Request, view: str = "all"):
 
 
 @router.get("/pipeline/api/board/{pipeline_id}", response_class=HTMLResponse)
-async def get_board(request: Request, pipeline_id: str, view: str = "all"):
+async def get_board(
+    request: Request,
+    pipeline_id: str,
+    view: str = "all",
+    producers: str = "",
+    activity_days: str = "",
+):
     """Return kanban board HTML partial for a single pipeline."""
     user = await get_current_user(request)
     auth_redirect = _require_auth(request, user)
@@ -134,10 +188,8 @@ async def get_board(request: Request, pipeline_id: str, view: str = "all"):
         else:
             lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
-        if view == "my":
-            lead_query = _apply_my_leads_filter(lead_query, user)
-
-        lead_query = lead_query.order_by(Lead.enter_stage_date.desc())
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_days)
+        lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
 

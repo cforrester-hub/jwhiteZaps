@@ -109,6 +109,36 @@
 
     let allProducers = [];
 
+    // Distinct, colorblind-friendly palette for producer card borders
+    const PRODUCER_COLORS = [
+        '#6c5ce7', '#00b894', '#e17055', '#0984e3', '#fdcb6e',
+        '#e84393', '#00cec9', '#d63031', '#a29bfe', '#55efc4',
+        '#fab1a0', '#74b9ff', '#ffeaa7', '#fd79a8', '#81ecec',
+    ];
+    const producerColorMap = {};
+
+    function getProducerColor(firstname) {
+        if (!firstname) return 'transparent';
+        if (producerColorMap[firstname]) return producerColorMap[firstname];
+        const idx = Object.keys(producerColorMap).length % PRODUCER_COLORS.length;
+        producerColorMap[firstname] = PRODUCER_COLORS[idx];
+        return producerColorMap[firstname];
+    }
+
+    function applyProducerColors() {
+        document.querySelectorAll('.lead-card[data-producer]').forEach(card => {
+            const producer = card.dataset.producer;
+            card.style.borderLeft = '4px solid ' + getProducerColor(producer);
+        });
+    }
+
+    // Apply colors after every HTMX swap (board reload)
+    document.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target.id === 'kanban-board') {
+            applyProducerColors();
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
         loadProducers();
         loadFilterCounts();
@@ -128,10 +158,12 @@
         const container = document.getElementById('producer-checkboxes');
         container.innerHTML = allProducers.map(p => {
             const name = p.firstname + ' ' + p.lastname;
+            const color = getProducerColor(p.firstname);
+            const dot = '<span class="producer-color-dot" style="background:' + color + ';"></span>';
             const count = countsMap ? (countsMap[p.firstname] || 0) : '';
             const countHtml = count !== '' ? '<span class="producer-count">(' + count + ')</span>' : '';
             return '<label><input type="checkbox" value="' + p.firstname + '"' +
-                   ' onchange="onProducerChange()"> ' + name + countHtml + '</label>';
+                   ' onchange="onProducerChange()"> ' + dot + name + countHtml + '</label>';
         }).join('');
     }
 

@@ -541,6 +541,14 @@ body {
     accent-color: #6c5ce7;
 }
 
+.producer-color-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
 .producer-actions {
     margin-top: 6px;
     padding-top: 6px;

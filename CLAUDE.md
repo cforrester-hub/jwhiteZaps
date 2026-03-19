@@ -28,6 +28,13 @@ Microservice Zapier Replacement - A containerized stack to replace Zapier automa
 | workflow-service | Workflow orchestration + cron scheduler |
 | deputy-service | Deputy webhooks to RingCentral DND |
 | dashboard-service | Employee status dashboard |
+| pipeline-dashboard | AgencyZoom pipeline Kanban board (HTMX + Jinja2) |
+
+## Service Dependencies
+- workflow-service → ringcentral, storage, agencyzoom, transcription
+- deputy-service → redis, ringcentral-service
+- dashboard-service → deputy-service (startup recovery)
+- pipeline-dashboard → PostgreSQL, AgencyZoom API (direct, not via agencyzoom-service)
 
 ## Workflows (workflow-service)
 
@@ -60,6 +67,12 @@ Skipped when:
 - pool_size=2, max_overflow=3
 - pool_pre_ping=True, pool_recycle=300
 - Staggered workflow schedules to avoid exhaustion
+
+### Pipeline Dashboard
+- Leads queried by stage_id (not pipeline_id) for individual pipeline views — pipeline_id on leads is unreliable
+- Data synced from AgencyZoom via cron, cached in pd_pipelines/pd_stages/pd_leads tables
+- User auth via AZ credentials; system sync uses env var credentials
+- Frontend: HTMX partials swapped into #kanban-board container
 
 ### Timezone
 - RingCentral times are UTC
@@ -111,6 +124,24 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /api/ringcentral/calls - Fetch call logs
 - GET /api/ringcentral/calls/{id} - Call details
 - GET /api/ringcentral/calls/{id}/raw - Debug raw response
+
+### Deputy Service
+- POST /api/deputy/webhook/timesheet - Deputy webhook receiver
+- GET /api/deputy/employees/clock-status - Current clock statuses
+
+### Dashboard Service
+- WS /api/dashboard/ws - WebSocket for real-time employee status
+- POST /api/dashboard/internal/employee-status - Internal status updates (X-Internal-Key auth)
+
+### Pipeline Dashboard
+- GET /pipeline/ - Main board page (redirects to /pipeline/login if unauthenticated)
+- GET /pipeline/api/board/all - All pipelines kanban (HTMX partial)
+- GET /pipeline/api/board/{pipeline_id} - Single pipeline kanban (HTMX partial)
+
+## Development Workflow
+- Commit directly to main, push, CI/CD deploys automatically
+- GitHub Actions: test → build Docker images → push GHCR → SSH deploy to DO droplet
+- Deploy includes `docker compose down --remove-orphans` before `up -d` to prevent container name conflicts
 
 ## User Context
 - Insurance agency automation project

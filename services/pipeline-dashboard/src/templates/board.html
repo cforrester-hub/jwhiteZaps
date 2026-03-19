@@ -65,7 +65,7 @@
                     <span class="activity-pill" data-days="7" onclick="setActivityDays(this)">7d</span>
                     <span class="activity-pill" data-days="14" onclick="setActivityDays(this)">14d</span>
                     <span class="activity-pill" data-days="30" onclick="setActivityDays(this)">30d</span>
-                    <span class="activity-pill" data-days="90" onclick="setActivityDays(this)">90d</span>
+                    <span class="activity-pill" data-days="90+" onclick="setActivityDays(this)">90d+</span>
                 </div>
             </div>
 
@@ -242,6 +242,42 @@
             swap: 'innerHTML',
             indicator: '#loading'
         });
+    }
+
+    // --- Manual Sync ---
+    async function triggerSync(badge) {
+        badge.style.pointerEvents = 'none';
+        badge.innerHTML = '&#x21bb; Syncing...';
+
+        try {
+            const resp = await fetch('/pipeline/api/sync', { method: 'POST' });
+            const data = await resp.json();
+
+            if (data.status === 'rate_limited') {
+                badge.innerHTML = '&#x21bb; ' + data.message;
+                setTimeout(() => {
+                    badge.style.pointerEvents = '';
+                    // Refresh sync status from server
+                    htmx.ajax('GET', '/pipeline/api/sync-status', {
+                        target: '#sync-status', swap: 'innerHTML'
+                    });
+                }, 3000);
+            } else if (data.status === 'started') {
+                badge.innerHTML = '&#x21bb; Syncing...';
+                // Poll for completion by refreshing sync status after delay
+                setTimeout(() => {
+                    badge.style.pointerEvents = '';
+                    htmx.ajax('GET', '/pipeline/api/sync-status', {
+                        target: '#sync-status', swap: 'innerHTML'
+                    });
+                    loadBoard();
+                }, 30000);  // Refresh after 30s (sync takes time due to AZ rate limits)
+            }
+        } catch (e) {
+            badge.innerHTML = '&#x21bb; Sync failed';
+            badge.style.pointerEvents = '';
+            console.error('Sync error:', e);
+        }
     }
 </script>
 {% endblock %}

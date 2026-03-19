@@ -177,6 +177,16 @@ body {
     border-radius: 12px;
 }
 
+.sync-clickable {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sync-clickable:hover {
+    color: #ccc;
+    background: #1e2d4a;
+}
+
 .btn-logout {
     padding: 6px 14px;
     border: 1px solid #3a3a5e;

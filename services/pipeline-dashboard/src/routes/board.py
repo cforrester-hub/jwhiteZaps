@@ -61,10 +61,16 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_da
         if producer_list:
             lead_query = lead_query.where(Lead.assign_to_firstname.in_(producer_list))
 
-    if activity_days and activity_days.isdigit():
-        days = int(activity_days)
-        cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
-        lead_query = lead_query.where(Lead.last_activity_date >= cutoff)
+    if activity_days:
+        if activity_days.endswith("+"):
+            # "90+" means 90 days or older
+            days = int(activity_days[:-1])
+            cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            lead_query = lead_query.where(Lead.last_activity_date <= cutoff)
+        elif activity_days.isdigit():
+            days = int(activity_days)
+            cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+            lead_query = lead_query.where(Lead.last_activity_date >= cutoff)
 
     return lead_query
 

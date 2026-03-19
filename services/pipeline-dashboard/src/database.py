@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -125,8 +126,15 @@ class Lead(Base):
 
 
 async def init_db():
-    """Create database tables if they don't exist."""
+    """Create database tables if they don't exist, and run migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Migrations: add columns that create_all won't add to existing tables
+    async with engine.begin() as conn:
+        # Add last_activity_date if missing
+        await conn.execute(text("""
+            ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS last_activity_date VARCHAR(50)
+        """))
 
 

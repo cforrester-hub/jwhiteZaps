@@ -59,13 +59,14 @@
             <div class="filter-section">
                 <div class="filter-label">Last Activity</div>
                 <div class="activity-pills">
-                    <span class="activity-pill active" data-days="" onclick="setActivityDays(this)">Any</span>
-                    <span class="activity-pill" data-days="1" onclick="setActivityDays(this)">1d</span>
-                    <span class="activity-pill" data-days="3" onclick="setActivityDays(this)">3d</span>
-                    <span class="activity-pill" data-days="7" onclick="setActivityDays(this)">7d</span>
-                    <span class="activity-pill" data-days="14" onclick="setActivityDays(this)">14d</span>
-                    <span class="activity-pill" data-days="30" onclick="setActivityDays(this)">30d</span>
-                    <span class="activity-pill" data-days="90+" onclick="setActivityDays(this)">90d+</span>
+                    <span class="activity-pill active" data-days="" onclick="clearActivityBuckets()">Any</span>
+                    <span class="activity-pill" data-days="today" onclick="toggleActivityBucket(this)">Today</span>
+                    <span class="activity-pill" data-days="1" onclick="toggleActivityBucket(this)">1d</span>
+                    <span class="activity-pill" data-days="3" onclick="toggleActivityBucket(this)">3d</span>
+                    <span class="activity-pill" data-days="7" onclick="toggleActivityBucket(this)">7d</span>
+                    <span class="activity-pill" data-days="14" onclick="toggleActivityBucket(this)">14d</span>
+                    <span class="activity-pill" data-days="30" onclick="toggleActivityBucket(this)">30d</span>
+                    <span class="activity-pill" data-days="90+" onclick="toggleActivityBucket(this)">90d+</span>
                 </div>
             </div>
 
@@ -104,7 +105,7 @@
 
     const filterState = {
         producers: [],
-        activityDays: '',
+        activityBuckets: [],
         panelOpen: false,
         myLeadsActive: false,
     };
@@ -245,12 +246,47 @@
         }
     }
 
-    function setActivityDays(pill) {
-        document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        filterState.activityDays = pill.dataset.days;
+    const ORDERED_BUCKET_KEYS = ["today", "1", "3", "7", "14", "30", "90+"];
+
+    function toggleActivityBucket(pill) {
+        const key = pill.dataset.days;
+        const idx = filterState.activityBuckets.indexOf(key);
+        if (idx >= 0) {
+            filterState.activityBuckets.splice(idx, 1);
+        } else {
+            filterState.activityBuckets.push(key);
+        }
+
+        // Auto-fill gaps to create contiguous range
+        if (filterState.activityBuckets.length >= 2) {
+            const indices = filterState.activityBuckets.map(k => ORDERED_BUCKET_KEYS.indexOf(k));
+            const minIdx = Math.min(...indices);
+            const maxIdx = Math.max(...indices);
+            filterState.activityBuckets = ORDERED_BUCKET_KEYS.slice(minIdx, maxIdx + 1);
+        }
+
+        updateActivityPillStates();
         updateFilterBadge();
         loadBoard();
+    }
+
+    function clearActivityBuckets() {
+        filterState.activityBuckets = [];
+        updateActivityPillStates();
+        updateFilterBadge();
+        loadBoard();
+    }
+
+    function updateActivityPillStates() {
+        document.querySelectorAll('.activity-pill').forEach(pill => {
+            const days = pill.dataset.days;
+            if (days === '') {
+                // "Any" pill is active when no buckets selected
+                pill.classList.toggle('active', filterState.activityBuckets.length === 0);
+            } else {
+                pill.classList.toggle('active', filterState.activityBuckets.includes(days));
+            }
+        });
     }
 
     function toggleMyLeads() {
@@ -290,7 +326,7 @@
     function updateFilterBadge() {
         let count = 0;
         if (filterState.producers.length > 0) count++;
-        if (filterState.activityDays !== '') count++;
+        if (filterState.activityBuckets.length > 0) count++;
 
         const badge = document.getElementById('filter-badge');
         const btn = document.getElementById('btn-filters');
@@ -311,8 +347,8 @@
         if (filterState.producers.length > 0) {
             url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
         }
-        if (filterState.activityDays) {
-            url += '&activity_days=' + filterState.activityDays;
+        if (filterState.activityBuckets.length > 0) {
+            url += '&activity_buckets=' + encodeURIComponent(filterState.activityBuckets.join(','));
         }
 
         htmx.ajax('GET', url, {
@@ -333,8 +369,8 @@
             if (filterState.producers.length > 0) {
                 url += '&producers=' + encodeURIComponent(filterState.producers.join(','));
             }
-            if (filterState.activityDays) {
-                url += '&activity_days=' + filterState.activityDays;
+            if (filterState.activityBuckets.length > 0) {
+                url += '&activity_buckets=' + encodeURIComponent(filterState.activityBuckets.join(','));
             }
 
             const resp = await fetch(url);
@@ -355,14 +391,14 @@
             // Update activity pill counts
             document.querySelectorAll('.activity-pill').forEach(pill => {
                 const days = pill.dataset.days;
-                const key = days || null;
                 let countText = '';
-                if (key && data.activity[key] !== undefined) {
-                    countText = ' (' + data.activity[key] + ')';
+                if (days && data.activity[days] !== undefined) {
+                    countText = ' (' + data.activity[days] + ')';
                 }
-                const label = pill.dataset.days === '' ? 'Any' :
-                              pill.dataset.days.endsWith('+') ? pill.dataset.days.replace('+', 'd+') :
-                              pill.dataset.days + 'd';
+                const label = days === '' ? 'Any' :
+                              days === 'today' ? 'Today' :
+                              days.endsWith('+') ? days.replace('+', 'd+') :
+                              days + 'd';
                 pill.textContent = label + countText;
             });
         } catch (e) {

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, or_, select
 
 from ..auth import get_current_user
 from ..database import Employee, Lead, Pipeline, Stage, async_session
@@ -51,7 +51,18 @@ def _apply_my_leads_filter(lead_query, user):
     return lead_query
 
 
-def _apply_filters(lead_query, user, view: str, producers: str = "", activity_days: str = ""):
+BUCKET_BOUNDS = {
+    "today": (0, 1),
+    "1": (1, 3),
+    "3": (3, 7),
+    "7": (7, 14),
+    "14": (14, 30),
+    "30": (30, 90),
+    "90+": (90, None),
+}
+
+
+def _apply_filters(lead_query, user, view: str, producers: str = "", activity_buckets: str = ""):
     """Apply all filters to a lead query."""
     if view == "my":
         lead_query = _apply_my_leads_filter(lead_query, user)
@@ -61,16 +72,39 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_da
         if producer_list:
             lead_query = lead_query.where(Lead.assign_to_firstname.in_(producer_list))
 
-    if activity_days:
-        if activity_days.endswith("+"):
-            # "90+" means 90 days or older
-            days = int(activity_days[:-1])
-            cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
-            lead_query = lead_query.where(Lead.last_activity_date <= cutoff)
-        elif activity_days.isdigit():
-            days = int(activity_days)
-            cutoff = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
-            lead_query = lead_query.where(Lead.last_activity_date >= cutoff)
+    if activity_buckets:
+        bucket_keys = [b.strip() for b in activity_buckets.split(",") if b.strip()]
+        if bucket_keys:
+            now = datetime.utcnow()
+            conditions = []
+            includes_90_plus = "90+" in bucket_keys
+
+            # Collect non-90+ buckets to compute contiguous range
+            bounded_keys = [k for k in bucket_keys if k != "90+"]
+            if bounded_keys:
+                # Find overall min lower and max upper across selected buckets
+                lowers = [BUCKET_BOUNDS[k][0] for k in bounded_keys]
+                uppers = [BUCKET_BOUNDS[k][1] for k in bounded_keys]
+                min_lower = min(lowers)
+                max_upper = max(uppers)
+                # Activity date >= (now - max_upper days) AND < (now - min_lower days + 1 day for today bucket)
+                upper_cutoff = (now - timedelta(days=max_upper)).strftime("%Y-%m-%d")
+                lower_cutoff = (now - timedelta(days=min_lower)).strftime("%Y-%m-%d")
+                # lead.last_activity_date >= upper_cutoff (older boundary)
+                # lead.last_activity_date <= lower_cutoff (newer boundary)
+                # For "today" bucket (min_lower=0): lower_cutoff = today, so activity_date <= today
+                conditions.append(
+                    (Lead.last_activity_date >= upper_cutoff) & (Lead.last_activity_date <= lower_cutoff)
+                )
+
+            if includes_90_plus:
+                cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+                conditions.append(
+                    (Lead.last_activity_date < cutoff_90) | (Lead.last_activity_date.is_(None))
+                )
+
+            if conditions:
+                lead_query = lead_query.where(or_(*conditions))
 
     return lead_query
 
@@ -113,7 +147,7 @@ async def get_filter_counts(
     pipeline_id: str = "all",
     view: str = "all",
     producers: str = "",
-    activity_days: str = "",
+    activity_buckets: str = "",
 ):
     """Return lead counts for filter items (producers and activity buckets)."""
     user = await get_current_user(request)
@@ -142,18 +176,33 @@ async def get_filter_counts(
         all_leads = result.scalars().all()
 
     now = datetime.utcnow()
+    today_str = now.strftime("%Y-%m-%d")
 
     # Producer counts (apply activity filter but not producer filter)
     filtered_for_producers = all_leads
-    if activity_days:
-        if activity_days.endswith("+"):
-            days = int(activity_days[:-1])
-            cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-            filtered_for_producers = [l for l in all_leads if l.last_activity_date and l.last_activity_date <= cutoff]
-        elif activity_days.isdigit():
-            days = int(activity_days)
-            cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
-            filtered_for_producers = [l for l in all_leads if l.last_activity_date and l.last_activity_date >= cutoff]
+    if activity_buckets:
+        bucket_keys = [b.strip() for b in activity_buckets.split(",") if b.strip()]
+        if bucket_keys:
+            def _lead_in_buckets(lead, keys):
+                for key in keys:
+                    lower, upper = BUCKET_BOUNDS[key]
+                    if key == "90+":
+                        if not lead.last_activity_date:
+                            return True
+                        cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+                        if lead.last_activity_date[:10] < cutoff_90:
+                            return True
+                    else:
+                        if not lead.last_activity_date:
+                            continue
+                        date_str = lead.last_activity_date[:10]
+                        upper_cutoff = (now - timedelta(days=upper)).strftime("%Y-%m-%d")
+                        lower_cutoff = (now - timedelta(days=lower)).strftime("%Y-%m-%d")
+                        if date_str >= upper_cutoff and date_str <= lower_cutoff:
+                            return True
+                return False
+
+            filtered_for_producers = [l for l in all_leads if _lead_in_buckets(l, bucket_keys)]
 
     producer_counts = {}
     for lead in filtered_for_producers:
@@ -164,24 +213,32 @@ async def get_filter_counts(
             producer_counts[key]["count"] += 1
 
     # Activity bucket counts (apply producer filter but not activity filter)
+    # Each lead falls into exactly ONE bucket based on days since activity
     filtered_for_activity = all_leads
     if producers:
         producer_list = [p.strip() for p in producers.split(",") if p.strip()]
         if producer_list:
             filtered_for_activity = [l for l in all_leads if l.assign_to_firstname in producer_list]
 
-    buckets = {"1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0}
+    buckets = {"today": 0, "1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0}
+    # Ordered bucket boundaries for exclusive assignment
+    ordered_bounds = [("today", 0, 1), ("1", 1, 3), ("3", 3, 7), ("7", 7, 14), ("14", 14, 30), ("30", 30, 90)]
+
     for lead in filtered_for_activity:
         if not lead.last_activity_date:
             buckets["90+"] += 1
             continue
         date_str = lead.last_activity_date[:10]
-        for days_str, days_val in [("1", 1), ("3", 3), ("7", 7), ("14", 14), ("30", 30)]:
-            cutoff = (now - timedelta(days=days_val)).strftime("%Y-%m-%d")
-            if date_str >= cutoff:
-                buckets[days_str] += 1
-        cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
-        if date_str <= cutoff_90:
+        assigned = False
+        for bucket_key, lower, upper in ordered_bounds:
+            upper_cutoff = (now - timedelta(days=upper)).strftime("%Y-%m-%d")
+            lower_cutoff = (now - timedelta(days=lower)).strftime("%Y-%m-%d")
+            if date_str >= upper_cutoff and date_str <= lower_cutoff:
+                buckets[bucket_key] += 1
+                assigned = True
+                break
+        if not assigned:
+            # Older than 90 days
             buckets["90+"] += 1
 
     return JSONResponse({
@@ -244,7 +301,7 @@ async def get_all_boards(
     request: Request,
     view: str = "all",
     producers: str = "",
-    activity_days: str = "",
+    activity_buckets: str = "",
 ):
     """Return kanban boards for ALL pipelines."""
     user = await get_current_user(request)
@@ -267,7 +324,7 @@ async def get_all_boards(
 
         # Build lead query
         lead_query = select(Lead)
-        lead_query = _apply_filters(lead_query, user, view, producers, activity_days)
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets)
         lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
@@ -309,7 +366,7 @@ async def get_board(
     pipeline_id: str,
     view: str = "all",
     producers: str = "",
-    activity_days: str = "",
+    activity_buckets: str = "",
 ):
     """Return kanban board HTML partial for a single pipeline."""
     user = await get_current_user(request)
@@ -335,7 +392,7 @@ async def get_board(
         else:
             lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
 
-        lead_query = _apply_filters(lead_query, user, view, producers, activity_days)
+        lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets)
         lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()

@@ -15,6 +15,7 @@ from ..auth import (
     logout_user,
     set_session_cookie,
 )
+from .. import sync as sync_module
 from ..sync import sync_all
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ async def trigger_sync(request: Request, background_tasks: BackgroundTasks):
         }
 
     _last_manual_sync[session_id] = now
+    # Set flag before response so sync-status immediately shows "syncing"
+    # (background_tasks run after response, causing a race with the JS poll)
+    sync_module.sync_in_progress = True
     background_tasks.add_task(sync_all)
     logger.info(f"Manual sync triggered by {user.display_name}")
     return {"status": "started", "message": "Sync started in background"}

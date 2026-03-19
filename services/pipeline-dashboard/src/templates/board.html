@@ -100,7 +100,8 @@
 </div>
 
 <script>
-    const currentUserFirstName = '{{ user.display_name.split()[0] if user.display_name else "" }}';
+    const currentUserDisplayName = '{{ user.display_name or "" }}';
+    let currentUserProducerName = '';  // Resolved after producers load
 
     const filterState = {
         producers: [],
@@ -150,6 +151,18 @@
         try {
             const resp = await fetch('/pipeline/api/producers');
             allProducers = await resp.json();
+
+            // Match current user to a producer by first name from display_name,
+            // or by checking if display_name contains a producer's firstname
+            const displayParts = currentUserDisplayName.toLowerCase().split(/[\s@]+/);
+            for (const p of allProducers) {
+                const fn = p.firstname.toLowerCase();
+                if (displayParts.includes(fn) || currentUserDisplayName.toLowerCase().includes(fn + ' ' + (p.lastname || '').toLowerCase())) {
+                    currentUserProducerName = p.firstname;
+                    break;
+                }
+            }
+
             renderProducerCheckboxes();
         } catch (e) {
             console.error('Failed to load producers:', e);
@@ -198,7 +211,7 @@
 
         // Sync My/All Leads toggle with producer selection
         const isMyLeads = filterState.producers.length === 1 &&
-                          filterState.producers[0] === currentUserFirstName;
+                          filterState.producers[0] === currentUserProducerName;
         filterState.myLeadsActive = isMyLeads;
         document.getElementById('btn-my-leads').classList.toggle('active', isMyLeads);
         document.getElementById('btn-all-leads').classList.toggle('active', filterState.producers.length === 0);
@@ -252,11 +265,11 @@
         document.getElementById('btn-all-leads').classList.remove('active');
 
         // Set producer filter to just the current user
-        filterState.producers = currentUserFirstName ? [currentUserFirstName] : [];
+        filterState.producers = currentUserProducerName ? [currentUserProducerName] : [];
 
         // Update checkboxes to match
         document.querySelectorAll('#producer-checkboxes input').forEach(cb => {
-            cb.checked = (cb.value === currentUserFirstName);
+            cb.checked = (cb.value === currentUserProducerName);
         });
 
         updateProducerDisplay();

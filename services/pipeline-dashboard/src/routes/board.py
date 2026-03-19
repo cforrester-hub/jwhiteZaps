@@ -10,7 +10,7 @@ from sqlalchemy import distinct, func, or_, select
 
 from ..auth import get_current_user
 from ..database import Employee, Lead, Pipeline, Stage, async_session
-from ..sync import sync_in_progress
+from .. import sync as sync_module
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -472,5 +472,5 @@ async def sync_status(request: Request):
 
     return templates.TemplateResponse(
         "partials/sync_status.html",
-        {"request": request, "sync_text": sync_text, "syncing": sync_in_progress},
+        {"request": request, "sync_text": sync_text, "syncing": sync_module.sync_in_progress},
     )

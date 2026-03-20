@@ -146,6 +146,16 @@ class Lead(Base):
     )
 
 
+class SyncMeta(Base):
+    """Tracks sync metadata (e.g., last successful full/delta sync time)."""
+
+    __tablename__ = "pd_sync_meta"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(String(255), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 async def init_db():
     """Create database tables if they don't exist, and run migrations."""
     async with engine.begin() as conn:

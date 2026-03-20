@@ -178,6 +178,7 @@ async def fetch_leads_page(
     page: int = 0,
     page_size: int = 100,
     assigned_to: Optional[int] = None,
+    last_activity_earliest_date: Optional[str] = None,
 ) -> dict:
     """
     Fetch a page of leads, optionally filtered by pipeline and assignee.
@@ -194,18 +195,30 @@ async def fetch_leads_page(
         body["workflowId"] = pipeline_id
     if assigned_to is not None:
         body["assignedTo"] = assigned_to
+    if last_activity_earliest_date is not None:
+        body["lastActivityEarliestDate"] = last_activity_earliest_date
 
     return await _make_request("POST", "/v1/api/leads/list", jwt, json=body)
 
 
-async def fetch_all_leads_for_pipeline(jwt: str, pipeline_id: int) -> list[dict]:
+async def fetch_all_leads_for_pipeline(
+    jwt: str,
+    pipeline_id: int,
+    last_activity_earliest_date: Optional[str] = None,
+) -> list[dict]:
     """Fetch all leads for a pipeline, handling pagination."""
     all_leads = []
     page = 0
     page_size = 100
 
     while True:
-        data = await fetch_leads_page(jwt, pipeline_id=pipeline_id, page=page, page_size=page_size)
+        data = await fetch_leads_page(
+            jwt,
+            pipeline_id=pipeline_id,
+            page=page,
+            page_size=page_size,
+            last_activity_earliest_date=last_activity_earliest_date,
+        )
         leads = data.get("leads", [])
         all_leads.extend(leads)
 

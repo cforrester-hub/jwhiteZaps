@@ -2,10 +2,10 @@
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete, select, text
 
 from .az_client import (
     _rate_limit_delay,
@@ -15,7 +15,7 @@ from .az_client import (
     system_login,
 )
 from .config import get_settings
-from .database import Employee, Lead, Pipeline, Stage, async_session
+from .database import Employee, Lead, Pipeline, Stage, SyncMeta, async_session
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -62,10 +62,48 @@ async def sync_all():
         sync_started_at = None
 
 
+async def _get_last_successful_sync() -> datetime | None:
+    """Get the timestamp of the last successful sync from the DB."""
+    async with async_session() as session:
+        result = await session.execute(
+            select(SyncMeta).where(SyncMeta.key == "last_successful_sync")
+        )
+        meta = result.scalar_one_or_none()
+        if meta and meta.value:
+            try:
+                return datetime.strptime(meta.value, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+    return None
+
+
+async def _set_last_successful_sync(ts: datetime):
+    """Record the timestamp of a successful sync."""
+    async with async_session() as session:
+        async with session.begin():
+            await session.merge(SyncMeta(
+                key="last_successful_sync",
+                value=ts.strftime("%Y-%m-%d %H:%M:%S"),
+                updated_at=ts,
+            ))
+
+
 async def _sync_all_inner():
     """Inner sync logic."""
     sync_start = datetime.utcnow()
-    logger.info("Starting pipeline data sync")
+
+    # Determine if this is a full or delta sync
+    last_sync = await _get_last_successful_sync()
+    is_delta = last_sync is not None
+    delta_date_filter = None
+    if is_delta:
+        # Look back 24 hours from last successful sync to catch anything we missed
+        lookback = last_sync - timedelta(hours=24)
+        delta_date_filter = lookback.strftime("%Y-%m-%d")
+
+    sync_type = "delta" if is_delta else "full"
+    logger.info(f"Starting {sync_type} pipeline data sync"
+                + (f" (activity since {delta_date_filter})" if delta_date_filter else ""))
 
     try:
         jwt = await system_login()
@@ -73,7 +111,7 @@ async def _sync_all_inner():
         logger.error(f"Sync failed: could not authenticate - {e}")
         return
 
-    # Step 1: Sync pipelines and stages
+    # Step 1: Sync pipelines and stages (always full)
     try:
         pipelines_data = await fetch_pipelines_and_stages(jwt)
         logger.info(f"Fetched {len(pipelines_data)} pipelines from AgencyZoom")
@@ -139,7 +177,10 @@ async def _sync_all_inner():
         try:
             # Convert to int for the API call (workflowId expects integer)
             pipeline_int_id = int(pid)
-            leads = await fetch_all_leads_for_pipeline(jwt, pipeline_int_id)
+            leads = await fetch_all_leads_for_pipeline(
+                jwt, pipeline_int_id,
+                last_activity_earliest_date=delta_date_filter,
+            )
             logger.info(f"Pipeline '{p.get('name')}' (id={pid}): {len(leads)} leads")
             synced_pipeline_ids.append(str(pid))
         except Exception as e:
@@ -182,8 +223,8 @@ async def _sync_all_inner():
 
         await _rate_limit_delay()
 
-    # Step 3: Delete stale leads only from successfully synced pipelines
-    if synced_pipeline_ids:
+    # Step 3: Delete stale leads only on full sync (delta only upserts recent changes)
+    if not is_delta and synced_pipeline_ids:
         async with async_session() as session:
             async with session.begin():
                 result = await session.execute(
@@ -223,4 +264,6 @@ async def _sync_all_inner():
     except Exception as e:
         logger.error(f"Failed to sync employees: {e}")
 
-    logger.info(f"Sync complete: {len(pipelines_data)} pipelines, {total_leads} leads")
+    # Record successful sync
+    await _set_last_successful_sync(sync_start)
+    logger.info(f"{sync_type.title()} sync complete: {len(pipelines_data)} pipelines, {total_leads} leads")

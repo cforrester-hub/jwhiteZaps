@@ -1,6 +1,5 @@
 """API routes: login, logout, health, manual sync."""
 
-import asyncio
 import logging
 import time
 
@@ -83,6 +82,7 @@ async def trigger_sync(request: Request, background_tasks: BackgroundTasks):
     # Set flag before response so sync-status immediately shows "syncing"
     # (background_tasks run after response, causing a race with the JS poll)
     sync_module.sync_in_progress = True
+    sync_module.sync_started_at = time.monotonic()
     background_tasks.add_task(sync_all)
     logger.info(f"Manual sync triggered by {user.display_name}")
     return {"status": "started", "message": "Sync started in background"}

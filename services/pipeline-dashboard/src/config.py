@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     session_expiry_hours: int = 8
 
     # Sync
-    sync_interval_cron: str = "3,8,13,18,23,28,33,38,43,48,53,58 * * * *"
+    sync_interval_cron: str = "3,33 * * * *"
+
+    # Timezone that AgencyZoom returns dates in (agency-level setting in AZ)
+    az_timezone: str = "America/Los_Angeles"
 
     # Logging
     log_level: str = "INFO"

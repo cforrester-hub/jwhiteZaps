@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -11,6 +12,8 @@ from sqlalchemy import distinct, func, or_, select
 from ..auth import get_current_user
 from ..database import Employee, Lead, Pipeline, Stage, async_session
 from .. import sync as sync_module
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -76,7 +79,7 @@ def _apply_filters(lead_query, user, view: str, producers: str = "", activity_bu
     if activity_buckets:
         bucket_keys = [b.strip() for b in activity_buckets.split(",") if b.strip()]
         if bucket_keys:
-            now = datetime.utcnow()
+            now = datetime.now(PACIFIC)
             conditions = []
             includes_90_plus = "90+" in bucket_keys
 
@@ -198,7 +201,7 @@ async def get_filter_counts(
                 return all(fn.startswith(t) or ln.startswith(t) for t in tokens)
             all_leads = [l for l in all_leads if _matches_search(l)]
 
-    now = datetime.utcnow()
+    now = datetime.now(PACIFIC)
     today_str = now.strftime("%Y-%m-%d")
 
     # Producer counts (apply activity filter but not producer filter)
@@ -494,7 +497,14 @@ async def sync_status(request: Request):
     else:
         sync_text = "Never"
 
+    # If sync has been "in progress" for more than 10 minutes, treat as stale
+    syncing = sync_module.sync_in_progress
+    if syncing and sync_module.sync_started_at is not None:
+        import time
+        if time.monotonic() - sync_module.sync_started_at > 600:
+            syncing = False
+
     return templates.TemplateResponse(
         "partials/sync_status.html",
-        {"request": request, "sync_text": sync_text, "syncing": sync_module.sync_in_progress},
+        {"request": request, "sync_text": sync_text, "syncing": syncing},
     )

@@ -1,7 +1,9 @@
 """Background data sync from AgencyZoom to local PostgreSQL cache."""
 
 import logging
+import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import delete, text
 
@@ -12,21 +14,49 @@ from .az_client import (
     fetch_pipelines_and_stages,
     system_login,
 )
+from .config import get_settings
 from .database import Employee, Lead, Pipeline, Stage, async_session
+
+PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def _convert_az_date(date_str: str | None) -> str | None:
+    """Convert an AZ date string from the agency's timezone to Pacific.
+
+    AZ returns naive datetimes like "2026-03-20 14:30:00" in the agency's
+    configured timezone. We parse, localize, convert to Pacific, and return
+    as a string in the same format.
+    """
+    if not date_str or len(date_str) < 10:
+        return date_str
+    settings = get_settings()
+    az_tz = ZoneInfo(settings.az_timezone)
+    # If AZ timezone is already Pacific, no conversion needed
+    if settings.az_timezone == "America/Los_Angeles":
+        return date_str
+    try:
+        dt = datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
+        dt = dt.replace(tzinfo=az_tz).astimezone(PACIFIC)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return date_str
 
 logger = logging.getLogger(__name__)
 
 sync_in_progress = False
+sync_started_at: float | None = None
 
 
 async def sync_all():
     """Main sync job: fetch pipelines, stages, and leads from AgencyZoom."""
-    global sync_in_progress
+    global sync_in_progress, sync_started_at
     sync_in_progress = True
+    sync_started_at = time.monotonic()
     try:
         await _sync_all_inner()
     finally:
         sync_in_progress = False
+        sync_started_at = None
 
 
 async def _sync_all_inner():
@@ -133,9 +163,9 @@ async def _sync_all_inner():
                         status=lead.get("status"),
                         premium=lead.get("premium"),
                         quoted=lead.get("quoted"),
-                        enter_stage_date=lead.get("enterStageDate"),
-                        last_activity_date=lead.get("lastActivityDate"),
-                        contact_date=lead.get("contactDate"),
+                        enter_stage_date=_convert_az_date(lead.get("enterStageDate")),
+                        last_activity_date=_convert_az_date(lead.get("lastActivityDate")),
+                        contact_date=_convert_az_date(lead.get("contactDate")),
                         lead_source_name=lead.get("leadSourceName"),
                         workflow_name=lead.get("workflowName"),
                         workflow_stage_name=lead.get("workflowStageName"),

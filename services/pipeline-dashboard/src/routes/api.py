@@ -79,10 +79,6 @@ async def trigger_sync(request: Request, background_tasks: BackgroundTasks):
         }
 
     _last_manual_sync[session_id] = now
-    # Set flag before response so sync-status immediately shows "syncing"
-    # (background_tasks run after response, causing a race with the JS poll)
-    sync_module.sync_in_progress = True
-    sync_module.sync_started_at = time.monotonic()
     background_tasks.add_task(sync_all)
     logger.info(f"Manual sync triggered by {user.display_name}")
     return {"status": "started", "message": "Sync started in background"}

@@ -497,11 +497,11 @@ async def sync_status(request: Request):
     else:
         sync_text = "Never"
 
-    # If sync has been "in progress" for more than 10 minutes, treat as stale
+    # If sync has been "in progress" for more than 90 minutes, treat as stale
     syncing = sync_module.sync_in_progress
     if syncing and sync_module.sync_started_at is not None:
         import time
-        if time.monotonic() - sync_module.sync_started_at > 600:
+        if time.monotonic() - sync_module.sync_started_at > 5400:
             syncing = False
 
     return templates.TemplateResponse(

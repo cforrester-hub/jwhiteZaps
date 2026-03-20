@@ -50,6 +50,9 @@ sync_started_at: float | None = None
 async def sync_all():
     """Main sync job: fetch pipelines, stages, and leads from AgencyZoom."""
     global sync_in_progress, sync_started_at
+    if sync_in_progress:
+        logger.info("Sync already in progress, skipping")
+        return
     sync_in_progress = True
     sync_started_at = time.monotonic()
     try:

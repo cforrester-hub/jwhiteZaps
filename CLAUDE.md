@@ -137,11 +137,15 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /pipeline/ - Main board page (redirects to /pipeline/login if unauthenticated)
 - GET /pipeline/api/board/all - All pipelines kanban (HTMX partial)
 - GET /pipeline/api/board/{pipeline_id} - Single pipeline kanban (HTMX partial)
+- GET /pipeline/api/leads - Paginated JSON lead list (filters: pipeline_id, view, producers, activity_buckets, search, status, page, page_size)
+- GET /pipeline/api/stats/activity - Lead counts by activity date and bucket
+- GET /pipeline/api/stats/producers - Per-producer lead breakdown with status and bucket counts
+- GET /pipeline/api/stats/pipelines - Per-pipeline summary with stage and status breakdowns
 
 ## Development Workflow
 - Commit directly to main, push, CI/CD deploys automatically
 - GitHub Actions: test → build Docker images → push GHCR → SSH deploy to DO droplet
-- Deploy includes `docker compose down --remove-orphans` before `up -d` to prevent container name conflicts
+- Deploy pulls images while running, then `docker compose up -d --force-recreate --remove-orphans` to swap containers in-place
 
 ## User Context
 - Insurance agency automation project

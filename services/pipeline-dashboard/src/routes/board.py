@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import distinct, func, or_, select
+from sqlalchemy import case, distinct, func, or_, select
 
 from ..auth import get_current_user
 from ..database import Employee, Lead, Pipeline, Stage, async_session
@@ -508,3 +508,338 @@ async def sync_status(request: Request):
         "partials/sync_status.html",
         {"request": request, "sync_text": sync_text, "syncing": syncing},
     )
+
+
+# --- JSON API Endpoints for Data Analysis ---
+
+STATUS_LABELS = {0: "new", 1: "quoted", 2: "won", 3: "lost", 4: "contacted", 5: "expired"}
+
+
+def _serialize_lead(lead):
+    """Convert a Lead ORM object to a JSON-serializable dict."""
+    return {
+        "id": lead.id,
+        "firstname": lead.firstname,
+        "lastname": lead.lastname,
+        "phone": lead.phone,
+        "email": lead.email,
+        "status": lead.status,
+        "lead_type": lead.lead_type,
+        "pipeline_name": lead.workflow_name,
+        "stage_name": lead.workflow_stage_name,
+        "assigned_to_name": " ".join(filter(None, [lead.assign_to_firstname, lead.assign_to_lastname])) or None,
+        "last_activity_date": lead.last_activity_date[:10] if lead.last_activity_date else None,
+        "enter_stage_date": lead.enter_stage_date[:10] if lead.enter_stage_date else None,
+        "contact_date": lead.contact_date[:10] if lead.contact_date else None,
+        "premium": lead.premium,
+        "quoted": lead.quoted,
+        "lead_source": lead.lead_source_name,
+    }
+
+
+async def _build_filtered_query(db, user, pipeline_id=None, view="all", producers="",
+                                  activity_buckets="", search="", status=""):
+    """Build a filtered Lead query, returning (query, stage_ids_used)."""
+    if pipeline_id:
+        result = await db.execute(
+            select(Stage.id).where(Stage.pipeline_id == pipeline_id)
+        )
+        stage_ids = [r[0] for r in result.all()]
+        if stage_ids:
+            lead_query = select(Lead).where(Lead.stage_id.in_(stage_ids))
+        else:
+            lead_query = select(Lead).where(Lead.pipeline_id == pipeline_id)
+    else:
+        lead_query = select(Lead)
+
+    lead_query = _apply_filters(lead_query, user, view, producers, activity_buckets, search)
+
+    if status:
+        status_ints = [int(s.strip()) for s in status.split(",") if s.strip().isdigit()]
+        if status_ints:
+            lead_query = lead_query.where(Lead.status.in_(status_ints))
+
+    return lead_query
+
+
+@router.get("/pipeline/api/leads")
+async def get_leads_json(
+    request: Request,
+    pipeline_id: str = "",
+    view: str = "all",
+    producers: str = "",
+    activity_buckets: str = "",
+    search: str = "",
+    status: str = "",
+    page: int = 0,
+    page_size: int = 100,
+):
+    """Return paginated JSON lead data with filtering."""
+    user = await get_current_user(request)
+    if user is None:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    page_size = min(max(page_size, 1), 500)
+    page = max(page, 0)
+
+    async with async_session() as db:
+        lead_query = await _build_filtered_query(
+            db, user, pipeline_id or None, view, producers, activity_buckets, search, status
+        )
+
+        # Get total count
+        count_query = select(func.count()).select_from(lead_query.subquery())
+        total = (await db.execute(count_query)).scalar()
+
+        # Fetch page
+        lead_query = lead_query.order_by(Lead.last_activity_date.desc().nullslast())
+        lead_query = lead_query.offset(page * page_size).limit(page_size)
+        result = await db.execute(lead_query)
+        leads = result.scalars().all()
+
+    return JSONResponse({
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "leads": [_serialize_lead(l) for l in leads],
+    })
+
+
+@router.get("/pipeline/api/stats/activity")
+async def get_stats_activity(
+    request: Request,
+    pipeline_id: str = "",
+    view: str = "all",
+    producers: str = "",
+    activity_buckets: str = "",
+    search: str = "",
+    status: str = "",
+):
+    """Return lead counts grouped by activity date and bucket."""
+    user = await get_current_user(request)
+    if user is None:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    now = datetime.now(PACIFIC)
+
+    async with async_session() as db:
+        lead_query = await _build_filtered_query(
+            db, user, pipeline_id or None, view, producers, activity_buckets, search, status
+        )
+
+        # Total count
+        count_query = select(func.count()).select_from(lead_query.subquery())
+        total = (await db.execute(count_query)).scalar()
+
+        # by_date: group by date, last 90 days only
+        cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+        date_expr = func.substr(Lead.last_activity_date, 1, 10)
+        date_query = (
+            select(date_expr.label("dt"), func.count().label("cnt"))
+            .select_from(lead_query.where(Lead.last_activity_date >= cutoff_90).subquery())
+            .group_by("dt")
+            .order_by(func.substr(Lead.last_activity_date, 1, 10).desc())
+        )
+        # Re-derive: apply the filter on top of the base query
+        base_sq = lead_query.where(
+            Lead.last_activity_date.isnot(None),
+            Lead.last_activity_date >= cutoff_90,
+        ).subquery()
+        date_query = (
+            select(
+                func.substr(base_sq.c.last_activity_date, 1, 10).label("dt"),
+                func.count().label("cnt"),
+            )
+            .group_by("dt")
+            .order_by(func.substr(base_sq.c.last_activity_date, 1, 10).desc())
+        )
+        date_rows = (await db.execute(date_query)).all()
+
+        # by_bucket: fetch all leads and bucket them in Python (reuse existing logic)
+        result = await db.execute(lead_query)
+        all_leads = result.scalars().all()
+
+    by_date = [{"date": r[0], "count": r[1]} for r in date_rows]
+
+    # Compute buckets
+    ordered_bounds = [("today", 0, 0), ("1", 1, 2), ("3", 3, 6), ("7", 7, 13), ("14", 14, 29), ("30", 30, 89)]
+    buckets = {"today": 0, "1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0}
+    for lead in all_leads:
+        if not lead.last_activity_date:
+            buckets["90+"] += 1
+            continue
+        date_str = lead.last_activity_date[:10]
+        assigned = False
+        for bucket_key, lower, upper in ordered_bounds:
+            upper_cutoff = (now - timedelta(days=upper)).strftime("%Y-%m-%d")
+            lower_cutoff = (now - timedelta(days=lower)).strftime("%Y-%m-%d")
+            if upper_cutoff <= date_str <= lower_cutoff:
+                buckets[bucket_key] += 1
+                assigned = True
+                break
+        if not assigned:
+            buckets["90+"] += 1
+
+    return JSONResponse({
+        "total": total,
+        "by_date": by_date,
+        "by_bucket": buckets,
+    })
+
+
+@router.get("/pipeline/api/stats/producers")
+async def get_stats_producers(
+    request: Request,
+    pipeline_id: str = "",
+    view: str = "all",
+    activity_buckets: str = "",
+    search: str = "",
+    status: str = "",
+):
+    """Return per-producer lead breakdown."""
+    user = await get_current_user(request)
+    if user is None:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    now = datetime.now(PACIFIC)
+
+    async with async_session() as db:
+        lead_query = await _build_filtered_query(
+            db, user, pipeline_id or None, view, "", activity_buckets, search, status
+        )
+        result = await db.execute(lead_query)
+        all_leads = result.scalars().all()
+
+    # Group by producer
+    producers_map = {}
+    ordered_bounds = [("today", 0, 0), ("1", 1, 2), ("3", 3, 6), ("7", 7, 13), ("14", 14, 29), ("30", 30, 89)]
+
+    for lead in all_leads:
+        key = lead.assign_to_firstname or "(unassigned)"
+        if key not in producers_map:
+            producers_map[key] = {
+                "firstname": lead.assign_to_firstname or "",
+                "lastname": lead.assign_to_lastname or "",
+                "total": 0,
+                "by_status": {v: 0 for v in STATUS_LABELS.values()},
+                "by_bucket": {"today": 0, "1": 0, "3": 0, "7": 0, "14": 0, "30": 0, "90+": 0},
+            }
+        p = producers_map[key]
+        p["total"] += 1
+
+        # Status
+        status_label = STATUS_LABELS.get(lead.status, "new")
+        p["by_status"][status_label] += 1
+
+        # Bucket
+        if not lead.last_activity_date:
+            p["by_bucket"]["90+"] += 1
+        else:
+            date_str = lead.last_activity_date[:10]
+            assigned = False
+            for bucket_key, lower, upper in ordered_bounds:
+                upper_cutoff = (now - timedelta(days=upper)).strftime("%Y-%m-%d")
+                lower_cutoff = (now - timedelta(days=lower)).strftime("%Y-%m-%d")
+                if upper_cutoff <= date_str <= lower_cutoff:
+                    p["by_bucket"][bucket_key] += 1
+                    assigned = True
+                    break
+            if not assigned:
+                p["by_bucket"]["90+"] += 1
+
+    result_list = sorted(producers_map.values(), key=lambda p: p["firstname"])
+    return JSONResponse({"producers": result_list})
+
+
+@router.get("/pipeline/api/stats/pipelines")
+async def get_stats_pipelines(
+    request: Request,
+    view: str = "all",
+    producers: str = "",
+    activity_buckets: str = "",
+    search: str = "",
+):
+    """Return per-pipeline lead counts with stage and status breakdowns."""
+    user = await get_current_user(request)
+    if user is None:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    async with async_session() as db:
+        # Get all pipelines and stages
+        result = await db.execute(select(Pipeline).order_by(Pipeline.name))
+        pipelines = result.scalars().all()
+
+        result = await db.execute(select(Stage).order_by(Stage.pipeline_id, Stage.seq))
+        all_stages = result.scalars().all()
+
+        # Get filtered leads
+        lead_query = await _build_filtered_query(
+            db, user, None, view, producers, activity_buckets, search
+        )
+        result = await db.execute(lead_query)
+        all_leads = result.scalars().all()
+
+    # Build stage_id -> pipeline_id and stage_id -> stage_name maps
+    stage_to_pipeline = {}
+    stage_name_map = {}
+    stages_by_pipeline = {}
+    for s in all_stages:
+        pid = str(s.pipeline_id)
+        sid = str(s.id)
+        stage_to_pipeline[sid] = pid
+        stage_name_map[sid] = s.name
+        if pid not in stages_by_pipeline:
+            stages_by_pipeline[pid] = []
+        stages_by_pipeline[pid].append(s)
+
+    pipeline_name_map = {str(p.id): p.name for p in pipelines}
+
+    # Accumulate per-pipeline stats
+    pipeline_data = {}
+    for lead in all_leads:
+        sid = str(lead.stage_id) if lead.stage_id else ""
+        pid = stage_to_pipeline.get(sid, str(lead.pipeline_id) if lead.pipeline_id else "")
+        if not pid:
+            continue
+
+        if pid not in pipeline_data:
+            pipeline_data[pid] = {
+                "id": pid,
+                "name": pipeline_name_map.get(pid, "Unknown"),
+                "total": 0,
+                "stage_counts": {},
+                "by_status": {v: 0 for v in STATUS_LABELS.values()},
+            }
+        pd = pipeline_data[pid]
+        pd["total"] += 1
+
+        # Stage count
+        if sid:
+            pd["stage_counts"][sid] = pd["stage_counts"].get(sid, 0) + 1
+
+        # Status
+        status_label = STATUS_LABELS.get(lead.status, "new")
+        pd["by_status"][status_label] += 1
+
+    # Build final response with ordered stages
+    result_list = []
+    for p in pipelines:
+        pid = str(p.id)
+        if pid not in pipeline_data:
+            continue
+        pd = pipeline_data[pid]
+        by_stage = []
+        for s in stages_by_pipeline.get(pid, []):
+            sid = str(s.id)
+            count = pd["stage_counts"].get(sid, 0)
+            if count > 0:
+                by_stage.append({"id": sid, "name": s.name, "count": count})
+        result_list.append({
+            "id": pd["id"],
+            "name": pd["name"],
+            "total": pd["total"],
+            "by_stage": by_stage,
+            "by_status": pd["by_status"],
+        })
+
+    return JSONResponse({"pipelines": result_list})

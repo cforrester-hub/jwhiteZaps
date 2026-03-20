@@ -32,6 +32,35 @@
 </div>
 {% endif %}
 {% endfor %}
+{% if show_outcomes %}
+<div class="pipeline-section outcomes-section" id="pipeline-outcomes">
+    <div class="pipeline-header">
+        <button class="btn-pipeline-toggle" onclick="togglePipeline('outcomes')">−</button>
+        <h2>Outcomes</h2>
+        <span class="pipeline-type">
+            {{ outcome_leads.sold|length + outcome_leads.dead|length + outcome_leads.expired|length }} leads
+        </span>
+    </div>
+    <div class="kanban-board">
+        {% for col_name, col_key, col_class in [('Sold', 'sold', 'outcome-sold'), ('Dead', 'dead', 'outcome-dead'), ('Expired', 'expired', 'outcome-expired')] %}
+        <div class="kanban-column {{ col_class }}">
+            <div class="column-header">
+                <h3>{{ col_name }}</h3>
+                <span class="lead-count">{{ outcome_leads[col_key]|length }}</span>
+            </div>
+            <div class="column-body">
+                {% for lead in outcome_leads[col_key] %}
+                {% include "partials/lead_card.html" %}
+                {% endfor %}
+                {% if not outcome_leads[col_key] %}
+                <div class="empty-column">No leads</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 {% if not pipelines %}
 <div class="empty-state">
     <p>No pipelines found. Data will appear after the next sync.</p>

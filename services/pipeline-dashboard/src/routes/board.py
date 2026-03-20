@@ -353,6 +353,25 @@ async def get_all_boards(
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
 
+        # Terminal leads (Sold/Dead/Expired) — only when date filter active
+        outcome_leads = {"sold": [], "dead": [], "expired": []}
+        show_outcomes = False
+        if activity_buckets:
+            bucket_keys = [b.strip() for b in activity_buckets.split(",") if b.strip()]
+            if bucket_keys and not (bucket_keys == ["90+"]):
+                show_outcomes = True
+                outcome_query = select(Lead).where(Lead.status.in_([2, 3, 5]))
+                outcome_query = _apply_filters(outcome_query, user, view, producers, activity_buckets, search)
+                outcome_query = outcome_query.order_by(Lead.last_activity_date.desc().nullslast())
+                result = await db.execute(outcome_query)
+                for lead in result.scalars().all():
+                    if lead.status == 2:
+                        outcome_leads["sold"].append(lead)
+                    elif lead.status == 3:
+                        outcome_leads["dead"].append(lead)
+                    elif lead.status == 5:
+                        outcome_leads["expired"].append(lead)
+
     # Group stages by pipeline
     stages_by_pipeline = {}
     for stage in all_stages:
@@ -379,6 +398,11 @@ async def get_all_boards(
             "stages_by_pipeline": stages_by_pipeline,
             "leads_by_stage": leads_by_stage,
             "view": view,
+            "outcome_leads": outcome_leads,
+            "show_outcomes": show_outcomes,
+            "outcome_sold": len(outcome_leads.get("sold", [])),
+            "outcome_dead": len(outcome_leads.get("dead", [])),
+            "outcome_expired": len(outcome_leads.get("expired", [])),
             **stats,
         },
     )

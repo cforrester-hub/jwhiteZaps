@@ -734,6 +734,13 @@ body {
     border-color: #555;
 }
 
+/* ===== OUTCOME COLUMNS ===== */
+.outcome-sold .column-header { border-bottom-color: #2e7d32; }
+.outcome-dead .column-header { border-bottom-color: #c62828; }
+.outcome-expired .column-header { border-bottom-color: #ef6c00; }
+
+.outcomes-section .pipeline-header h2 { color: #666; }
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
     .nav-bar {

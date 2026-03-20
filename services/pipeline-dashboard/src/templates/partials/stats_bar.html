@@ -9,4 +9,18 @@
         <div class="stat-label">{{ pc.name }}</div>
     </div>
     {% endfor %}
+    {% if show_outcomes %}
+    <div class="stat-card">
+        <span class="stat-value" style="color:#2e7d32">{{ outcome_sold }}</span>
+        <span class="stat-label">Sold</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value" style="color:#c62828">{{ outcome_dead }}</span>
+        <span class="stat-label">Dead</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-value" style="color:#ef6c00">{{ outcome_expired }}</span>
+        <span class="stat-label">Expired</span>
+    </div>
+    {% endif %}
 </div>

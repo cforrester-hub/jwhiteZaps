@@ -267,7 +267,7 @@
       "get": {
         "operationId": "getQuoteAnalysis",
         "summary": "Analyze quote patterns — bundled vs mono-line, carriers, and products",
-        "description": "Returns bundled vs mono-line breakdown, carrier/product counts. Searches ALL leads with quote records regardless of lead status, catching quoting activity even when producers haven't updated statuses. Returns status_mismatch count (leads with quotes but not in QUOTED/WON status = pipeline discipline issue). Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets).",
+        "description": "Bundled vs mono-line breakdown, carrier/product counts. Finds ALL leads with quotes regardless of status. Includes status_mismatch count. Use summary_only=true for large datasets.",
         "parameters": [
           {
             "name": "producer",

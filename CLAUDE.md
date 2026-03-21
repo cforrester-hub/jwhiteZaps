@@ -29,12 +29,14 @@ Microservice Zapier Replacement - A containerized stack to replace Zapier automa
 | deputy-service | Deputy webhooks to RingCentral DND |
 | dashboard-service | Employee status dashboard |
 | pipeline-dashboard | AgencyZoom pipeline Kanban board (HTMX + Jinja2) |
+| az-analyst-service | LLM-powered AgencyZoom data analysis (REST API + MCP) |
 
 ## Service Dependencies
 - workflow-service → ringcentral, storage, agencyzoom, transcription
 - deputy-service → redis, ringcentral-service
 - dashboard-service → deputy-service (startup recovery)
 - pipeline-dashboard → PostgreSQL, AgencyZoom API (direct, not via agencyzoom-service)
+- az-analyst-service → PostgreSQL (read-only pd_* tables), AgencyZoom API (live notes/tasks)
 
 ## Workflows (workflow-service)
 
@@ -141,6 +143,14 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /pipeline/api/stats/activity - Lead counts by activity date and bucket
 - GET /pipeline/api/stats/producers - Per-producer lead breakdown with status and bucket counts
 - GET /pipeline/api/stats/pipelines - Per-pipeline summary with stage and status breakdowns
+
+### AZ Analyst Service
+- GET /api/analysis/health - Health check
+- GET /api/analysis/producer-activity?producer={name}&date=&days=&include_details= - Producer lead activity (X-API-Key auth)
+- GET /api/analysis/lead/{lead_id}?include_notes=&include_tasks= - Lead detail with live notes/tasks
+- GET /api/analysis/pipeline-analytics?pipeline_id=&producer=&date_from=&date_to= - Pipeline analytics from synced data
+- GET /api/analysis/tasks?producer={name}&status=&date_from=&date_to= - Producer tasks (live AZ API)
+- GET /api/analysis/search?query=&phone=&email=&limit= - Search leads by name/phone/email
 
 ## Development Workflow
 - Commit directly to main, push, CI/CD deploys automatically

@@ -149,6 +149,9 @@ jobs:
           - service: transcription-service
             context: ./services/transcription-service
             dockerfile: ./services/transcription-service/Dockerfile
+          - service: az-analyst-service
+            context: ./services/az-analyst-service
+            dockerfile: ./services/az-analyst-service/Dockerfile
 
     steps:
       - name: Checkout code

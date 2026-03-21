@@ -263,7 +263,7 @@
       "get": {
         "operationId": "getQuoteAnalysis",
         "summary": "Analyze quote patterns — bundled vs mono-line, carriers, and products",
-        "description": "Returns leads with their quotes and a summary of bundled vs mono-line counts, carrier breakdown, and product breakdown. Uses synced data; no live API calls.",
+        "description": "Returns bundled vs mono-line breakdown, carrier/product counts. Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets or high-volume producers). Uses synced data; no live API calls.",
         "parameters": [
           {
             "name": "producer",
@@ -280,10 +280,38 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Filter by last_activity_date start YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "Filter by last_activity_date end YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days (shortcut for date_from, ignored if date_from set)",
+            "schema": { "type": "integer", "default": 0 }
+          },
+          {
             "name": "bundled_only",
             "in": "query",
             "required": false,
             "description": "If true, only return leads with quotes spanning multiple product lines",
+            "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, return only summary stats without per-lead detail (faster, smaller response). Recommended for large datasets.",
             "schema": { "type": "boolean", "default": false }
           }
         ],
@@ -297,6 +325,7 @@
                   "properties": {
                     "leads": {
                       "type": "array",
+                      "description": "Per-lead detail with quotes. Omitted when summary_only=true.",
                       "items": {
                         "type": "object",
                         "properties": {
@@ -320,6 +349,7 @@
                         "total": { "type": "integer" },
                         "bundled": { "type": "integer" },
                         "mono_line": { "type": "integer" },
+                        "bundle_rate_pct": { "type": "string", "description": "Percentage of quoted leads that are bundled" },
                         "by_carrier": {
                           "type": "object",
                           "additionalProperties": { "type": "integer" }

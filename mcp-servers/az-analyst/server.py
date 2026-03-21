@@ -131,21 +131,34 @@ async def get_tasks(producer: str, status: str = "all", date_from: str = "", dat
 async def quote_analysis(
     producer: str = "",
     pipeline_id: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    days: int = 0,
     bundled_only: bool = False,
+    summary_only: bool = False,
 ) -> str:
     """Analyze quoting patterns — which carriers, products, bundled vs mono-line, premiums.
 
     Uses synced quote data from the database (no live AZ API calls, fast).
+    Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets).
 
     Args:
         producer: Filter by producer first name (optional)
         pipeline_id: Filter by pipeline ID (optional)
+        date_from: Start date YYYY-MM-DD (optional)
+        date_to: End date YYYY-MM-DD (optional)
+        days: Look back N days (shortcut for date_from, ignored if date_from set)
         bundled_only: If true, only show leads with multiple product lines quoted
+        summary_only: If true, return only summary stats without per-lead detail (faster)
     """
     return await _call_api("/quote-analysis", {
         "producer": producer,
         "pipeline_id": pipeline_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "days": days,
         "bundled_only": str(bundled_only).lower(),
+        "summary_only": str(summary_only).lower(),
     })
 
 

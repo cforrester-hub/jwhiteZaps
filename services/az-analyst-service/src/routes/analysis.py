@@ -600,11 +600,31 @@ async def team_performance(
 async def quote_analysis(
     producer: Optional[str] = Query(None, description="Filter by producer firstname"),
     pipeline_id: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="Filter by last_activity_date start YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="Filter by last_activity_date end YYYY-MM-DD"),
+    days: int = Query(0, description="Look back N days (shortcut for date_from, ignored if date_from set)", ge=0, le=365),
     bundled_only: bool = Query(False, description="Only show leads with multiple product lines"),
+    summary_only: bool = Query(False, description="Return only summary stats, omit per-lead detail (faster, smaller response)"),
 ):
-    """Analyze quoting patterns from synced quote data. No live AZ API calls."""
+    """Analyze quoting patterns from synced quote data. No live AZ API calls.
+
+    Returns bundled vs mono-line breakdown, carrier/product counts, and optionally per-lead detail.
+    Use summary_only=true for aggregate stats without per-lead data (recommended for large datasets).
+    """
+    # Compute date range
+    start = None
+    end = None
+    if date_from:
+        start = date_from
+    elif days > 0:
+        start = (_today_pacific() - timedelta(days=days - 1)).isoformat()
+    if date_to:
+        end = date_to + "T23:59:59"
+    elif start:
+        end = _today_pacific().isoformat() + "T23:59:59"
+
     async with async_session() as session:
-        # Get all quoted/won leads with their quotes
+        # Get quoted/won leads
         lead_query = select(Lead).where(Lead.status.in_([1, 2]))
         if producer:
             lead_query = lead_query.where(
@@ -612,13 +632,17 @@ async def quote_analysis(
             )
         if pipeline_id:
             lead_query = lead_query.where(Lead.pipeline_id == pipeline_id)
+        if start:
+            lead_query = lead_query.where(Lead.last_activity_date >= start)
+        if end:
+            lead_query = lead_query.where(Lead.last_activity_date <= end)
 
         lead_result = await session.execute(lead_query)
         leads = lead_result.scalars().all()
         lead_ids = [l.id for l in leads]
 
         if not lead_ids:
-            return {"leads": [], "summary": {"total": 0}}
+            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "by_carrier": [], "by_product": []}}
 
         # Fetch all quotes for these leads
         quote_result = await session.execute(
@@ -657,21 +681,26 @@ async def quote_analysis(
             if q.product_name:
                 product_counts[q.product_name] = product_counts.get(q.product_name, 0) + 1
 
-        lead_data.append({
-            **_serialize_lead(lead),
-            "quotes": [_serialize_quote(q) for q in lead_quotes],
-            "is_bundled": is_bundled,
-            "product_lines": sorted(product_names),
-            "total_premium": sum(q.premium or 0 for q in lead_quotes),
-        })
+        if not summary_only:
+            lead_data.append({
+                **_serialize_lead(lead),
+                "quotes": [_serialize_quote(q) for q in lead_quotes],
+                "is_bundled": is_bundled,
+                "product_lines": sorted(product_names),
+                "total_premium": sum(q.premium or 0 for q in lead_quotes),
+            })
 
-    return {
-        "leads": lead_data,
+    response = {
         "summary": {
-            "total": len(lead_data),
+            "total": bundled_count + mono_count,
             "bundled": bundled_count,
             "mono_line": mono_count,
+            "bundle_rate_pct": f"{round(bundled_count / (bundled_count + mono_count) * 100, 1) if (bundled_count + mono_count) > 0 else 0}%",
             "by_carrier": sorted(carrier_counts.items(), key=lambda x: -x[1]),
             "by_product": sorted(product_counts.items(), key=lambda x: -x[1]),
         },
     }
+    if not summary_only:
+        response["leads"] = lead_data
+
+    return response

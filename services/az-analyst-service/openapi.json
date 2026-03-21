@@ -402,6 +402,98 @@
         }
       }
     },
+    "/api/analysis/team-performance": {
+      "get": {
+        "operationId": "getTeamPerformance",
+        "summary": "Per-producer performance breakdown: close rates, lead counts, status splits",
+        "description": "Returns all active producers ranked by close rate for the given date range. Includes team totals. Uses synced data — no live API calls, fast response.",
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter to a specific pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Activity date start YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "Activity date end YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days if date_from not set (default 30)",
+            "schema": { "type": "integer", "default": 30 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-producer performance data ranked by close rate",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "producers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "integer", "nullable": true },
+                          "name": { "type": "string" },
+                          "firstname": { "type": "string", "nullable": true },
+                          "lastname": { "type": "string", "nullable": true },
+                          "total": { "type": "integer" },
+                          "new": { "type": "integer" },
+                          "quoted": { "type": "integer" },
+                          "won": { "type": "integer" },
+                          "lost": { "type": "integer" },
+                          "contacted": { "type": "integer" },
+                          "expired": { "type": "integer" },
+                          "decided": { "type": "integer" },
+                          "close_rate": { "type": "number" },
+                          "close_rate_pct": { "type": "string" }
+                        }
+                      }
+                    },
+                    "team_totals": {
+                      "type": "object",
+                      "properties": {
+                        "total_leads": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "lost": { "type": "integer" },
+                        "decided": { "type": "integer" },
+                        "close_rate": { "type": "number" },
+                        "close_rate_pct": { "type": "string" },
+                        "producers_count": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analysis/search": {
       "get": {
         "operationId": "searchLeads",

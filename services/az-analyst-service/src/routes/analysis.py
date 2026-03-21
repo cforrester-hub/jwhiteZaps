@@ -449,6 +449,105 @@ async def search_leads(
     }
 
 
+@router.get("/team-performance", dependencies=[Depends(verify_api_key)])
+async def team_performance(
+    pipeline_id: Optional[str] = Query(None, description="Filter to a specific pipeline"),
+    date_from: Optional[str] = Query(None, description="Activity date start YYYY-MM-DD"),
+    date_to: Optional[str] = Query(None, description="Activity date end YYYY-MM-DD"),
+    days: int = Query(30, description="Look back N days (ignored if date_from set)", ge=1, le=365),
+):
+    """Per-producer performance breakdown: close rates, lead counts, status splits.
+
+    Returns all active producers ranked by close rate.
+    """
+    # Compute date range
+    if date_from:
+        start = date_from
+    else:
+        start = (_today_pacific() - timedelta(days=days - 1)).isoformat()
+    end = (date_to or _today_pacific().isoformat()) + "T23:59:59"
+
+    async with async_session() as session:
+        # Get active producers
+        emp_result = await session.execute(
+            select(Employee).where(Employee.is_producer == 1, Employee.is_active == 1)
+        )
+        producers = emp_result.scalars().all()
+
+        # Get all leads in date range
+        lead_query = select(Lead).where(
+            Lead.last_activity_date >= start,
+            Lead.last_activity_date <= end,
+        )
+        if pipeline_id:
+            lead_query = lead_query.where(Lead.pipeline_id == pipeline_id)
+
+        lead_result = await session.execute(lead_query)
+        leads = lead_result.scalars().all()
+
+    # Build producer lookup
+    producer_map = {p.id: p for p in producers}
+
+    # Group leads by assigned_to
+    by_producer = {}
+    for lead in leads:
+        pid = lead.assigned_to
+        if pid not in by_producer:
+            prod = producer_map.get(pid)
+            by_producer[pid] = {
+                "id": pid,
+                "name": f"{prod.firstname or ''} {prod.lastname or ''}".strip() if prod else f"Unknown ({pid})",
+                "firstname": prod.firstname if prod else None,
+                "lastname": prod.lastname if prod else None,
+                "total": 0,
+                "new": 0,
+                "quoted": 0,
+                "won": 0,
+                "lost": 0,
+                "contacted": 0,
+                "expired": 0,
+            }
+        entry = by_producer[pid]
+        entry["total"] += 1
+        status_name = STATUS_MAP.get(lead.status, "unknown")
+        if status_name in entry:
+            entry[status_name] += 1
+
+    # Compute close rates and sort
+    results = []
+    for entry in by_producer.values():
+        total = entry["total"]
+        won = entry["won"]
+        lost = entry["lost"]
+        decided = won + lost
+        entry["close_rate"] = round(won / decided, 3) if decided > 0 else 0
+        entry["close_rate_pct"] = f"{entry['close_rate'] * 100:.1f}%"
+        entry["decided"] = decided
+        results.append(entry)
+
+    results.sort(key=lambda x: (-x["close_rate"], -x["won"]))
+
+    # Team totals
+    team_total = sum(e["total"] for e in results)
+    team_won = sum(e["won"] for e in results)
+    team_lost = sum(e["lost"] for e in results)
+    team_decided = team_won + team_lost
+
+    return {
+        "date_range": {"from": start, "to": date_to or _today_pacific().isoformat()},
+        "producers": results,
+        "team_totals": {
+            "total_leads": team_total,
+            "won": team_won,
+            "lost": team_lost,
+            "decided": team_decided,
+            "close_rate": round(team_won / team_decided, 3) if team_decided > 0 else 0,
+            "close_rate_pct": f"{round(team_won / team_decided * 100, 1) if team_decided > 0 else 0}%",
+            "producers_count": len(results),
+        },
+    }
+
+
 @router.get("/quote-analysis", dependencies=[Depends(verify_api_key)])
 async def quote_analysis(
     producer: Optional[str] = Query(None, description="Filter by producer firstname"),

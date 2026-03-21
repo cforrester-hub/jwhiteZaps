@@ -149,5 +149,31 @@ async def quote_analysis(
     })
 
 
+@mcp.tool()
+async def team_performance(
+    pipeline_id: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    days: int = 30,
+) -> str:
+    """Get per-producer performance breakdown: close rates, lead counts, status splits.
+
+    Returns all active producers ranked by close rate. Great for team comparisons
+    and leaderboards.
+
+    Args:
+        pipeline_id: Filter to a specific pipeline ID (optional)
+        date_from: Start date YYYY-MM-DD (optional, defaults to 30 days back)
+        date_to: End date YYYY-MM-DD (optional, defaults to today)
+        days: Look back N days if date_from not set (default 30)
+    """
+    return await _call_api("/team-performance", {
+        "pipeline_id": pipeline_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "days": days,
+    })
+
+
 if __name__ == "__main__":
     mcp.run()

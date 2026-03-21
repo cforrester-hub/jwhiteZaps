@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    select,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -148,6 +149,8 @@ class Lead(Base):
     tag_names = Column(String(500), nullable=True)  # comma-separated tags
     lead_source_id = Column(Integer, nullable=True)  # stable ID for lead source
     raw_json = Column(JSONB, nullable=True)
+    detail_json = Column(JSONB, nullable=True)  # full GET /leads/{id} response
+    detail_synced_at = Column(DateTime, nullable=True)  # when detail was last fetched
     synced_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
@@ -204,6 +207,27 @@ class LeadFile(Base):
     )
 
 
+class LeadOpportunity(Base):
+    """Cached AgencyZoom lead opportunities (carrier/product being quoted)."""
+
+    __tablename__ = "pd_lead_opportunities"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)  # AZ opportunity ID
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    carrier_id = Column(Integer, nullable=True)
+    product_line_id = Column(Integer, nullable=True)
+    status = Column(Integer, nullable=True)
+    premium = Column(Float, nullable=True)
+    items = Column(Integer, nullable=True)
+    property_address = Column(String(500), nullable=True)
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_opportunities_lead", "lead_id"),
+    )
+
+
 class SyncMeta(Base):
     """Tracks sync metadata (e.g., last successful full/delta sync time)."""
 
@@ -240,5 +264,27 @@ async def init_db():
             await conn.execute(text(
                 f"ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS {col} {coltype}"
             ))
+        # 2026-03-21: Detail sync columns
+        for col, coltype in [
+            ("detail_json", "JSONB"),
+            ("detail_synced_at", "TIMESTAMP"),
+        ]:
+            await conn.execute(text(
+                f"ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS {col} {coltype}"
+            ))
+
+    # Set one-time detail backfill flag if not already set
+    async with async_session() as session:
+        result = await session.execute(
+            select(SyncMeta).where(SyncMeta.key == "detail_backfill_needed")
+        )
+        existing = result.scalar_one_or_none()
+        if existing is None:
+            async with session.begin():
+                await session.merge(SyncMeta(
+                    key="detail_backfill_needed",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
 
 

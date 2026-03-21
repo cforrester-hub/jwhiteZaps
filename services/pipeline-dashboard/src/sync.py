@@ -5,19 +5,21 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import json as json_module
+
 from sqlalchemy import delete, select, text
 
 from .az_client import (
     _rate_limit_delay,
     fetch_all_leads_for_pipeline,
     fetch_employees,
+    fetch_lead_detail,
     fetch_lead_files,
-    fetch_lead_quotes,
     fetch_pipelines_and_stages,
     system_login,
 )
 from .config import get_settings
-from .database import Employee, Lead, LeadFile, LeadQuote, Pipeline, Stage, SyncMeta, async_session
+from .database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, SyncMeta, async_session
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -106,6 +108,17 @@ async def _sync_all_inner():
     sync_type = "delta" if is_delta else "full"
     logger.info(f"Starting {sync_type} pipeline data sync"
                 + (f" (activity since {delta_date_filter})" if delta_date_filter else ""))
+
+    # Check if a detail backfill has been requested
+    needs_detail_backfill = False
+    async with async_session() as session:
+        result = await session.execute(
+            select(SyncMeta).where(SyncMeta.key == "detail_backfill_needed")
+        )
+        meta = result.scalar_one_or_none()
+        if meta and meta.value == "true":
+            needs_detail_backfill = True
+            logger.info("Detail backfill flag detected — will sync details for ALL leads")
 
     try:
         jwt = await system_login()
@@ -236,31 +249,44 @@ async def _sync_all_inner():
 
         await _rate_limit_delay()
 
-    # Step 2.5: Sync quotes and files for ALL leads
-    # Captures quoting activity regardless of whether producer updated lead status
+    # Step 2.5: Sync lead details (quotes, opportunities via detail endpoint; files via separate call)
     async with async_session() as session:
-        if is_delta:
-            # Only sync quotes for leads updated in this delta
+        if needs_detail_backfill:
+            # Full backfill: all leads that haven't had detail synced
+            query = select(Lead).where(
+                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start)
+            )
+        elif is_delta:
+            # Delta: only leads updated in this sync cycle
             query = select(Lead).where(Lead.synced_at >= sync_start)
         else:
+            # Full sync: all leads
             query = select(Lead)
 
         result = await session.execute(query)
-        leads_needing_quotes = result.scalars().all()
+        leads_needing_detail = result.scalars().all()
 
-    logger.info(f"Syncing quotes/files for {len(leads_needing_quotes)} leads")
+    logger.info(f"Syncing details for {len(leads_needing_detail)} leads")
 
-    for lead in leads_needing_quotes:
-        # Fetch quotes
+    detail_success = 0
+    detail_errors = 0
+    for lead in leads_needing_detail:
         try:
-            quotes = await fetch_lead_quotes(jwt, lead.id)
+            detail = await fetch_lead_detail(jwt, lead.id)
+
             async with async_session() as session:
                 async with session.begin():
-                    # Delete existing quotes for this lead, then insert fresh
+                    # Store full detail response and timestamp
+                    await session.execute(
+                        text("UPDATE pd_leads SET detail_json = :dj, detail_synced_at = :ds WHERE id = :lid"),
+                        {"dj": json_module.dumps(detail), "ds": sync_start, "lid": lead.id},
+                    )
+
+                    # Parse and upsert quotes
                     await session.execute(
                         delete(LeadQuote).where(LeadQuote.lead_id == lead.id)
                     )
-                    for q in quotes:
+                    for q in (detail.get("quotes") or []):
                         q_id = q.get("id")
                         if q_id is None:
                             continue
@@ -280,35 +306,72 @@ async def _sync_all_inner():
                             raw_json=q,
                             synced_at=sync_start,
                         ))
-        except Exception as e:
-            logger.warning(f"Failed to sync quotes for lead {lead.id}: {e}")
 
-        # Fetch files (quotes only, file_type=1)
-        try:
-            files = await fetch_lead_files(jwt, lead.id, file_type=1)
-            async with async_session() as session:
-                async with session.begin():
+                    # Parse and upsert opportunities
                     await session.execute(
-                        delete(LeadFile).where(LeadFile.lead_id == lead.id)
+                        delete(LeadOpportunity).where(LeadOpportunity.lead_id == lead.id)
                     )
-                    for f in files:
-                        f_id = f.get("id")
-                        if f_id is None:
+                    for opp in (detail.get("opportunities") or []):
+                        opp_id = opp.get("id")
+                        if opp_id is None:
                             continue
-                        await session.merge(LeadFile(
-                            id=f_id,
+                        await session.merge(LeadOpportunity(
+                            id=opp_id,
                             lead_id=lead.id,
-                            title=f.get("title"),
-                            media_type=f.get("mediaType"),
-                            file_type=f.get("fileType"),
-                            size=f.get("size"),
-                            create_date=f.get("createDate"),
-                            comments=f.get("comments"),
-                            raw_json=f,
+                            carrier_id=opp.get("carrierId"),
+                            product_line_id=opp.get("productLineId"),
+                            status=opp.get("status"),
+                            premium=opp.get("premium"),
+                            items=opp.get("items"),
+                            property_address=opp.get("propertyAddress"),
+                            raw_json=opp,
                             synced_at=sync_start,
                         ))
+
+            # Fetch files separately (not included in detail endpoint)
+            try:
+                files = await fetch_lead_files(jwt, lead.id, file_type=1)
+                async with async_session() as session:
+                    async with session.begin():
+                        await session.execute(
+                            delete(LeadFile).where(LeadFile.lead_id == lead.id)
+                        )
+                        for f in files:
+                            f_id = f.get("id")
+                            if f_id is None:
+                                continue
+                            await session.merge(LeadFile(
+                                id=f_id,
+                                lead_id=lead.id,
+                                title=f.get("title"),
+                                media_type=f.get("mediaType"),
+                                file_type=f.get("fileType"),
+                                size=f.get("size"),
+                                create_date=f.get("createDate"),
+                                comments=f.get("comments"),
+                                raw_json=f,
+                                synced_at=sync_start,
+                            ))
+            except Exception as e:
+                logger.warning(f"Failed to sync files for lead {lead.id}: {e}")
+
+            detail_success += 1
         except Exception as e:
-            logger.warning(f"Failed to sync files for lead {lead.id}: {e}")
+            detail_errors += 1
+            logger.warning(f"Failed to sync detail for lead {lead.id}: {e}")
+
+    logger.info(f"Detail sync: {detail_success} succeeded, {detail_errors} failed")
+
+    # Clear backfill flag if set
+    if needs_detail_backfill:
+        async with async_session() as session:
+            async with session.begin():
+                await session.merge(SyncMeta(
+                    key="detail_backfill_needed",
+                    value="false",
+                    updated_at=sync_start,
+                ))
+        logger.info("Detail backfill complete — flag cleared")
 
     # Step 3: Delete stale leads only on full sync (delta only upserts recent changes)
     if not is_delta and synced_pipeline_ids:

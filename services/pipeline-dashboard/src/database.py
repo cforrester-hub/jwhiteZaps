@@ -275,12 +275,12 @@ async def init_db():
 
     # Set one-time detail backfill flag if not already set
     async with async_session() as session:
-        result = await session.execute(
-            select(SyncMeta).where(SyncMeta.key == "detail_backfill_needed")
-        )
-        existing = result.scalar_one_or_none()
-        if existing is None:
-            async with session.begin():
+        async with session.begin():
+            result = await session.execute(
+                select(SyncMeta).where(SyncMeta.key == "detail_backfill_needed")
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
                 await session.merge(SyncMeta(
                     key="detail_backfill_needed",
                     value="true",

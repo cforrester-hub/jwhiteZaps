@@ -17,7 +17,7 @@ from ..az_client import (
     system_login,
 )
 from ..config import get_settings
-from ..database import Employee, Lead, LeadFile, LeadQuote, Pipeline, Stage, async_session
+from ..database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, async_session
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -93,6 +93,20 @@ def _serialize_file(f: LeadFile) -> dict:
         "size": f.size,
         "create_date": f.create_date,
         "comments": f.comments,
+    }
+
+
+def _serialize_opportunity(o: LeadOpportunity) -> dict:
+    """Convert a LeadOpportunity ORM object to a JSON-serializable dict."""
+    return {
+        "id": o.id,
+        "lead_id": o.lead_id,
+        "carrier_id": o.carrier_id,
+        "product_line_id": o.product_line_id,
+        "status": o.status,
+        "premium": o.premium,
+        "items": o.items,
+        "property_address": o.property_address,
     }
 
 
@@ -250,6 +264,12 @@ async def lead_detail(
         )
         files = file_result.scalars().all()
         response["files"] = [_serialize_file(f) for f in files]
+
+        opp_result = await session.execute(
+            select(LeadOpportunity).where(LeadOpportunity.lead_id == lead_id)
+        )
+        opportunities = opp_result.scalars().all()
+        response["opportunities"] = [_serialize_opportunity(o) for o in opportunities]
 
     if include_notes or include_tasks:
         try:

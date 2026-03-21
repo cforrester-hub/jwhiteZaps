@@ -117,6 +117,17 @@ class Lead(Base):
     workflow_stage_name = Column(String(255), nullable=True)
     assign_to_firstname = Column(String(255), nullable=True)
     assign_to_lastname = Column(String(255), nullable=True)
+    # High-value fields
+    street_address = Column(String(255), nullable=True)
+    city = Column(String(100), nullable=True)
+    state = Column(String(10), nullable=True)
+    zip_code = Column(String(20), nullable=True)
+    sold_date = Column(String(50), nullable=True)
+    x_date = Column(String(50), nullable=True)
+    quote_date = Column(String(50), nullable=True)
+    customer_id = Column(Integer, nullable=True)
+    tag_names = Column(String(500), nullable=True)
+    lead_source_id = Column(Integer, nullable=True)
     raw_json = Column(JSONB, nullable=True)
     synced_at = Column(DateTime, default=datetime.utcnow)
 
@@ -124,4 +135,51 @@ class Lead(Base):
         Index("ix_pd_leads_pipeline_stage", "pipeline_id", "stage_id"),
         Index("ix_pd_leads_assigned", "assigned_to"),
         Index("ix_pd_leads_synced", "synced_at"),
+    )
+
+
+class LeadQuote(Base):
+    """Cached AgencyZoom lead quotes (read-only)."""
+
+    __tablename__ = "pd_lead_quotes"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    carrier_id = Column(Integer, nullable=True)
+    carrier_name = Column(String(255), nullable=True)
+    product_line_id = Column(Integer, nullable=True)
+    product_name = Column(String(255), nullable=True)
+    premium = Column(Float, nullable=True)
+    items = Column(Integer, nullable=True)
+    sold = Column(Integer, nullable=True)
+    effective_date = Column(String(50), nullable=True)
+    potential_revenue = Column(Float, nullable=True)
+    property_address = Column(String(500), nullable=True)
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_quotes_lead", "lead_id"),
+        Index("ix_pd_lead_quotes_carrier", "carrier_name"),
+    )
+
+
+class LeadFile(Base):
+    """Cached AgencyZoom lead file references (read-only)."""
+
+    __tablename__ = "pd_lead_files"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=True)
+    media_type = Column(String(100), nullable=True)
+    file_type = Column(Integer, nullable=True)
+    size = Column(Integer, nullable=True)
+    create_date = Column(String(50), nullable=True)
+    comments = Column(Text, nullable=True)
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_files_lead", "lead_id"),
     )

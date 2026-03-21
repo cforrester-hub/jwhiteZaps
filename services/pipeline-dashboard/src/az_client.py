@@ -244,3 +244,24 @@ async def fetch_pipeline_counts(jwt: str, assigned_to: Optional[int] = None) -> 
 
     data = await _make_request("POST", "/v1/api/leads/pipeline-count", jwt, json=body)
     return data.get("leadsCount", [])
+
+
+async def fetch_lead_quotes(jwt: str, lead_id: int) -> list[dict]:
+    """Fetch quotes for a specific lead."""
+    await _rate_limit_delay()
+    data = await _make_request("GET", f"/v1/api/leads/{lead_id}/quotes", jwt)
+    if isinstance(data, list):
+        return data
+    return data.get("quotes", data.get("items", []))
+
+
+async def fetch_lead_files(jwt: str, lead_id: int, file_type: int = None) -> list[dict]:
+    """Fetch files for a specific lead. file_type=1 for quotes only."""
+    await _rate_limit_delay()
+    body = {"customerReferralId": lead_id}
+    if file_type is not None:
+        body["fileType"] = file_type
+    data = await _make_request("POST", "/v1/api/leads/files", jwt, json=body)
+    if isinstance(data, list):
+        return data
+    return data.get("files", data.get("items", []))

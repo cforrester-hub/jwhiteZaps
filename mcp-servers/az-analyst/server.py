@@ -29,15 +29,15 @@ async def _call_api(path: str, params: dict = None) -> str:
 
 @mcp.tool()
 async def get_producer_activity(
-    producer: str,
+    producer: str = "",
     date: str = "",
     days: int = 1,
     include_details: bool = False,
 ) -> str:
-    """Analyze a producer's lead activity. Returns leads active on the given date with pipeline and status breakdown.
+    """Analyze lead activity. Omit producer for company-wide view, or specify a name for one producer.
 
     Args:
-        producer: Producer first name (e.g. "Gabriela", "Eric")
+        producer: Producer first name (e.g. "Gabriela"). Omit or empty for company-wide.
         date: Date in YYYY-MM-DD format. Defaults to today Pacific.
         days: Look back N days (default 1)
         include_details: If true, fetches notes and tasks from AZ API for top leads (slower, ~30s)

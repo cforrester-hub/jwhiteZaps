@@ -123,12 +123,12 @@ async def health():
 
 @router.get("/producer-activity", dependencies=[Depends(verify_api_key)])
 async def producer_activity(
-    producer: str = Query(..., description="Producer firstname to match"),
+    producer: Optional[str] = Query(None, description="Producer firstname (omit for company-wide)"),
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD), defaults to today Pacific"),
     days: int = Query(1, description="Look back N days", ge=1, le=90),
     include_details: bool = Query(False, description="Fetch notes/tasks from AZ API for top leads"),
 ):
-    """Analyze a producer's lead activity for a given date range."""
+    """Analyze lead activity for a given date range. Omit producer for company-wide view."""
     # Parse date range
     if date:
         try:
@@ -141,20 +141,24 @@ async def producer_activity(
     start_date = end_date - timedelta(days=days - 1)
 
     async with async_session() as session:
-        # Find producer info
-        emp_result = await session.execute(
-            select(Employee).where(
-                func.lower(Employee.firstname) == producer.lower()
+        # Find producer info if specified
+        employee = None
+        if producer:
+            emp_result = await session.execute(
+                select(Employee).where(
+                    func.lower(Employee.firstname) == producer.lower()
+                )
             )
-        )
-        employee = emp_result.scalar_one_or_none()
+            employee = emp_result.scalar_one_or_none()
 
-        # Query leads by producer firstname and activity date range
+        # Query leads by activity date range, optionally filtered by producer
         query = select(Lead).where(
-            func.lower(Lead.assign_to_firstname) == producer.lower(),
             Lead.last_activity_date >= start_date.isoformat(),
             Lead.last_activity_date <= end_date.isoformat() + "T23:59:59",
-        ).order_by(Lead.last_activity_date.desc())
+        )
+        if producer:
+            query = query.where(func.lower(Lead.assign_to_firstname) == producer.lower())
+        query = query.order_by(Lead.last_activity_date.desc())
 
         result = await session.execute(query)
         leads = result.scalars().all()
@@ -176,12 +180,10 @@ async def producer_activity(
 
         # Get total assigned per pipeline
         for pname in pipeline_groups:
-            count_result = await session.execute(
-                select(func.count(Lead.id)).where(
-                    func.lower(Lead.assign_to_firstname) == producer.lower(),
-                    Lead.workflow_name == pname,
-                )
-            )
+            count_query = select(func.count(Lead.id)).where(Lead.workflow_name == pname)
+            if producer:
+                count_query = count_query.where(func.lower(Lead.assign_to_firstname) == producer.lower())
+            count_result = await session.execute(count_query)
             pipeline_groups[pname]["total_assigned"] = count_result.scalar() or 0
 
         # Serialize leads
@@ -216,10 +218,10 @@ async def producer_activity(
 
     return {
         "producer": {
-            "firstname": employee.firstname if employee else producer,
+            "firstname": employee.firstname if employee else (producer or "All"),
             "lastname": employee.lastname if employee else None,
             "id": employee.id if employee else None,
-        },
+        } if producer else {"firstname": "All", "lastname": "Company-wide", "id": None},
         "date_range": {
             "from": start_date.isoformat(),
             "to": end_date.isoformat(),

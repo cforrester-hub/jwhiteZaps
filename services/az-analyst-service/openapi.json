@@ -14,14 +14,14 @@
     "/api/analysis/producer-activity": {
       "get": {
         "operationId": "getProducerActivity",
-        "summary": "Analyze a producer's lead activity for a date range",
-        "description": "Returns leads active on the given date(s) with pipeline and status breakdown. Optionally fetches live notes and tasks from AgencyZoom for top leads.",
+        "summary": "Analyze lead activity for a date range, by producer or company-wide",
+        "description": "Returns leads active on the given date(s) with pipeline and status breakdown. Omit producer for company-wide view.",
         "parameters": [
           {
             "name": "producer",
             "in": "query",
-            "required": true,
-            "description": "Producer first name (e.g. Gabriela, Eric)",
+            "required": false,
+            "description": "Producer first name (e.g. Gabriela). Omit for company-wide.",
             "schema": { "type": "string" }
           },
           {

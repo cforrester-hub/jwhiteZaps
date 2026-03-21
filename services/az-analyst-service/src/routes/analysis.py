@@ -27,7 +27,25 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 STATUS_MAP = {0: "new", 1: "quoted", 2: "won", 3: "lost", 4: "contacted", 5: "expired"}
 
 
-def _serialize_lead(lead: Lead) -> dict:
+async def _get_quoted_lead_ids(session, lead_ids: list[int] = None) -> set[int]:
+    """Get set of lead IDs that have quote records in pd_lead_quotes.
+
+    A lead is considered 'effectively quoted' if it has quote records OR quote_date is set.
+    This is more reliable than the status field which is never set to QUOTED in AZ.
+    """
+    query = select(LeadQuote.lead_id).distinct()
+    if lead_ids is not None:
+        query = query.where(LeadQuote.lead_id.in_(lead_ids))
+    result = await session.execute(query)
+    return {row[0] for row in result}
+
+
+def _is_effectively_quoted(lead: Lead, quoted_lead_ids: set[int]) -> bool:
+    """Check if a lead has been quoted based on quote records or quote_date."""
+    return lead.id in quoted_lead_ids or bool(lead.quote_date)
+
+
+def _serialize_lead(lead: Lead, effectively_quoted: bool = False) -> dict:
     """Convert a Lead ORM object to a JSON-serializable dict."""
     return {
         "id": lead.id,
@@ -63,6 +81,7 @@ def _serialize_lead(lead: Lead) -> dict:
         "quote_date": lead.quote_date,
         "customer_id": lead.customer_id,
         "tag_names": lead.tag_names,
+        "effectively_quoted": effectively_quoted,
     }
 
 
@@ -163,12 +182,20 @@ async def producer_activity(
         result = await session.execute(query)
         leads = result.scalars().all()
 
-        # Count by status
+        # Get set of lead IDs that have actual quote records
+        lead_ids = [l.id for l in leads]
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+
+        # Count by status, using real quoting detection
         status_counts = {"new": 0, "quoted": 0, "won": 0, "lost": 0, "contacted": 0, "expired": 0}
         for lead in leads:
-            status_name = STATUS_MAP.get(lead.status, "unknown")
-            if status_name in status_counts:
-                status_counts[status_name] += 1
+            if _is_effectively_quoted(lead, quoted_lead_ids) and lead.status not in (2, 3, 5):
+                # Lead has quotes but isn't won/lost/expired — count as quoted
+                status_counts["quoted"] += 1
+            else:
+                status_name = STATUS_MAP.get(lead.status, "unknown")
+                if status_name in status_counts:
+                    status_counts[status_name] += 1
 
         # Group by pipeline
         pipeline_groups = {}
@@ -187,7 +214,7 @@ async def producer_activity(
             pipeline_groups[pname]["total_assigned"] = count_result.scalar() or 0
 
         # Serialize leads
-        serialized_leads = [_serialize_lead(l) for l in leads]
+        serialized_leads = [_serialize_lead(l, _is_effectively_quoted(l, quoted_lead_ids)) for l in leads]
 
         # Optionally fetch live details for top leads
         if include_details and leads:
@@ -507,6 +534,10 @@ async def team_performance(
         lead_result = await session.execute(lead_query)
         leads = lead_result.scalars().all()
 
+        # Get set of lead IDs that have actual quote records
+        all_lead_ids = [l.id for l in leads]
+        quoted_lead_ids = await _get_quoted_lead_ids(session, all_lead_ids) if all_lead_ids else set()
+
     # Build producer lookup
     producer_map = {p.id: p for p in producers}
 
@@ -553,12 +584,15 @@ async def team_performance(
             }
         entry = by_producer[pid]
         entry["total"] += 1
-        status_name = STATUS_MAP.get(lead.status, "unknown")
-        if status_name in entry:
-            entry[status_name] += 1
+        if _is_effectively_quoted(lead, quoted_lead_ids) and lead.status not in (2, 3, 5):
+            entry["quoted"] += 1
+        else:
+            status_name = STATUS_MAP.get(lead.status, "unknown")
+            if status_name in entry:
+                entry[status_name] += 1
 
-        # New lead breakdown
-        if lead.status == 0:  # NEW
+        # New lead breakdown — only for leads that are truly new (not effectively quoted)
+        if lead.status == 0 and not _is_effectively_quoted(lead, quoted_lead_ids):
             if _entered_in_range(lead):
                 entry["new_this_period"] += 1
             else:
@@ -648,16 +682,23 @@ async def quote_analysis(
         end = _today_pacific().isoformat() + "T23:59:59"
 
     async with async_session() as session:
-        # Find all leads that have quote records (any status)
+        # Find all leads that have quote records OR quote_date set
         leads_with_quotes_q = select(LeadQuote.lead_id).distinct()
         leads_with_quotes_result = await session.execute(leads_with_quotes_q)
         lead_ids_with_quotes = {row[0] for row in leads_with_quotes_result}
 
-        if not lead_ids_with_quotes:
-            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "status_mismatch": 0, "by_carrier": [], "by_product": []}}
+        # Also include leads with quote_date set (even if no quote records yet)
+        quote_date_q = select(Lead.id).where(Lead.quote_date != None)
+        quote_date_result = await session.execute(quote_date_q)
+        lead_ids_with_quote_date = {row[0] for row in quote_date_result}
 
-        # Get the lead records for those IDs, applying filters
-        lead_query = select(Lead).where(Lead.id.in_(lead_ids_with_quotes))
+        effectively_quoted_ids = lead_ids_with_quotes | lead_ids_with_quote_date
+
+        if not effectively_quoted_ids:
+            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "by_carrier": [], "by_product": []}}
+
+        # Get the lead records, applying filters
+        lead_query = select(Lead).where(Lead.id.in_(effectively_quoted_ids))
         if producer:
             lead_query = lead_query.where(
                 func.lower(Lead.assign_to_firstname) == producer.lower()
@@ -674,7 +715,7 @@ async def quote_analysis(
         lead_ids = [l.id for l in leads]
 
         if not lead_ids:
-            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "status_mismatch": 0, "by_carrier": [], "by_product": []}}
+            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "by_carrier": [], "by_product": []}}
 
         # Fetch all quotes for these leads
         quote_result = await session.execute(
@@ -693,66 +734,66 @@ async def quote_analysis(
     product_counts = {}
     bundled_count = 0
     mono_count = 0
-    status_mismatch_count = 0
-    status_mismatch_leads = []
+    has_quote_records = 0
+    quote_date_only = 0
 
     for lead in leads:
         lead_quotes = quotes_by_lead.get(lead.id, [])
-        if not lead_quotes:
-            continue
+        effectively_quoted = lead.id in lead_ids_with_quotes or bool(lead.quote_date)
 
-        product_names = set(q.product_name for q in lead_quotes if q.product_name)
-        is_bundled = len(product_names) > 1
-        has_status_mismatch = lead.status not in (1, 2)  # has quotes but not QUOTED/WON
+        if lead_quotes:
+            has_quote_records += 1
+            product_names = set(q.product_name for q in lead_quotes if q.product_name)
+            is_bundled = len(product_names) > 1
 
-        if bundled_only and not is_bundled:
-            continue
+            if bundled_only and not is_bundled:
+                continue
 
-        if is_bundled:
-            bundled_count += 1
-        else:
-            mono_count += 1
+            if is_bundled:
+                bundled_count += 1
+            else:
+                mono_count += 1
 
-        if has_status_mismatch:
-            status_mismatch_count += 1
-            status_mismatch_leads.append({
-                "id": lead.id,
-                "name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
-                "current_status": STATUS_MAP.get(lead.status, "unknown"),
-                "quote_count": len(lead_quotes),
-            })
+            for q in lead_quotes:
+                if q.carrier_name:
+                    carrier_counts[q.carrier_name] = carrier_counts.get(q.carrier_name, 0) + 1
+                if q.product_name:
+                    product_counts[q.product_name] = product_counts.get(q.product_name, 0) + 1
 
-        for q in lead_quotes:
-            if q.carrier_name:
-                carrier_counts[q.carrier_name] = carrier_counts.get(q.carrier_name, 0) + 1
-            if q.product_name:
-                product_counts[q.product_name] = product_counts.get(q.product_name, 0) + 1
+            if not summary_only:
+                lead_data.append({
+                    **_serialize_lead(lead, effectively_quoted),
+                    "quotes": [_serialize_quote(q) for q in lead_quotes],
+                    "is_bundled": is_bundled,
+                    "product_lines": sorted(product_names),
+                    "total_premium": sum(q.premium or 0 for q in lead_quotes),
+                })
+        elif effectively_quoted:
+            # Lead has quote_date but no quote records (quoting happened but wasn't entered as structured data)
+            quote_date_only += 1
+            if not bundled_only and not summary_only:
+                lead_data.append({
+                    **_serialize_lead(lead, effectively_quoted),
+                    "quotes": [],
+                    "is_bundled": False,
+                    "product_lines": [],
+                    "total_premium": 0,
+                })
 
-        if not summary_only:
-            lead_data.append({
-                **_serialize_lead(lead),
-                "quotes": [_serialize_quote(q) for q in lead_quotes],
-                "is_bundled": is_bundled,
-                "product_lines": sorted(product_names),
-                "total_premium": sum(q.premium or 0 for q in lead_quotes),
-                "status_mismatch": has_status_mismatch,
-            })
-
-    total_quoted = bundled_count + mono_count
+    total_with_records = bundled_count + mono_count
+    total_effectively_quoted = total_with_records + quote_date_only
     response = {
         "summary": {
-            "total": total_quoted,
+            "total_effectively_quoted": total_effectively_quoted,
+            "with_quote_records": total_with_records,
+            "quote_date_only": quote_date_only,
             "bundled": bundled_count,
             "mono_line": mono_count,
-            "bundle_rate_pct": f"{round(bundled_count / total_quoted * 100, 1) if total_quoted > 0 else 0}%",
-            "status_mismatch": status_mismatch_count,
-            "status_mismatch_pct": f"{round(status_mismatch_count / total_quoted * 100, 1) if total_quoted > 0 else 0}%",
+            "bundle_rate_pct": f"{round(bundled_count / total_with_records * 100, 1) if total_with_records > 0 else 0}%",
             "by_carrier": sorted(carrier_counts.items(), key=lambda x: -x[1]),
             "by_product": sorted(product_counts.items(), key=lambda x: -x[1]),
         },
     }
-    if status_mismatch_leads:
-        response["status_mismatches"] = status_mismatch_leads
     if not summary_only:
         response["leads"] = lead_data
 

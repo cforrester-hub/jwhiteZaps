@@ -353,9 +353,10 @@
                         "total": { "type": "integer" },
                         "bundled": { "type": "integer" },
                         "mono_line": { "type": "integer" },
-                        "bundle_rate_pct": { "type": "string", "description": "Percentage of quoted leads that are bundled" },
-                        "status_mismatch": { "type": "integer", "description": "Leads with quote records but NOT in QUOTED/WON status — indicates pipeline discipline issue" },
-                        "status_mismatch_pct": { "type": "string", "description": "Percentage of quoted leads with status mismatch" },
+                        "total_effectively_quoted": { "type": "integer", "description": "Total leads that have been quoted (quote records OR quote_date set)" },
+                        "with_quote_records": { "type": "integer", "description": "Leads with structured quote records (carrier/product/premium)" },
+                        "quote_date_only": { "type": "integer", "description": "Leads with quote_date set but no structured quote records" },
+                        "bundle_rate_pct": { "type": "string", "description": "Percentage of quoted leads (with records) that are bundled" },
                         "by_carrier": {
                           "type": "object",
                           "additionalProperties": { "type": "integer" }

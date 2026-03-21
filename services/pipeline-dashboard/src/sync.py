@@ -239,7 +239,7 @@ async def _sync_all_inner():
                         x_date=_convert_az_date(lead.get("xDate")),
                         quote_date=_convert_az_date(lead.get("quoteDate")),
                         customer_id=lead.get("customerId"),
-                        tag_names=lead.get("tagNames"),
+                        tag_names=",".join(lead["tagNames"]) if isinstance(lead.get("tagNames"), list) else lead.get("tagNames"),
                         lead_source_id=lead.get("leadSourceId"),
                         raw_json=lead,
                         synced_at=sync_start,

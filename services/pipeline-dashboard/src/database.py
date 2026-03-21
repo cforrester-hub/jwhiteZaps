@@ -273,16 +273,27 @@ async def init_db():
                 f"ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS {col} {coltype}"
             ))
 
-    # Set one-time detail backfill flag if not already set
+    # One-time backfill: reset detail_synced_at and set flag to re-fetch quotes with dedicated endpoint
     async with async_session() as session:
         async with session.begin():
             result = await session.execute(
-                select(SyncMeta).where(SyncMeta.key == "detail_backfill_needed")
+                select(SyncMeta).where(SyncMeta.key == "quotes_backfill_v2")
             )
             existing = result.scalar_one_or_none()
             if existing is None:
+                # Reset detail_synced_at so backfill re-fetches all leads
+                await session.execute(text(
+                    "UPDATE pd_leads SET detail_synced_at = NULL"
+                ))
+                # Set backfill flag
                 await session.merge(SyncMeta(
                     key="detail_backfill_needed",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
+                # Mark this migration as done so it doesn't repeat
+                await session.merge(SyncMeta(
+                    key="quotes_backfill_v2",
                     value="true",
                     updated_at=datetime.utcnow(),
                 ))

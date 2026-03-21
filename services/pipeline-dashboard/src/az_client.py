@@ -247,9 +247,18 @@ async def fetch_pipeline_counts(jwt: str, assigned_to: Optional[int] = None) -> 
 
 
 async def fetch_lead_detail(jwt: str, lead_id: int) -> dict:
-    """Fetch full detail for a lead (quotes, opportunities, customFields in one call)."""
+    """Fetch full detail for a lead (opportunities, customFields). Quotes lack carrier/product names here."""
     await _rate_limit_delay()
     return await _make_request("GET", f"/v1/api/leads/{lead_id}", jwt)
+
+
+async def fetch_lead_quotes(jwt: str, lead_id: int) -> list[dict]:
+    """Fetch quotes for a lead via dedicated endpoint (includes carrierName, productName)."""
+    await _rate_limit_delay()
+    data = await _make_request("GET", f"/v1/api/leads/{lead_id}/quotes", jwt)
+    if isinstance(data, list):
+        return data
+    return data.get("quotes", data.get("items", []))
 
 
 async def fetch_lead_files(jwt: str, lead_id: int, file_type: int = None) -> list[dict]:

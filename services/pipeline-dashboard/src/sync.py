@@ -15,6 +15,7 @@ from .az_client import (
     fetch_employees,
     fetch_lead_detail,
     fetch_lead_files,
+    fetch_lead_quotes,
     fetch_pipelines_and_stages,
     system_login,
 )
@@ -282,32 +283,40 @@ async def _sync_all_inner():
                         {"dj": json_module.dumps(detail), "ds": sync_start, "lid": lead.id},
                     )
 
-                    # Parse and upsert quotes
-                    await session.execute(
-                        delete(LeadQuote).where(LeadQuote.lead_id == lead.id)
-                    )
-                    for q in (detail.get("quotes") or []):
-                        q_id = q.get("id")
-                        if q_id is None:
-                            continue
-                        await session.merge(LeadQuote(
-                            id=q_id,
-                            lead_id=lead.id,
-                            carrier_id=q.get("carrierId"),
-                            carrier_name=q.get("carrierName"),
-                            product_line_id=q.get("productLineId"),
-                            product_name=q.get("productName"),
-                            premium=q.get("premium"),
-                            items=q.get("items"),
-                            sold=1 if q.get("sold") else 0,
-                            effective_date=q.get("effectiveDate"),
-                            potential_revenue=q.get("potentialRevenue"),
-                            property_address=q.get("propertyAddress"),
-                            raw_json=q,
-                            synced_at=sync_start,
-                        ))
+            # Fetch quotes via dedicated endpoint (has carrierName, productName)
+            try:
+                quotes = await fetch_lead_quotes(jwt, lead.id)
+                async with async_session() as session:
+                    async with session.begin():
+                        await session.execute(
+                            delete(LeadQuote).where(LeadQuote.lead_id == lead.id)
+                        )
+                        for q in quotes:
+                            q_id = q.get("id")
+                            if q_id is None:
+                                continue
+                            await session.merge(LeadQuote(
+                                id=q_id,
+                                lead_id=lead.id,
+                                carrier_id=q.get("carrierId"),
+                                carrier_name=q.get("carrierName"),
+                                product_line_id=q.get("productLineId"),
+                                product_name=q.get("productName"),
+                                premium=q.get("premium"),
+                                items=q.get("items"),
+                                sold=1 if q.get("sold") else 0,
+                                effective_date=q.get("effectiveDate"),
+                                potential_revenue=q.get("potentialRevenue"),
+                                property_address=q.get("propertyAddress"),
+                                raw_json=q,
+                                synced_at=sync_start,
+                            ))
+            except Exception as e:
+                logger.warning(f"Failed to sync quotes for lead {lead.id}: {e}")
 
-                    # Parse and upsert opportunities
+            # Parse and upsert opportunities from detail response
+            async with async_session() as session:
+                async with session.begin():
                     await session.execute(
                         delete(LeadOpportunity).where(LeadOpportunity.lead_id == lead.id)
                     )

@@ -136,11 +136,19 @@ async def producer_activity(
         if include_details and leads:
             try:
                 jwt = await system_login()
-                top_leads = leads[:7]  # Cap at 7 leads (14 API calls)
+                # Cap leads fetched so we stay under max_live_api_calls (2 calls per lead: notes + tasks)
+                max_leads = settings.max_live_api_calls // 2
+                top_leads = leads[:max_leads]
+                api_calls_made = 0
                 for i, lead in enumerate(top_leads):
+                    if api_calls_made >= settings.max_live_api_calls:
+                        logger.info(f"Hit max_live_api_calls ({settings.max_live_api_calls}), stopping detail fetch")
+                        break
                     try:
                         notes = await fetch_lead_notes(jwt, lead.id)
+                        api_calls_made += 1
                         tasks = await fetch_lead_tasks(jwt, lead.id)
+                        api_calls_made += 1
                         serialized_leads[i]["notes"] = notes
                         serialized_leads[i]["tasks"] = tasks
                     except Exception as e:

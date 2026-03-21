@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AgencyZoom Analyst",
-    "description": "Analyze AgencyZoom lead data — producer activity, lead details, pipeline analytics, tasks, and search.",
+    "description": "Analyze AgencyZoom lead data — producer activity, lead details, pipeline analytics, tasks, and search. IMPORTANT: All timestamps and dates in responses are in Pacific time (America/Los_Angeles). When displaying or comparing dates/times, treat them as Pacific. 'Today' means today in Pacific time.",
     "version": "1.0.0"
   },
   "servers": [

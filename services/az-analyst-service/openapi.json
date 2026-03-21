@@ -405,8 +405,8 @@
     "/api/analysis/team-performance": {
       "get": {
         "operationId": "getTeamPerformance",
-        "summary": "Per-producer performance breakdown: close rates, lead counts, status splits",
-        "description": "Returns all active producers ranked by close rate for the given date range. Includes team totals. Uses synced data — no live API calls, fast response.",
+        "summary": "Per-producer performance breakdown: close rates, lead counts, new lead aging",
+        "description": "Returns all active producers ranked by close rate. Distinguishes true new leads (entered this period) from backlog (stale leads still in 'new' status). Includes aging buckets for new leads (0-1, 2-3, 4-7, 8-14, 15+ days). Uses synced data — no live API calls, fast response.",
         "parameters": [
           {
             "name": "pipeline_id",
@@ -470,7 +470,20 @@
                           "expired": { "type": "integer" },
                           "decided": { "type": "integer" },
                           "close_rate": { "type": "number" },
-                          "close_rate_pct": { "type": "string" }
+                          "close_rate_pct": { "type": "string" },
+                          "new_this_period": { "type": "integer", "description": "New leads where enter_stage_date falls within the query date range" },
+                          "new_backlog": { "type": "integer", "description": "Leads still in 'new' status but entered before the date range (stale)" },
+                          "new_aging": {
+                            "type": "object",
+                            "description": "How long new leads have been sitting in their current stage",
+                            "properties": {
+                              "0-1_days": { "type": "integer" },
+                              "2-3_days": { "type": "integer" },
+                              "4-7_days": { "type": "integer" },
+                              "8-14_days": { "type": "integer" },
+                              "15+_days": { "type": "integer" }
+                            }
+                          }
                         }
                       }
                     },
@@ -483,7 +496,10 @@
                         "decided": { "type": "integer" },
                         "close_rate": { "type": "number" },
                         "close_rate_pct": { "type": "string" },
-                        "producers_count": { "type": "integer" }
+                        "producers_count": { "type": "integer" },
+                        "new": { "type": "integer" },
+                        "new_this_period": { "type": "integer" },
+                        "new_backlog": { "type": "integer" }
                       }
                     }
                   }

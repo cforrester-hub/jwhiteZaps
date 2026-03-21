@@ -488,6 +488,25 @@ async def team_performance(
     # Build producer lookup
     producer_map = {p.id: p for p in producers}
 
+    # Helper: compute days since enter_stage_date relative to today
+    today = _today_pacific()
+
+    def _days_in_stage(lead) -> int | None:
+        """Days since lead entered current stage."""
+        if not lead.enter_stage_date or len(lead.enter_stage_date) < 10:
+            return None
+        try:
+            entered = datetime.strptime(lead.enter_stage_date[:10], "%Y-%m-%d").date()
+            return (today - entered).days
+        except (ValueError, TypeError):
+            return None
+
+    def _entered_in_range(lead) -> bool:
+        """True if enter_stage_date falls within the query date range."""
+        if not lead.enter_stage_date:
+            return False
+        return lead.enter_stage_date >= start and lead.enter_stage_date <= end
+
     # Group leads by assigned_to
     by_producer = {}
     for lead in leads:
@@ -506,12 +525,35 @@ async def team_performance(
                 "lost": 0,
                 "contacted": 0,
                 "expired": 0,
+                "new_this_period": 0,
+                "new_backlog": 0,
+                "new_aging": {"0-1_days": 0, "2-3_days": 0, "4-7_days": 0, "8-14_days": 0, "15+_days": 0},
             }
         entry = by_producer[pid]
         entry["total"] += 1
         status_name = STATUS_MAP.get(lead.status, "unknown")
         if status_name in entry:
             entry[status_name] += 1
+
+        # New lead breakdown
+        if lead.status == 0:  # NEW
+            if _entered_in_range(lead):
+                entry["new_this_period"] += 1
+            else:
+                entry["new_backlog"] += 1
+
+            days_in = _days_in_stage(lead)
+            if days_in is not None:
+                if days_in <= 1:
+                    entry["new_aging"]["0-1_days"] += 1
+                elif days_in <= 3:
+                    entry["new_aging"]["2-3_days"] += 1
+                elif days_in <= 7:
+                    entry["new_aging"]["4-7_days"] += 1
+                elif days_in <= 14:
+                    entry["new_aging"]["8-14_days"] += 1
+                else:
+                    entry["new_aging"]["15+_days"] += 1
 
     # Compute close rates and sort
     results = []
@@ -532,6 +574,9 @@ async def team_performance(
     team_won = sum(e["won"] for e in results)
     team_lost = sum(e["lost"] for e in results)
     team_decided = team_won + team_lost
+    team_new = sum(e["new"] for e in results)
+    team_new_this_period = sum(e["new_this_period"] for e in results)
+    team_new_backlog = sum(e["new_backlog"] for e in results)
 
     return {
         "date_range": {"from": start, "to": date_to or _today_pacific().isoformat()},
@@ -544,6 +589,9 @@ async def team_performance(
             "close_rate": round(team_won / team_decided, 3) if team_decided > 0 else 0,
             "close_rate_pct": f"{round(team_won / team_decided * 100, 1) if team_decided > 0 else 0}%",
             "producers_count": len(results),
+            "new": team_new,
+            "new_this_period": team_new_this_period,
+            "new_backlog": team_new_backlog,
         },
     }
 

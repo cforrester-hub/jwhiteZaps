@@ -156,10 +156,12 @@ async def team_performance(
     date_to: str = "",
     days: int = 30,
 ) -> str:
-    """Get per-producer performance breakdown: close rates, lead counts, status splits.
+    """Get per-producer performance breakdown: close rates, lead counts, status splits, new lead aging.
 
-    Returns all active producers ranked by close rate. Great for team comparisons
-    and leaderboards.
+    Returns all active producers ranked by close rate. Includes:
+    - new_this_period vs new_backlog (true new leads vs stale leads still in "new" status)
+    - new_aging buckets (0-1 days, 2-3 days, 4-7 days, 8-14 days, 15+ days in stage)
+    Great for team comparisons, leaderboards, and pipeline hygiene analysis.
 
     Args:
         pipeline_id: Filter to a specific pipeline ID (optional)

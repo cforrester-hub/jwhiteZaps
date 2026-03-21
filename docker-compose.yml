@@ -162,6 +162,7 @@ services:
       dockerfile: Dockerfile
     container_name: ringcentral-service
     restart: unless-stopped
+    stop_grace_period: 5s
     environment:
       RINGCENTRAL_CLIENT_ID: ${RINGCENTRAL_CLIENT_ID}
       RINGCENTRAL_CLIENT_SECRET: ${RINGCENTRAL_CLIENT_SECRET}
@@ -195,7 +196,7 @@ services:
       dockerfile: ./services/workflow-service/Dockerfile
     container_name: workflow-service
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 5s
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-zapier}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapier_replacement}
       RINGCENTRAL_SERVICE_URL: http://ringcentral-service:8000
@@ -304,7 +305,7 @@ services:
       dockerfile: ./services/dashboard-service/Dockerfile
     container_name: dashboard-service
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 5s
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       EMPLOYEE_STATUS_API_KEY: ${EMPLOYEE_STATUS_API_KEY:-}
@@ -341,7 +342,7 @@ services:
       dockerfile: Dockerfile
     container_name: pipeline-dashboard
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 5s
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-zapier}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-zapier_replacement}
       AGENCYZOOM_API_URL: ${AGENCYZOOM_API_URL:-https://api.agencyzoom.com}
@@ -408,7 +409,7 @@ services:
       dockerfile: ./services/deputy-service/Dockerfile
     container_name: deputy-service
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 5s
     environment:
       DEPUTY_BASE_URL: ${DEPUTY_BASE_URL}
       DEPUTY_ACCESS_TOKEN: ${DEPUTY_ACCESS_TOKEN}

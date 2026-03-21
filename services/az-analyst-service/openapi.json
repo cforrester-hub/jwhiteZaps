@@ -263,7 +263,7 @@
       "get": {
         "operationId": "getQuoteAnalysis",
         "summary": "Analyze quote patterns — bundled vs mono-line, carriers, and products",
-        "description": "Returns bundled vs mono-line breakdown, carrier/product counts. Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets or high-volume producers). Uses synced data; no live API calls.",
+        "description": "Returns bundled vs mono-line breakdown, carrier/product counts. Searches ALL leads with quote records regardless of lead status, catching quoting activity even when producers haven't updated statuses. Returns status_mismatch count (leads with quotes but not in QUOTED/WON status = pipeline discipline issue). Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets).",
         "parameters": [
           {
             "name": "producer",
@@ -350,6 +350,8 @@
                         "bundled": { "type": "integer" },
                         "mono_line": { "type": "integer" },
                         "bundle_rate_pct": { "type": "string", "description": "Percentage of quoted leads that are bundled" },
+                        "status_mismatch": { "type": "integer", "description": "Leads with quote records but NOT in QUOTED/WON status — indicates pipeline discipline issue" },
+                        "status_mismatch_pct": { "type": "string", "description": "Percentage of quoted leads with status mismatch" },
                         "by_carrier": {
                           "type": "object",
                           "additionalProperties": { "type": "integer" }

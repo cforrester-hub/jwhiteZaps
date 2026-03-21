@@ -236,23 +236,19 @@ async def _sync_all_inner():
 
         await _rate_limit_delay()
 
-    # Step 2.5: Sync quotes and files for QUOTED and WON leads
-    # Only on full sync or for leads that changed in delta
-    quote_sync_statuses = {1, 2}  # QUOTED, WON
+    # Step 2.5: Sync quotes and files for ALL leads
+    # Captures quoting activity regardless of whether producer updated lead status
     async with async_session() as session:
         if is_delta:
             # Only sync quotes for leads updated in this delta
-            query = select(Lead).where(
-                Lead.status.in_(quote_sync_statuses),
-                Lead.synced_at >= sync_start,
-            )
+            query = select(Lead).where(Lead.synced_at >= sync_start)
         else:
-            query = select(Lead).where(Lead.status.in_(quote_sync_statuses))
+            query = select(Lead)
 
         result = await session.execute(query)
         leads_needing_quotes = result.scalars().all()
 
-    logger.info(f"Syncing quotes/files for {len(leads_needing_quotes)} quoted/won leads")
+    logger.info(f"Syncing quotes/files for {len(leads_needing_quotes)} leads")
 
     for lead in leads_needing_quotes:
         # Fetch quotes

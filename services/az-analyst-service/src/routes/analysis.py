@@ -608,7 +608,9 @@ async def quote_analysis(
 ):
     """Analyze quoting patterns from synced quote data. No live AZ API calls.
 
-    Returns bundled vs mono-line breakdown, carrier/product counts, and optionally per-lead detail.
+    Searches ALL leads that have quote records (regardless of lead status), so it
+    catches quoting activity even when producers haven't updated the lead status to QUOTED.
+    Includes a status_mismatch count showing leads with quotes but not in QUOTED/WON status.
     Use summary_only=true for aggregate stats without per-lead data (recommended for large datasets).
     """
     # Compute date range
@@ -624,8 +626,16 @@ async def quote_analysis(
         end = _today_pacific().isoformat() + "T23:59:59"
 
     async with async_session() as session:
-        # Get quoted/won leads
-        lead_query = select(Lead).where(Lead.status.in_([1, 2]))
+        # Find all leads that have quote records (any status)
+        leads_with_quotes_q = select(LeadQuote.lead_id).distinct()
+        leads_with_quotes_result = await session.execute(leads_with_quotes_q)
+        lead_ids_with_quotes = {row[0] for row in leads_with_quotes_result}
+
+        if not lead_ids_with_quotes:
+            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "status_mismatch": 0, "by_carrier": [], "by_product": []}}
+
+        # Get the lead records for those IDs, applying filters
+        lead_query = select(Lead).where(Lead.id.in_(lead_ids_with_quotes))
         if producer:
             lead_query = lead_query.where(
                 func.lower(Lead.assign_to_firstname) == producer.lower()
@@ -642,7 +652,7 @@ async def quote_analysis(
         lead_ids = [l.id for l in leads]
 
         if not lead_ids:
-            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "by_carrier": [], "by_product": []}}
+            return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "status_mismatch": 0, "by_carrier": [], "by_product": []}}
 
         # Fetch all quotes for these leads
         quote_result = await session.execute(
@@ -661,19 +671,34 @@ async def quote_analysis(
     product_counts = {}
     bundled_count = 0
     mono_count = 0
+    status_mismatch_count = 0
+    status_mismatch_leads = []
 
     for lead in leads:
         lead_quotes = quotes_by_lead.get(lead.id, [])
+        if not lead_quotes:
+            continue
+
         product_names = set(q.product_name for q in lead_quotes if q.product_name)
         is_bundled = len(product_names) > 1
+        has_status_mismatch = lead.status not in (1, 2)  # has quotes but not QUOTED/WON
 
         if bundled_only and not is_bundled:
             continue
 
         if is_bundled:
             bundled_count += 1
-        elif lead_quotes:
+        else:
             mono_count += 1
+
+        if has_status_mismatch:
+            status_mismatch_count += 1
+            status_mismatch_leads.append({
+                "id": lead.id,
+                "name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
+                "current_status": STATUS_MAP.get(lead.status, "unknown"),
+                "quote_count": len(lead_quotes),
+            })
 
         for q in lead_quotes:
             if q.carrier_name:
@@ -688,18 +713,24 @@ async def quote_analysis(
                 "is_bundled": is_bundled,
                 "product_lines": sorted(product_names),
                 "total_premium": sum(q.premium or 0 for q in lead_quotes),
+                "status_mismatch": has_status_mismatch,
             })
 
+    total_quoted = bundled_count + mono_count
     response = {
         "summary": {
-            "total": bundled_count + mono_count,
+            "total": total_quoted,
             "bundled": bundled_count,
             "mono_line": mono_count,
-            "bundle_rate_pct": f"{round(bundled_count / (bundled_count + mono_count) * 100, 1) if (bundled_count + mono_count) > 0 else 0}%",
+            "bundle_rate_pct": f"{round(bundled_count / total_quoted * 100, 1) if total_quoted > 0 else 0}%",
+            "status_mismatch": status_mismatch_count,
+            "status_mismatch_pct": f"{round(status_mismatch_count / total_quoted * 100, 1) if total_quoted > 0 else 0}%",
             "by_carrier": sorted(carrier_counts.items(), key=lambda x: -x[1]),
             "by_product": sorted(product_counts.items(), key=lambda x: -x[1]),
         },
     }
+    if status_mismatch_leads:
+        response["status_mismatches"] = status_mismatch_leads
     if not summary_only:
         response["leads"] = lead_data
 

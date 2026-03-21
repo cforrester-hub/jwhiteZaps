@@ -139,7 +139,10 @@ async def quote_analysis(
 ) -> str:
     """Analyze quoting patterns — which carriers, products, bundled vs mono-line, premiums.
 
-    Uses synced quote data from the database (no live AZ API calls, fast).
+    Searches ALL leads with quote records regardless of lead status, so it catches
+    quoting activity even when producers haven't updated statuses. Returns a
+    status_mismatch count showing leads with quotes but not in QUOTED/WON status
+    (indicates pipeline discipline issues).
     Use summary_only=true for aggregate stats without per-lead detail (recommended for large datasets).
 
     Args:

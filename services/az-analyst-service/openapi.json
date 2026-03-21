@@ -1,0 +1,541 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgencyZoom Analyst",
+    "description": "Analyze AgencyZoom lead data — producer activity, lead details, pipeline analytics, tasks, and search.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://jwhitezaps.atoaz.com"
+    }
+  ],
+  "paths": {
+    "/api/analysis/producer-activity": {
+      "get": {
+        "operationId": "getProducerActivity",
+        "summary": "Analyze a producer's lead activity for a date range",
+        "description": "Returns leads active on the given date(s) with pipeline and status breakdown. Optionally fetches live notes and tasks from AgencyZoom for top leads.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": true,
+            "description": "Producer first name (e.g. Gabriela, Eric)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "description": "Date in YYYY-MM-DD format. Defaults to today Pacific.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days (default 1)",
+            "schema": { "type": "integer", "default": 1 }
+          },
+          {
+            "name": "include_details",
+            "in": "query",
+            "required": false,
+            "description": "If true, fetches notes and tasks from AgencyZoom API for top leads. Slower (~30s).",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Producer activity data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "producer": {
+                      "type": "object",
+                      "properties": {
+                        "firstname": { "type": "string" },
+                        "lastname": { "type": "string", "nullable": true },
+                        "id": { "type": "integer", "nullable": true }
+                      }
+                    },
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "leads_active": { "type": "integer" },
+                        "new": { "type": "integer" },
+                        "quoted": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "lost": { "type": "integer" },
+                        "contacted": { "type": "integer" },
+                        "expired": { "type": "integer" }
+                      }
+                    },
+                    "leads": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Lead" }
+                    },
+                    "by_pipeline": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": { "type": "string" },
+                          "active": { "type": "integer" },
+                          "total_assigned": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/lead/{lead_id}": {
+      "get": {
+        "operationId": "getLeadDetail",
+        "summary": "Get detailed info for a specific lead with quotes, files, live notes and tasks",
+        "description": "Returns lead data from the database plus quotes, files, live notes and tasks fetched from the AgencyZoom API.",
+        "parameters": [
+          {
+            "name": "lead_id",
+            "in": "path",
+            "required": true,
+            "description": "The AgencyZoom lead ID",
+            "schema": { "type": "integer" }
+          },
+          {
+            "name": "include_notes",
+            "in": "query",
+            "required": false,
+            "description": "Fetch live notes from AgencyZoom API (default true)",
+            "schema": { "type": "boolean", "default": true }
+          },
+          {
+            "name": "include_tasks",
+            "in": "query",
+            "required": false,
+            "description": "Fetch live tasks from AgencyZoom API (default true)",
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lead detail with quotes, files, and optional notes and tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "lead": { "$ref": "#/components/schemas/Lead" },
+                    "quotes": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Quote" }
+                    },
+                    "quote_count": { "type": "integer" },
+                    "is_bundled": { "type": "boolean" },
+                    "files": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/File" }
+                    },
+                    "notes": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    },
+                    "tasks": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/pipeline-analytics": {
+      "get": {
+        "operationId": "getPipelineAnalytics",
+        "summary": "Get pipeline-level analytics with stage and status breakdowns",
+        "description": "Returns lead counts by pipeline, stage, and status with conversion rates. Uses synced data only — no live API calls, fast response.",
+        "parameters": [
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter to a specific pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter to a specific producer by first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Start date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline analytics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "pipelines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "total": { "type": "integer" },
+                          "by_stage": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "stage": { "type": "string" },
+                                "count": { "type": "integer" }
+                              }
+                            }
+                          },
+                          "by_status": {
+                            "type": "object",
+                            "properties": {
+                              "new": { "type": "integer" },
+                              "quoted": { "type": "integer" },
+                              "won": { "type": "integer" },
+                              "lost": { "type": "integer" },
+                              "contacted": { "type": "integer" },
+                              "expired": { "type": "integer" }
+                            }
+                          },
+                          "conversion_rate": { "type": "number" }
+                        }
+                      }
+                    },
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "leads": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "conversion_rate": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/quote-analysis": {
+      "get": {
+        "operationId": "getQuoteAnalysis",
+        "summary": "Analyze quote patterns — bundled vs mono-line, carriers, and products",
+        "description": "Returns leads with their quotes and a summary of bundled vs mono-line counts, carrier breakdown, and product breakdown. Uses synced data; no live API calls.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter to a specific producer by first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter to a specific pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "bundled_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, only return leads with quotes spanning multiple product lines",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Quote pattern analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "leads": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "lead": { "$ref": "#/components/schemas/Lead" },
+                          "quotes": {
+                            "type": "array",
+                            "items": { "$ref": "#/components/schemas/Quote" }
+                          },
+                          "is_bundled": { "type": "boolean" },
+                          "product_lines": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
+                          "total_premium": { "type": "number", "nullable": true }
+                        }
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "total": { "type": "integer" },
+                        "bundled": { "type": "integer" },
+                        "mono_line": { "type": "integer" },
+                        "by_carrier": {
+                          "type": "object",
+                          "additionalProperties": { "type": "integer" }
+                        },
+                        "by_product": {
+                          "type": "object",
+                          "additionalProperties": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/tasks": {
+      "get": {
+        "operationId": "getTasks",
+        "summary": "Get tasks for a producer from AgencyZoom",
+        "description": "Fetches tasks live from the AgencyZoom API for the specified producer. Can filter by status and date range.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": true,
+            "description": "Producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Filter: open, completed, or all (default all)",
+            "schema": { "type": "string", "default": "all" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Start date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Producer tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "producer": {
+                      "type": "object",
+                      "properties": {
+                        "firstname": { "type": "string" },
+                        "lastname": { "type": "string" },
+                        "id": { "type": "integer" }
+                      }
+                    },
+                    "task_count": { "type": "integer" },
+                    "tasks": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/search": {
+      "get": {
+        "operationId": "searchLeads",
+        "summary": "Search leads by name, phone, or email",
+        "description": "Searches synced lead data. At least one search parameter is required. Fast response — no live API calls.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "description": "Search by name (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "required": false,
+            "description": "Search by phone number (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "description": "Search by email (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Max results (default 20, max 100)",
+            "schema": { "type": "integer", "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": { "type": "integer" },
+                    "leads": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Lead" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Lead": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "firstname": { "type": "string", "nullable": true },
+          "lastname": { "type": "string", "nullable": true },
+          "pipeline": { "type": "string", "nullable": true },
+          "pipeline_id": { "type": "string", "nullable": true },
+          "stage": { "type": "string", "nullable": true },
+          "stage_id": { "type": "string", "nullable": true },
+          "status": { "type": "string" },
+          "status_code": { "type": "integer", "nullable": true },
+          "last_activity": { "type": "string", "nullable": true },
+          "enter_stage_date": { "type": "string", "nullable": true },
+          "contact_date": { "type": "string", "nullable": true },
+          "lead_source": { "type": "string", "nullable": true },
+          "lead_type": { "type": "string", "nullable": true },
+          "premium": { "type": "number", "nullable": true },
+          "quoted": { "type": "number", "nullable": true },
+          "phone": { "type": "string", "nullable": true },
+          "email": { "type": "string", "nullable": true },
+          "assigned_to": { "type": "integer", "nullable": true },
+          "assign_to_firstname": { "type": "string", "nullable": true },
+          "assign_to_lastname": { "type": "string", "nullable": true },
+          "street_address": { "type": "string", "nullable": true },
+          "city": { "type": "string", "nullable": true },
+          "state": { "type": "string", "nullable": true },
+          "zip_code": { "type": "string", "nullable": true },
+          "sold_date": { "type": "string", "nullable": true },
+          "x_date": { "type": "string", "nullable": true },
+          "quote_date": { "type": "string", "nullable": true },
+          "customer_id": { "type": "integer", "nullable": true },
+          "tag_names": { "type": "array", "items": { "type": "string" }, "nullable": true },
+          "lead_source_id": { "type": "integer", "nullable": true }
+        }
+      },
+      "Quote": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "lead_id": { "type": "integer", "nullable": true },
+          "carrier_name": { "type": "string", "nullable": true },
+          "product_name": { "type": "string", "nullable": true },
+          "premium": { "type": "number", "nullable": true },
+          "items": { "type": "array", "items": { "type": "object" }, "nullable": true },
+          "sold": { "type": "boolean", "nullable": true },
+          "effective_date": { "type": "string", "nullable": true },
+          "potential_revenue": { "type": "number", "nullable": true },
+          "property_address": { "type": "string", "nullable": true }
+        }
+      },
+      "File": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "lead_id": { "type": "integer", "nullable": true },
+          "title": { "type": "string", "nullable": true },
+          "media_type": { "type": "string", "nullable": true },
+          "file_type": { "type": "string", "nullable": true },
+          "size": { "type": "integer", "nullable": true },
+          "create_date": { "type": "string", "nullable": true },
+          "comments": { "type": "string", "nullable": true }
+        }
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "security": [
+    { "ApiKeyAuth": [] }
+  ]
+}

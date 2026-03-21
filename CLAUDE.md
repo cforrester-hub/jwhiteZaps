@@ -147,10 +147,12 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 ### AZ Analyst Service
 - GET /api/analysis/health - Health check
 - GET /api/analysis/producer-activity?producer={name}&date=&days=&include_details= - Producer lead activity (X-API-Key auth)
-- GET /api/analysis/lead/{lead_id}?include_notes=&include_tasks= - Lead detail with live notes/tasks
+- GET /api/analysis/lead/{lead_id}?include_notes=&include_tasks= - Lead detail with quotes, files, and live notes/tasks
 - GET /api/analysis/pipeline-analytics?pipeline_id=&producer=&date_from=&date_to= - Pipeline analytics from synced data
 - GET /api/analysis/tasks?producer={name}&status=&date_from=&date_to= - Producer tasks (live AZ API)
 - GET /api/analysis/search?query=&phone=&email=&limit= - Search leads by name/phone/email
+- GET /api/analysis/quote-analysis?producer=&pipeline_id=&bundled_only= - Quote pattern analysis (bundled vs mono, carriers, products)
+- **Keep in sync:** When adding/changing az-analyst-service endpoints, update the MCP server (`mcp-servers/az-analyst/server.py`) AND the OpenAPI spec (`services/az-analyst-service/openapi.json`) for ChatGPT Custom GPT
 
 ## Development Workflow
 - Commit directly to main, push, CI/CD deploys automatically

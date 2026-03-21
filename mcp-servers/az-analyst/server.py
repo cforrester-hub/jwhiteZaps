@@ -52,7 +52,10 @@ async def get_producer_activity(
 
 @mcp.tool()
 async def get_lead_detail(lead_id: int, include_notes: bool = True, include_tasks: bool = True) -> str:
-    """Get detailed info for a specific lead including live notes and tasks from AgencyZoom.
+    """Get detailed info for a specific lead including quotes, files, and optionally live notes/tasks from AgencyZoom.
+
+    Returns synced quote data (carrier, product, premium, bundled status) and file references.
+    Notes and tasks are fetched live from AZ API when requested.
 
     Args:
         lead_id: The AgencyZoom lead ID
@@ -121,6 +124,28 @@ async def get_tasks(producer: str, status: str = "all", date_from: str = "", dat
         "status": status,
         "date_from": date_from,
         "date_to": date_to,
+    })
+
+
+@mcp.tool()
+async def quote_analysis(
+    producer: str = "",
+    pipeline_id: str = "",
+    bundled_only: bool = False,
+) -> str:
+    """Analyze quoting patterns — which carriers, products, bundled vs mono-line, premiums.
+
+    Uses synced quote data from the database (no live AZ API calls, fast).
+
+    Args:
+        producer: Filter by producer first name (optional)
+        pipeline_id: Filter by pipeline ID (optional)
+        bundled_only: If true, only show leads with multiple product lines quoted
+    """
+    return await _call_api("/quote-analysis", {
+        "producer": producer,
+        "pipeline_id": pipeline_id,
+        "bundled_only": str(bundled_only).lower(),
     })
 
 

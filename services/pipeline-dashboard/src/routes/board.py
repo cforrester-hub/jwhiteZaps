@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import case, distinct, func, or_, select
+from sqlalchemy import distinct, func, or_, select
 
 from ..auth import get_current_user
 from ..database import Employee, Lead, Pipeline, Stage, async_session
@@ -627,39 +627,22 @@ async def get_stats_activity(
             db, user, pipeline_id or None, view, producers, activity_buckets, search, status
         )
 
-        # Total count
-        count_query = select(func.count()).select_from(lead_query.subquery())
-        total = (await db.execute(count_query)).scalar()
-
-        # by_date: group by date, last 90 days only
-        cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
-        date_expr = func.substr(Lead.last_activity_date, 1, 10)
-        date_query = (
-            select(date_expr.label("dt"), func.count().label("cnt"))
-            .select_from(lead_query.where(Lead.last_activity_date >= cutoff_90).subquery())
-            .group_by("dt")
-            .order_by(func.substr(Lead.last_activity_date, 1, 10).desc())
-        )
-        # Re-derive: apply the filter on top of the base query
-        base_sq = lead_query.where(
-            Lead.last_activity_date.isnot(None),
-            Lead.last_activity_date >= cutoff_90,
-        ).subquery()
-        date_query = (
-            select(
-                func.substr(base_sq.c.last_activity_date, 1, 10).label("dt"),
-                func.count().label("cnt"),
-            )
-            .group_by("dt")
-            .order_by(func.substr(base_sq.c.last_activity_date, 1, 10).desc())
-        )
-        date_rows = (await db.execute(date_query)).all()
-
-        # by_bucket: fetch all leads and bucket them in Python (reuse existing logic)
+        # Fetch all leads and compute everything in Python
         result = await db.execute(lead_query)
         all_leads = result.scalars().all()
 
-    by_date = [{"date": r[0], "count": r[1]} for r in date_rows]
+    total = len(all_leads)
+    cutoff_90 = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    # by_date: count per date, last 90 days only
+    date_counts = {}
+    for lead in all_leads:
+        if not lead.last_activity_date:
+            continue
+        dt = lead.last_activity_date[:10]
+        if dt >= cutoff_90:
+            date_counts[dt] = date_counts.get(dt, 0) + 1
+    by_date = [{"date": d, "count": c} for d, c in sorted(date_counts.items(), reverse=True)]
 
     # Compute buckets
     ordered_bounds = [("today", 0, 0), ("1", 1, 2), ("3", 3, 6), ("7", 7, 13), ("14", 14, 29), ("30", 30, 89)]

@@ -17,7 +17,7 @@ from ..az_client import (
     system_login,
 )
 from ..config import get_settings
-from ..database import Employee, Lead, Pipeline, Stage, async_session
+from ..database import Employee, Lead, LeadFile, LeadQuote, Pipeline, Stage, async_session
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -44,6 +44,7 @@ def _serialize_lead(lead: Lead) -> dict:
         "enter_stage_date": lead.enter_stage_date,
         "contact_date": lead.contact_date,
         "lead_source": lead.lead_source_name,
+        "lead_source_id": lead.lead_source_id,
         "lead_type": lead.lead_type,
         "premium": lead.premium,
         "quoted": lead.quoted,
@@ -52,6 +53,46 @@ def _serialize_lead(lead: Lead) -> dict:
         "assigned_to": lead.assigned_to,
         "assign_to_firstname": lead.assign_to_firstname,
         "assign_to_lastname": lead.assign_to_lastname,
+        # New high-value fields
+        "street_address": lead.street_address,
+        "city": lead.city,
+        "state": lead.state,
+        "zip_code": lead.zip_code,
+        "sold_date": lead.sold_date,
+        "x_date": lead.x_date,
+        "quote_date": lead.quote_date,
+        "customer_id": lead.customer_id,
+        "tag_names": lead.tag_names,
+    }
+
+
+def _serialize_quote(q: LeadQuote) -> dict:
+    """Convert a LeadQuote ORM object to a JSON-serializable dict."""
+    return {
+        "id": q.id,
+        "lead_id": q.lead_id,
+        "carrier_name": q.carrier_name,
+        "product_name": q.product_name,
+        "premium": q.premium,
+        "items": q.items,
+        "sold": bool(q.sold) if q.sold is not None else None,
+        "effective_date": q.effective_date,
+        "potential_revenue": q.potential_revenue,
+        "property_address": q.property_address,
+    }
+
+
+def _serialize_file(f: LeadFile) -> dict:
+    """Convert a LeadFile ORM object to a JSON-serializable dict."""
+    return {
+        "id": f.id,
+        "lead_id": f.lead_id,
+        "title": f.title,
+        "media_type": f.media_type,
+        "file_type": f.file_type,
+        "size": f.size,
+        "create_date": f.create_date,
+        "comments": f.comments,
     }
 
 
@@ -193,6 +234,22 @@ async def lead_detail(
         raise HTTPException(404, "Lead not found")
 
     response = {"lead": _serialize_lead(lead)}
+
+    # Include synced quotes and files from DB
+    async with async_session() as session:
+        quote_result = await session.execute(
+            select(LeadQuote).where(LeadQuote.lead_id == lead_id)
+        )
+        quotes = quote_result.scalars().all()
+        response["quotes"] = [_serialize_quote(q) for q in quotes]
+        response["quote_count"] = len(quotes)
+        response["is_bundled"] = len(set(q.product_name for q in quotes if q.product_name)) > 1
+
+        file_result = await session.execute(
+            select(LeadFile).where(LeadFile.lead_id == lead_id)
+        )
+        files = file_result.scalars().all()
+        response["files"] = [_serialize_file(f) for f in files]
 
     if include_notes or include_tasks:
         try:
@@ -389,4 +446,85 @@ async def search_leads(
     return {
         "count": len(leads),
         "leads": [_serialize_lead(l) for l in leads],
+    }
+
+
+@router.get("/quote-analysis", dependencies=[Depends(verify_api_key)])
+async def quote_analysis(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_id: Optional[str] = Query(None),
+    bundled_only: bool = Query(False, description="Only show leads with multiple product lines"),
+):
+    """Analyze quoting patterns from synced quote data. No live AZ API calls."""
+    async with async_session() as session:
+        # Get all quoted/won leads with their quotes
+        lead_query = select(Lead).where(Lead.status.in_([1, 2]))
+        if producer:
+            lead_query = lead_query.where(
+                func.lower(Lead.assign_to_firstname) == producer.lower()
+            )
+        if pipeline_id:
+            lead_query = lead_query.where(Lead.pipeline_id == pipeline_id)
+
+        lead_result = await session.execute(lead_query)
+        leads = lead_result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        if not lead_ids:
+            return {"leads": [], "summary": {"total": 0}}
+
+        # Fetch all quotes for these leads
+        quote_result = await session.execute(
+            select(LeadQuote).where(LeadQuote.lead_id.in_(lead_ids))
+        )
+        all_quotes = quote_result.scalars().all()
+
+        # Group quotes by lead
+        quotes_by_lead = {}
+        for q in all_quotes:
+            quotes_by_lead.setdefault(q.lead_id, []).append(q)
+
+    # Build response
+    lead_data = []
+    carrier_counts = {}
+    product_counts = {}
+    bundled_count = 0
+    mono_count = 0
+
+    for lead in leads:
+        lead_quotes = quotes_by_lead.get(lead.id, [])
+        product_names = set(q.product_name for q in lead_quotes if q.product_name)
+        is_bundled = len(product_names) > 1
+
+        if bundled_only and not is_bundled:
+            continue
+
+        if is_bundled:
+            bundled_count += 1
+        elif lead_quotes:
+            mono_count += 1
+
+        for q in lead_quotes:
+            if q.carrier_name:
+                carrier_counts[q.carrier_name] = carrier_counts.get(q.carrier_name, 0) + 1
+            if q.product_name:
+                product_counts[q.product_name] = product_counts.get(q.product_name, 0) + 1
+
+        lead_data.append({
+            **_serialize_lead(lead),
+            "quotes": [_serialize_quote(q) for q in lead_quotes],
+            "is_bundled": is_bundled,
+            "product_lines": sorted(product_names),
+            "total_premium": sum(q.premium or 0 for q in lead_quotes),
+        })
+
+    return {
+        "leads": lead_data,
+        "summary": {
+            "total": len(lead_data),
+            "bundled": bundled_count,
+            "mono_line": mono_count,
+            "by_carrier": sorted(carrier_counts.items(), key=lambda x: -x[1]),
+            "by_product": sorted(product_counts.items(), key=lambda x: -x[1]),
+        },
     }

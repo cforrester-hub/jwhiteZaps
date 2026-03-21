@@ -11,11 +11,13 @@ from .az_client import (
     _rate_limit_delay,
     fetch_all_leads_for_pipeline,
     fetch_employees,
+    fetch_lead_files,
+    fetch_lead_quotes,
     fetch_pipelines_and_stages,
     system_login,
 )
 from .config import get_settings
-from .database import Employee, Lead, Pipeline, Stage, SyncMeta, async_session
+from .database import Employee, Lead, LeadFile, LeadQuote, Pipeline, Stage, SyncMeta, async_session
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -215,6 +217,17 @@ async def _sync_all_inner():
                         workflow_stage_name=lead.get("workflowStageName"),
                         assign_to_firstname=lead.get("assignToFirstname"),
                         assign_to_lastname=lead.get("assignToLastname"),
+                        # New high-value columns
+                        street_address=lead.get("streetAddress"),
+                        city=lead.get("city"),
+                        state=lead.get("state"),
+                        zip_code=lead.get("zip"),
+                        sold_date=_convert_az_date(lead.get("soldDate")),
+                        x_date=_convert_az_date(lead.get("xDate")),
+                        quote_date=_convert_az_date(lead.get("quoteDate")),
+                        customer_id=lead.get("customerId"),
+                        tag_names=lead.get("tagNames"),
+                        lead_source_id=lead.get("leadSourceId"),
                         raw_json=lead,
                         synced_at=sync_start,
                     ))
@@ -222,6 +235,84 @@ async def _sync_all_inner():
                 total_leads += len(leads)
 
         await _rate_limit_delay()
+
+    # Step 2.5: Sync quotes and files for QUOTED and WON leads
+    # Only on full sync or for leads that changed in delta
+    quote_sync_statuses = {1, 2}  # QUOTED, WON
+    async with async_session() as session:
+        if is_delta:
+            # Only sync quotes for leads updated in this delta
+            query = select(Lead).where(
+                Lead.status.in_(quote_sync_statuses),
+                Lead.synced_at >= sync_start,
+            )
+        else:
+            query = select(Lead).where(Lead.status.in_(quote_sync_statuses))
+
+        result = await session.execute(query)
+        leads_needing_quotes = result.scalars().all()
+
+    logger.info(f"Syncing quotes/files for {len(leads_needing_quotes)} quoted/won leads")
+
+    for lead in leads_needing_quotes:
+        # Fetch quotes
+        try:
+            quotes = await fetch_lead_quotes(jwt, lead.id)
+            async with async_session() as session:
+                async with session.begin():
+                    # Delete existing quotes for this lead, then insert fresh
+                    await session.execute(
+                        delete(LeadQuote).where(LeadQuote.lead_id == lead.id)
+                    )
+                    for q in quotes:
+                        q_id = q.get("id")
+                        if q_id is None:
+                            continue
+                        await session.merge(LeadQuote(
+                            id=q_id,
+                            lead_id=lead.id,
+                            carrier_id=q.get("carrierId"),
+                            carrier_name=q.get("carrierName"),
+                            product_line_id=q.get("productLineId"),
+                            product_name=q.get("productName"),
+                            premium=q.get("premium"),
+                            items=q.get("items"),
+                            sold=1 if q.get("sold") else 0,
+                            effective_date=q.get("effectiveDate"),
+                            potential_revenue=q.get("potentialRevenue"),
+                            property_address=q.get("propertyAddress"),
+                            raw_json=q,
+                            synced_at=sync_start,
+                        ))
+        except Exception as e:
+            logger.warning(f"Failed to sync quotes for lead {lead.id}: {e}")
+
+        # Fetch files (quotes only, file_type=1)
+        try:
+            files = await fetch_lead_files(jwt, lead.id, file_type=1)
+            async with async_session() as session:
+                async with session.begin():
+                    await session.execute(
+                        delete(LeadFile).where(LeadFile.lead_id == lead.id)
+                    )
+                    for f in files:
+                        f_id = f.get("id")
+                        if f_id is None:
+                            continue
+                        await session.merge(LeadFile(
+                            id=f_id,
+                            lead_id=lead.id,
+                            title=f.get("title"),
+                            media_type=f.get("mediaType"),
+                            file_type=f.get("fileType"),
+                            size=f.get("size"),
+                            create_date=f.get("createDate"),
+                            comments=f.get("comments"),
+                            raw_json=f,
+                            synced_at=sync_start,
+                        ))
+        except Exception as e:
+            logger.warning(f"Failed to sync files for lead {lead.id}: {e}")
 
     # Step 3: Delete stale leads only on full sync (delta only upserts recent changes)
     if not is_delta and synced_pipeline_ids:

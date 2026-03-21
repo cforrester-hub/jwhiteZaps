@@ -147,7 +147,7 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 ### AZ Analyst Service
 - GET /api/analysis/health - Health check
 - GET /api/analysis/producer-activity?producer={name}&date=&days=&include_details= - Producer lead activity (X-API-Key auth)
-- GET /api/analysis/lead/{lead_id}?include_notes=&include_tasks= - Lead detail with quotes, files, and live notes/tasks
+- GET /api/analysis/lead/{lead_id}?include_notes=&include_tasks= - Lead detail with quotes, opportunities, files, and live notes/tasks
 - GET /api/analysis/pipeline-analytics?pipeline_id=&producer=&date_from=&date_to= - Pipeline analytics from synced data
 - GET /api/analysis/tasks?producer={name}&status=&date_from=&date_to= - Producer tasks (live AZ API)
 - GET /api/analysis/search?query=&phone=&email=&limit= - Search leads by name/phone/email

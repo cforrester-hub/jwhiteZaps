@@ -52,9 +52,10 @@ async def get_producer_activity(
 
 @mcp.tool()
 async def get_lead_detail(lead_id: int, include_notes: bool = True, include_tasks: bool = True) -> str:
-    """Get detailed info for a specific lead including quotes, files, and optionally live notes/tasks from AgencyZoom.
+    """Get detailed info for a specific lead including quotes, opportunities, files, and optionally live notes/tasks.
 
-    Returns synced quote data (carrier, product, premium, bundled status) and file references.
+    Returns synced data: quotes (carrier, product, premium, bundled status),
+    opportunities (carrier, product line, premium, status), and file references.
     Notes and tasks are fetched live from AZ API when requested.
 
     Args:

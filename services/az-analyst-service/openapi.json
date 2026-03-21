@@ -107,8 +107,8 @@
     "/api/analysis/lead/{lead_id}": {
       "get": {
         "operationId": "getLeadDetail",
-        "summary": "Get detailed info for a specific lead with quotes, files, live notes and tasks",
-        "description": "Returns lead data from the database plus quotes, files, live notes and tasks fetched from the AgencyZoom API.",
+        "summary": "Get detailed info for a specific lead with quotes, opportunities, files, live notes and tasks",
+        "description": "Returns lead data from the database plus quotes, opportunities, files, live notes and tasks fetched from the AgencyZoom API.",
         "parameters": [
           {
             "name": "lead_id",
@@ -134,7 +134,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Lead detail with quotes, files, and optional notes and tasks",
+            "description": "Lead detail with quotes, opportunities, files, and optional notes and tasks",
             "content": {
               "application/json": {
                 "schema": {
@@ -144,6 +144,10 @@
                     "quotes": {
                       "type": "array",
                       "items": { "$ref": "#/components/schemas/Quote" }
+                    },
+                    "opportunities": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Opportunity" }
                     },
                     "quote_count": { "type": "integer" },
                     "is_bundled": { "type": "boolean" },
@@ -650,6 +654,19 @@
           "sold": { "type": "boolean", "nullable": true },
           "effective_date": { "type": "string", "nullable": true },
           "potential_revenue": { "type": "number", "nullable": true },
+          "property_address": { "type": "string", "nullable": true }
+        }
+      },
+      "Opportunity": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "lead_id": { "type": "integer" },
+          "carrier_id": { "type": "integer", "nullable": true },
+          "product_line_id": { "type": "integer", "nullable": true },
+          "status": { "type": "integer", "nullable": true },
+          "premium": { "type": "number", "nullable": true },
+          "items": { "type": "integer", "nullable": true },
           "property_address": { "type": "string", "nullable": true }
         }
       },

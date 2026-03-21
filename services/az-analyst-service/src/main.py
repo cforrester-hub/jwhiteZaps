@@ -2,8 +2,10 @@
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 
 from .config import get_settings
 from .routes.analysis import router as analysis_router
@@ -31,3 +33,11 @@ app = FastAPI(
 )
 
 app.include_router(analysis_router)
+
+OPENAPI_PATH = Path(__file__).resolve().parent.parent / "openapi.json"
+
+
+@app.get("/api/analysis/openapi.json", include_in_schema=False)
+async def serve_openapi():
+    """Serve the hand-maintained OpenAPI spec for ChatGPT import."""
+    return FileResponse(OPENAPI_PATH, media_type="application/json")

@@ -129,6 +129,8 @@ class Lead(Base):
     tag_names = Column(String(500), nullable=True)
     lead_source_id = Column(Integer, nullable=True)
     raw_json = Column(JSONB, nullable=True)
+    detail_json = Column(JSONB, nullable=True)
+    detail_synced_at = Column(DateTime, nullable=True)
     synced_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
@@ -182,4 +184,25 @@ class LeadFile(Base):
 
     __table_args__ = (
         Index("ix_pd_lead_files_lead", "lead_id"),
+    )
+
+
+class LeadOpportunity(Base):
+    """Cached AgencyZoom lead opportunities (read-only)."""
+
+    __tablename__ = "pd_lead_opportunities"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    carrier_id = Column(Integer, nullable=True)
+    product_line_id = Column(Integer, nullable=True)
+    status = Column(Integer, nullable=True)
+    premium = Column(Float, nullable=True)
+    items = Column(Integer, nullable=True)
+    property_address = Column(String(500), nullable=True)
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_opportunities_lead", "lead_id"),
     )

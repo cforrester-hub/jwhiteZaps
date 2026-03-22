@@ -45,16 +45,32 @@ def _is_effectively_quoted(lead: Lead, quoted_lead_ids: set[int]) -> bool:
     return lead.id in quoted_lead_ids or bool(lead.quote_date)
 
 
-def _serialize_lead(lead: Lead, effectively_quoted: bool = False) -> dict:
-    """Convert a Lead ORM object to a JSON-serializable dict."""
+def _serialize_lead(lead: Lead, effectively_quoted: bool = False,
+                    pipelines_map: dict = None, stages_map: dict = None) -> dict:
+    """Convert a Lead ORM object to a JSON-serializable dict.
+
+    pipelines_map/stages_map resolve names when workflow_name/workflow_stage_name are null.
+    """
+    pipeline_name = lead.workflow_name
+    if not pipeline_name and pipelines_map and lead.pipeline_id:
+        pipeline_name = pipelines_map.get(lead.pipeline_id)
+
+    stage_name = lead.workflow_stage_name
+    if not stage_name and stages_map and lead.stage_id:
+        stage_info = stages_map.get(lead.stage_id)
+        if isinstance(stage_info, dict):
+            stage_name = stage_info.get("name")
+        elif isinstance(stage_info, str):
+            stage_name = stage_info
+
     return {
         "id": lead.id,
         "name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
         "firstname": lead.firstname,
         "lastname": lead.lastname,
-        "pipeline": lead.workflow_name,
+        "pipeline": pipeline_name,
         "pipeline_id": lead.pipeline_id,
-        "stage": lead.workflow_stage_name,
+        "stage": stage_name,
         "stage_id": lead.stage_id,
         "status": STATUS_MAP.get(lead.status, "unknown"),
         "status_code": lead.status,

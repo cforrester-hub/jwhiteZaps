@@ -182,7 +182,21 @@ async def _sync_all_inner():
 
     await _rate_limit_delay()
 
+    # Build pipeline/stage name lookups from synced pipeline data
+    pipeline_names = {}
+    stage_names = {}
+    for p in pipelines_data:
+        pipeline_names[str(p.get("id", ""))] = p.get("name", "")
+        for s in p.get("stages", []):
+            stage_names[str(s.get("id", ""))] = s.get("name", "")
+
     # Step 2: Sync leads per pipeline
+    # For full sync, limit to last 18 months of activity
+    if not is_delta and not delta_date_filter:
+        eighteen_months_ago = (sync_start - timedelta(days=548)).strftime("%Y-%m-%d")
+        delta_date_filter = eighteen_months_ago
+        logger.info(f"Full sync: limiting to leads with activity since {delta_date_filter}")
+
     total_leads = 0
     synced_pipeline_ids = []  # Track successful syncs for safe stale deletion
     for p in pipelines_data:
@@ -210,10 +224,14 @@ async def _sync_all_inner():
                     if lead_id is None:
                         continue
 
+                    # Use lead's own workflowId if available, fall back to loop pipeline
+                    lead_pipeline_id = str(lead.get("workflowId") or pid)
+                    lead_stage_id = str(lead.get("workflowStageId", ""))
+
                     await session.merge(Lead(
                         id=lead_id,
-                        pipeline_id=str(pid),
-                        stage_id=str(lead.get("workflowStageId", "")),
+                        pipeline_id=lead_pipeline_id,
+                        stage_id=lead_stage_id,
                         assigned_to=lead.get("assignedTo"),
                         firstname=lead.get("firstname"),
                         lastname=lead.get("lastname"),
@@ -227,11 +245,12 @@ async def _sync_all_inner():
                         last_activity_date=_convert_az_date(lead.get("lastActivityDate")),
                         contact_date=_convert_az_date(lead.get("contactDate")),
                         lead_source_name=lead.get("leadSourceName"),
-                        workflow_name=lead.get("workflowName"),
-                        workflow_stage_name=lead.get("workflowStageName"),
+                        # Resolve names: prefer lead data, fall back to pipeline/stage lookup
+                        workflow_name=lead.get("workflowName") or pipeline_names.get(lead_pipeline_id),
+                        workflow_stage_name=lead.get("workflowStageName") or stage_names.get(lead_stage_id),
                         assign_to_firstname=lead.get("assignToFirstname"),
                         assign_to_lastname=lead.get("assignToLastname"),
-                        # New high-value columns
+                        # High-value columns
                         street_address=lead.get("streetAddress"),
                         city=lead.get("city"),
                         state=lead.get("state"),

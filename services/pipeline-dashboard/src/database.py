@@ -1,6 +1,9 @@
 """Database connection and models for the pipeline dashboard."""
 
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import (
     Column,
@@ -273,29 +276,36 @@ async def init_db():
                 f"ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS {col} {coltype}"
             ))
 
-    # One-time backfill: reset detail_synced_at and set flag to re-fetch quotes with dedicated endpoint
+    # Pipeline fix v1: clear all lead data and force full re-sync with correct pipeline_id
     async with async_session() as session:
         async with session.begin():
             result = await session.execute(
-                select(SyncMeta).where(SyncMeta.key == "quotes_backfill_v2")
+                select(SyncMeta).where(SyncMeta.key == "pipeline_fix_v1")
             )
             existing = result.scalar_one_or_none()
             if existing is None:
-                # Reset detail_synced_at so backfill re-fetches all leads
+                logger.info("Pipeline fix v1: clearing lead data for clean re-sync")
+                # Truncate lead-related tables (cascade will handle quotes/files/opportunities)
+                await session.execute(text("DELETE FROM pd_lead_quotes"))
+                await session.execute(text("DELETE FROM pd_lead_files"))
+                await session.execute(text("DELETE FROM pd_lead_opportunities"))
+                await session.execute(text("DELETE FROM pd_leads"))
+                # Reset sync state to force full sync
                 await session.execute(text(
-                    "UPDATE pd_leads SET detail_synced_at = NULL"
+                    "DELETE FROM pd_sync_meta WHERE key IN ('last_successful_sync', 'detail_backfill_needed', 'quotes_backfill_v2')"
                 ))
-                # Set backfill flag
+                # Set backfill flag for detail sync
                 await session.merge(SyncMeta(
                     key="detail_backfill_needed",
                     value="true",
                     updated_at=datetime.utcnow(),
                 ))
-                # Mark this migration as done so it doesn't repeat
+                # Mark this migration as done
                 await session.merge(SyncMeta(
-                    key="quotes_backfill_v2",
+                    key="pipeline_fix_v1",
                     value="true",
                     updated_at=datetime.utcnow(),
                 ))
+                logger.info("Pipeline fix v1: complete — next sync will be a full 18-month re-sync")
 
 

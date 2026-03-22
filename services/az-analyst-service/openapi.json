@@ -44,6 +44,20 @@
             "required": false,
             "description": "If true, fetches notes and tasks from AgencyZoom API for top leads. Slower (~30s).",
             "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, return only summary counts without per-lead list (faster).",
+            "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "group_by_day",
+            "in": "query",
+            "required": false,
+            "description": "If true, break down activity counts by day within the date range.",
+            "schema": { "type": "boolean", "default": false }
           }
         ],
         "responses": {
@@ -305,6 +319,27 @@
             "schema": { "type": "integer", "default": 0 }
           },
           {
+            "name": "pipeline_name",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline name (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lead_source",
+            "in": "query",
+            "required": false,
+            "description": "Filter by lead source name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "source_group",
+            "in": "query",
+            "required": false,
+            "description": "Filter by classified source group: vendor_lead, inbound, book, referral, targeted, partner",
+            "schema": { "type": "string" }
+          },
+          {
             "name": "bundled_only",
             "in": "query",
             "required": false,
@@ -537,6 +572,213 @@
                         "new": { "type": "integer" },
                         "new_this_period": { "type": "integer" },
                         "new_backlog": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/funnel-performance": {
+      "get": {
+        "operationId": "getFunnelPerformance",
+        "summary": "Executive funnel metrics with flexible grouping and timing",
+        "description": "Quote rates, close rates, speed-to-quote, and bundle analysis filtered by enter_stage_date. Use group_by for breakdowns by producer, pipeline, source, day, or week.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter by producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline name (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lead_source",
+            "in": "query",
+            "required": false,
+            "description": "Filter by lead source name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "source_group",
+            "in": "query",
+            "required": false,
+            "description": "Filter by classified source group: vendor_lead, inbound, book, referral, targeted, partner",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "channel_type",
+            "in": "query",
+            "required": false,
+            "description": "Filter by channel type: internet, inbound, internal, reactivation, outbound, etc.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Start date YYYY-MM-DD (defaults to 30 days back)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days if date_from not set (default 30)",
+            "schema": { "type": "integer", "default": 30 }
+          },
+          {
+            "name": "group_by",
+            "in": "query",
+            "required": false,
+            "description": "Break down results by: producer, pipeline, source, day, or week",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "report_mode",
+            "in": "query",
+            "required": false,
+            "description": "standard (rates from leads_entered) or internet (rates from contacted/quoted)",
+            "schema": { "type": "string", "default": "standard" }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, omit the groups array (default true for safety)",
+            "schema": { "type": "boolean", "default": true }
+          },
+          {
+            "name": "include_leads",
+            "in": "query",
+            "required": false,
+            "description": "If true, include per-lead detail in response (default false)",
+            "schema": { "type": "boolean", "default": false }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Funnel performance metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "leads_entered": { "type": "integer" },
+                        "contacted": { "type": "integer" },
+                        "quoted": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "lost": { "type": "integer" },
+                        "contact_rate_pct": { "type": "string" },
+                        "quote_rate_pct": { "type": "string" },
+                        "close_rate_pct": { "type": "string" },
+                        "bundle_rate_pct": { "type": "string" },
+                        "avg_days_to_quote": { "type": "number", "nullable": true },
+                        "avg_days_to_close": { "type": "number", "nullable": true }
+                      }
+                    },
+                    "groups": {
+                      "type": "array",
+                      "description": "Per-group breakdown when group_by is set and summary_only=false",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/data-quality": {
+      "get": {
+        "operationId": "getDataQualityReport",
+        "summary": "Data quality diagnostics for pipeline discipline",
+        "description": "Surfaces pipeline discipline issues: status mismatches, missing timestamps, stuck leads (14+ days in NEW), won without quotes, and timeline anomalies. Returns a health score.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter by producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "How far back to scan (default 90)",
+            "schema": { "type": "integer", "default": 90 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Data quality diagnostic report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total_leads_scanned": { "type": "integer" },
+                    "health_score_pct": { "type": "number", "description": "0-100 score; higher is better" },
+                    "issues": {
+                      "type": "object",
+                      "properties": {
+                        "quoted_wrong_status": { "type": "integer" },
+                        "won_without_quotes": { "type": "integer" },
+                        "expired_with_quotes": { "type": "integer" },
+                        "missing_contact_date": { "type": "integer" },
+                        "stuck_in_new": { "type": "integer" },
+                        "timeline_anomalies": { "type": "integer" }
+                      }
+                    },
+                    "sample_leads": {
+                      "type": "object",
+                      "description": "Sample leads per issue category",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": { "$ref": "#/components/schemas/Lead" }
                       }
                     }
                   }

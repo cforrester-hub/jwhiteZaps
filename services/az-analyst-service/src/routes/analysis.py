@@ -1106,3 +1106,147 @@ async def funnel_performance(
         ]
 
     return response
+
+
+@router.get("/data-quality", dependencies=[Depends(verify_api_key)])
+async def data_quality_report(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
+    days: int = Query(90, description="How far back to scan", ge=1, le=365),
+):
+    """Data quality diagnostics — surfaces pipeline discipline issues and missing data.
+
+    Scans leads for common data quality problems like quoted leads with wrong status,
+    missing timestamps, stuck leads, and timeline anomalies.
+    """
+    start = (_today_pacific() - timedelta(days=days - 1)).isoformat()
+
+    async with async_session() as session:
+        conditions = [Lead.last_activity_date >= start]
+        if producer:
+            conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+
+        result = await session.execute(select(Lead).where(*conditions))
+        leads = result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+
+    today = _today_pacific()
+
+    def _days_old(date_str):
+        dt = _parse_date_str(date_str)
+        if not dt:
+            return None
+        return (datetime.combine(today, datetime.min.time()) - dt).days
+
+    # Diagnostic categories
+    issues = {}
+
+    # 1. Quoted but wrong status (has quotes but status is NEW or CONTACTED)
+    quoted_wrong = [l for l in leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status in (0, 4)]
+    issues["quoted_but_wrong_status"] = {
+        "count": len(quoted_wrong),
+        "severity": "high",
+        "description": "Has quote records or quote_date but status is NEW or CONTACTED",
+    }
+
+    # 2. Won without quote (status=WON but no quote records and no quote_date)
+    won_no_quote = [l for l in leads if l.status == 2 and not _is_effectively_quoted(l, quoted_lead_ids)]
+    issues["won_without_quote"] = {
+        "count": len(won_no_quote),
+        "severity": "medium",
+        "description": "Status is WON but no quote records or quote_date found",
+    }
+
+    # 3. Expired with quote (status=EXPIRED but has quote records)
+    expired_quoted = [l for l in leads if l.status == 5 and _is_effectively_quoted(l, quoted_lead_ids)]
+    issues["expired_with_quote"] = {
+        "count": len(expired_quoted),
+        "severity": "medium",
+        "description": "Status is EXPIRED but has quote records (potential lost revenue)",
+    }
+
+    # 4. Missing contact date (contacted/quoted/won but no contact_date)
+    missing_contact = [l for l in leads if (l.status in (4,) or _is_effectively_quoted(l, quoted_lead_ids) or l.status == 2) and not l.contact_date]
+    issues["missing_contact_date"] = {
+        "count": len(missing_contact),
+        "severity": "low",
+        "description": "Lead is contacted/quoted/won but contact_date is not set",
+    }
+
+    # 5. Missing quote date (has quote records but quote_date field is null)
+    missing_quote_date = [l for l in leads if l.id in quoted_lead_ids and not l.quote_date]
+    issues["missing_quote_date"] = {
+        "count": len(missing_quote_date),
+        "severity": "low",
+        "description": "Has quote records but quote_date field is not set on lead",
+    }
+
+    # 6. Stuck leads (status=NEW for 14+ days)
+    stuck = [l for l in leads if l.status == 0 and not _is_effectively_quoted(l, quoted_lead_ids)]
+    stuck = [l for l in stuck if _days_old(l.enter_stage_date) is not None and _days_old(l.enter_stage_date) > 14]
+    issues["stuck_in_new_14_plus_days"] = {
+        "count": len(stuck),
+        "severity": "high",
+        "description": "Status is NEW (not quoted) and has been in current stage for 14+ days",
+    }
+
+    # 7. Sold without sold_date
+    sold_no_date = [l for l in leads if l.status == 2 and not l.sold_date]
+    issues["sold_without_sold_date"] = {
+        "count": len(sold_no_date),
+        "severity": "medium",
+        "description": "Status is WON but sold_date is not recorded",
+    }
+
+    # 8. Timeline anomalies (dates out of logical order)
+    timeline_bad = []
+    for l in leads:
+        sold_dt = _parse_date_str(l.sold_date)
+        quote_dt = _parse_date_str(l.quote_date)
+        contact_dt = _parse_date_str(l.contact_date)
+        if sold_dt and quote_dt and sold_dt < quote_dt:
+            timeline_bad.append(l)
+        elif quote_dt and contact_dt and quote_dt < contact_dt:
+            timeline_bad.append(l)
+    issues["timeline_anomalies"] = {
+        "count": len(timeline_bad),
+        "severity": "low",
+        "description": "Dates are out of logical order (e.g., sold before quoted)",
+    }
+
+    # Total issues
+    total_issues = sum(issue["count"] for issue in issues.values())
+    total_leads = len(leads)
+    health_score = round((total_leads - total_issues) / total_leads * 100) if total_leads > 0 else 100
+
+    # Sample leads per category (up to 5 each)
+    sample_leads = {}
+    category_leads = {
+        "quoted_but_wrong_status": quoted_wrong,
+        "won_without_quote": won_no_quote,
+        "expired_with_quote": expired_quoted,
+        "stuck_in_new_14_plus_days": stuck,
+        "sold_without_sold_date": sold_no_date,
+        "timeline_anomalies": timeline_bad,
+    }
+    for cat, cat_leads in category_leads.items():
+        if cat_leads:
+            sample_leads[cat] = [
+                {"id": l.id, "name": f"{l.firstname or ''} {l.lastname or ''}".strip(),
+                 "status": STATUS_MAP.get(l.status, "unknown"), "producer": l.assign_to_firstname,
+                 "pipeline": l.workflow_name, "enter_stage_date": l.enter_stage_date}
+                for l in cat_leads[:5]
+            ]
+
+    return {
+        "date_range": {"from": start, "to": _today_pacific().isoformat()},
+        "total_leads_scanned": total_leads,
+        "total_issues": total_issues,
+        "health_score_pct": f"{health_score}%",
+        "issues": issues,
+        "sample_leads": sample_leads,
+    }

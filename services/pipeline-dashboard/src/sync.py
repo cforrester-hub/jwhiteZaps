@@ -270,23 +270,35 @@ async def _sync_all_inner():
         await _rate_limit_delay()
 
     # Step 2.5: Sync lead details (quotes, opportunities via detail endpoint; files via separate call)
+    # Only fetch details for leads likely to have quotes (saves thousands of API calls)
+    quote_likely_filter = or_(
+        Lead.quote_date != None,
+        Lead.quoted != None,
+        Lead.premium != None,
+        Lead.status == 2,  # WON — must have been quoted
+    )
+
     async with async_session() as session:
         if needs_detail_backfill:
-            # Full backfill: all leads that haven't had detail synced
+            # Full backfill: leads likely to have quotes that haven't been detail-synced
             query = select(Lead).where(
-                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start)
+                quote_likely_filter,
+                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start),
             )
         elif is_delta:
-            # Delta: only leads updated in this sync cycle
-            query = select(Lead).where(Lead.synced_at >= sync_start)
+            # Delta: only leads updated in this sync cycle that are likely to have quotes
+            query = select(Lead).where(
+                Lead.synced_at >= sync_start,
+                quote_likely_filter,
+            )
         else:
-            # Full sync: all leads
-            query = select(Lead)
+            # Full sync: all leads likely to have quotes
+            query = select(Lead).where(quote_likely_filter)
 
         result = await session.execute(query)
         leads_needing_detail = result.scalars().all()
 
-    logger.info(f"Syncing details for {len(leads_needing_detail)} leads")
+    logger.info(f"Syncing details for {len(leads_needing_detail)} leads (filtered to quote-likely)")
 
     detail_success = 0
     detail_errors = 0

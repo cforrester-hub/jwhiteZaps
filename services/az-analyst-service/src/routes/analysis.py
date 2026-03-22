@@ -212,6 +212,8 @@ async def producer_activity(
     date: Optional[str] = Query(None, description="Date (YYYY-MM-DD), defaults to today Pacific"),
     days: int = Query(1, description="Look back N days", ge=1, le=90),
     include_details: bool = Query(False, description="Fetch notes/tasks from AZ API for top leads"),
+    summary_only: bool = Query(False, description="Omit leads array (faster for large queries)"),
+    group_by_day: bool = Query(False, description="Add by_date daily activity counts"),
 ):
     """Analyze lead activity for a given date range. Omit producer for company-wide view."""
     # Parse date range
@@ -280,10 +282,13 @@ async def producer_activity(
             pipeline_groups[pname]["total_assigned"] = count_result.scalar() or 0
 
         # Serialize leads
-        serialized_leads = [_serialize_lead(l, _is_effectively_quoted(l, quoted_lead_ids)) for l in leads]
+        if summary_only:
+            serialized_leads = []
+        else:
+            serialized_leads = [_serialize_lead(l, _is_effectively_quoted(l, quoted_lead_ids)) for l in leads]
 
         # Optionally fetch live details for top leads
-        if include_details and leads:
+        if not summary_only and include_details and leads:
             try:
                 jwt = await system_login()
                 # Cap leads fetched so we stay under max_live_api_calls (2 calls per lead: notes + tasks)
@@ -309,7 +314,7 @@ async def producer_activity(
             except Exception as e:
                 logger.error(f"Failed to authenticate with AZ API: {e}")
 
-    return {
+    response = {
         "producer": {
             "firstname": employee.firstname if employee else (producer or "All"),
             "lastname": employee.lastname if employee else None,
@@ -326,6 +331,16 @@ async def producer_activity(
         "leads": serialized_leads,
         "by_pipeline": list(pipeline_groups.values()),
     }
+
+    if group_by_day:
+        by_date = {}
+        for lead in leads:
+            day_key = (lead.last_activity_date or "")[:10]
+            if day_key:
+                by_date[day_key] = by_date.get(day_key, 0) + 1
+        response["by_date"] = [{"date": k, "count": v} for k, v in sorted(by_date.items())]
+
+    return response
 
 
 @router.get("/lead/{lead_id}", dependencies=[Depends(verify_api_key)])
@@ -722,6 +737,9 @@ async def team_performance(
 async def quote_analysis(
     producer: Optional[str] = Query(None, description="Filter by producer firstname"),
     pipeline_id: Optional[str] = Query(None),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    lead_source: Optional[str] = Query(None, description="Filter by lead_source_name"),
+    source_group: Optional[str] = Query(None, description="Filter by classified source group"),
     date_from: Optional[str] = Query(None, description="Filter by last_activity_date start YYYY-MM-DD"),
     date_to: Optional[str] = Query(None, description="Filter by last_activity_date end YYYY-MM-DD"),
     days: int = Query(0, description="Look back N days (shortcut for date_from, ignored if date_from set)", ge=0, le=365),
@@ -771,6 +789,10 @@ async def quote_analysis(
             )
         if pipeline_id:
             lead_query = lead_query.where(Lead.pipeline_id == pipeline_id)
+        if pipeline_name:
+            lead_query = lead_query.where(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+        if lead_source:
+            lead_query = lead_query.where(Lead.lead_source_name == lead_source)
         if start:
             lead_query = lead_query.where(Lead.last_activity_date >= start)
         if end:
@@ -779,6 +801,10 @@ async def quote_analysis(
         lead_result = await session.execute(lead_query)
         leads = lead_result.scalars().all()
         lead_ids = [l.id for l in leads]
+
+        if source_group:
+            leads = [l for l in leads if classify_source(l.lead_source_name) == source_group]
+            lead_ids = [l.id for l in leads]
 
         if not lead_ids:
             return {"summary": {"total": 0, "bundled": 0, "mono_line": 0, "by_carrier": [], "by_product": []}}

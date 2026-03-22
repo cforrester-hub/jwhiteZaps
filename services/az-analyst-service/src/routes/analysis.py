@@ -1,6 +1,7 @@
 """Analysis REST API endpoints."""
 
 import logging
+import statistics
 from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -18,6 +19,7 @@ from ..az_client import (
 )
 from ..config import get_settings
 from ..database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, async_session
+from ..normalization import classify_pipeline, classify_source
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -25,6 +27,54 @@ settings = get_settings()
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 STATUS_MAP = {0: "new", 1: "quoted", 2: "won", 3: "lost", 4: "contacted", 5: "expired"}
+
+
+# ---------------------------------------------------------------------------
+# Timing helpers
+# ---------------------------------------------------------------------------
+
+def _parse_date_str(s: str | None) -> datetime | None:
+    """Parse a date string into datetime. Handles 'YYYY-MM-DD' and 'YYYY-MM-DD HH:MM:SS'."""
+    if not s or len(s) < 10:
+        return None
+    try:
+        if len(s) >= 19:
+            return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+        return datetime.strptime(s[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+
+
+def _hours_between(start: str | None, end: str | None) -> float | None:
+    """Calculate hours between two date strings. Returns None if either is missing or end < start."""
+    s = _parse_date_str(start)
+    e = _parse_date_str(end)
+    if not s or not e or e < s:
+        return None
+    return round((e - s).total_seconds() / 3600, 1)
+
+
+def _timing_stats(values: list[float]) -> dict:
+    """Compute median, average, and sample size for a list of hour values."""
+    clean = [v for v in values if v is not None]
+    if not clean:
+        return {"median_hours": None, "avg_hours": None, "sample_size": 0}
+    return {
+        "median_hours": round(statistics.median(clean), 1),
+        "avg_hours": round(sum(clean) / len(clean), 1),
+        "sample_size": len(clean),
+    }
+
+
+async def _load_name_maps(session) -> tuple[dict, dict]:
+    """Load pipeline and stage name lookup maps from DB."""
+    pipeline_result = await session.execute(select(Pipeline))
+    pipelines_map = {p.id: p.name for p in pipeline_result.scalars().all()}
+
+    stage_result = await session.execute(select(Stage))
+    stages_map = {s.id: s.name for s in stage_result.scalars().all()}
+
+    return pipelines_map, stages_map
 
 
 async def _get_quoted_lead_ids(session, lead_ids: list[int] = None) -> set[int]:

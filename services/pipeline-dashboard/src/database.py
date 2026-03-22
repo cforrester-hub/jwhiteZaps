@@ -280,7 +280,7 @@ async def init_db():
     async with async_session() as session:
         async with session.begin():
             result = await session.execute(
-                select(SyncMeta).where(SyncMeta.key == "pipeline_fix_v1")
+                select(SyncMeta).where(SyncMeta.key == "pipeline_fix_v2")
             )
             existing = result.scalar_one_or_none()
             if existing is None:
@@ -302,7 +302,7 @@ async def init_db():
                 ))
                 # Mark this migration as done
                 await session.merge(SyncMeta(
-                    key="pipeline_fix_v1",
+                    key="pipeline_fix_v2",
                     value="true",
                     updated_at=datetime.utcnow(),
                 ))

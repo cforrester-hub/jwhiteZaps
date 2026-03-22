@@ -191,10 +191,10 @@ async def _sync_all_inner():
             stage_names[str(s.get("id", ""))] = s.get("name", "")
 
     # Step 2: Sync leads per pipeline
-    # For full sync, limit to last 18 months of activity
+    # For full sync, limit to last 12 months of activity
     if not is_delta and not delta_date_filter:
-        eighteen_months_ago = (sync_start - timedelta(days=548)).strftime("%Y-%m-%d")
-        delta_date_filter = eighteen_months_ago
+        twelve_months_ago = (sync_start - timedelta(days=365)).strftime("%Y-%m-%d")
+        delta_date_filter = twelve_months_ago
         logger.info(f"Full sync: limiting to leads with activity since {delta_date_filter}")
 
     total_leads = 0

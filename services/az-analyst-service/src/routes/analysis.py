@@ -864,3 +864,219 @@ async def quote_analysis(
         response["leads"] = lead_data
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Funnel Performance
+# ---------------------------------------------------------------------------
+
+@router.get("/funnel-performance", dependencies=[Depends(verify_api_key)])
+async def funnel_performance(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    lead_source: Optional[str] = Query(None, description="Filter by lead_source_name"),
+    source_group: Optional[str] = Query(None, description="Filter by classified source group"),
+    channel_type: Optional[str] = Query(None, description="Filter by channel type (internet, inbound, etc.)"),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD (filters on enter_stage_date)"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    days: int = Query(30, description="Look back N days if date_from not set", ge=1, le=365),
+    group_by: Optional[str] = Query(None, description="Group results: producer, pipeline, source, day, week"),
+    report_mode: str = Query("standard", description="standard (rates from entered) or internet (rates from contacted/quoted)"),
+    summary_only: bool = Query(True, description="Omit groups array (default true for safety)"),
+    include_leads: bool = Query(False, description="Include per-lead detail (off by default)"),
+):
+    """Executive funnel metrics with flexible grouping and timing.
+
+    Filters on enter_stage_date (when lead entered funnel), not last_activity_date.
+    Use group_by to break down by producer, pipeline, source, day, or week.
+    report_mode controls denominator logic for rates.
+    """
+    # Compute date range
+    if date_from:
+        start = date_from
+    else:
+        start = (_today_pacific() - timedelta(days=days - 1)).isoformat()
+    end = (date_to or _today_pacific().isoformat()) + "T23:59:59"
+
+    async with async_session() as session:
+        # Build query filtering on enter_stage_date (funnel entry)
+        conditions = [
+            Lead.enter_stage_date >= start,
+            Lead.enter_stage_date <= end,
+        ]
+        if producer:
+            conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+        if pipeline_name:
+            conditions.append(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+        if lead_source:
+            conditions.append(Lead.lead_source_name == lead_source)
+
+        query = select(Lead).where(*conditions)
+        result = await session.execute(query)
+        leads = result.scalars().all()
+
+        # Post-filter by classification (computed in Python)
+        if source_group:
+            leads = [l for l in leads if classify_source(l.lead_source_name) == source_group]
+        if channel_type:
+            leads = [l for l in leads if classify_pipeline(l.workflow_name).get("channel_type") == channel_type]
+
+        # Get quoted lead IDs and bundle info
+        lead_ids = [l.id for l in leads]
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+
+        # Get bundle detection: lead_id -> number of distinct products
+        bundled_ids = set()
+        if lead_ids:
+            bundle_q = (
+                select(LeadQuote.lead_id, func.count(func.distinct(LeadQuote.product_name)))
+                .where(LeadQuote.lead_id.in_(lead_ids), LeadQuote.product_name != None)
+                .group_by(LeadQuote.lead_id)
+            )
+            bundle_result = await session.execute(bundle_q)
+            bundled_ids = {row[0] for row in bundle_result if row[1] > 1}
+
+            # Count products per quoted lead for avg_products metric
+            products_q = (
+                select(LeadQuote.lead_id, func.count(func.distinct(LeadQuote.product_name)))
+                .where(LeadQuote.lead_id.in_(lead_ids), LeadQuote.product_name != None)
+                .group_by(LeadQuote.lead_id)
+            )
+            products_result = await session.execute(products_q)
+            products_per_lead = {row[0]: row[1] for row in products_result}
+        else:
+            products_per_lead = {}
+
+        # Load name maps for serialization
+        pipelines_map, stages_map = await _load_name_maps(session)
+
+    def _compute_group_metrics(group_leads: list) -> dict:
+        """Compute funnel metrics for a group of leads."""
+        entered = len(group_leads)
+        contacted = sum(1 for l in group_leads if l.contact_date)
+        quoted = sum(1 for l in group_leads if _is_effectively_quoted(l, quoted_lead_ids))
+        won = sum(1 for l in group_leads if l.status == 2)
+        lost = sum(1 for l in group_leads if l.status == 3)
+        expired = sum(1 for l in group_leads if l.status == 5)
+        bundled = sum(1 for l in group_leads if l.id in bundled_ids)
+        mono = sum(1 for l in group_leads if _is_effectively_quoted(l, quoted_lead_ids) and l.id not in bundled_ids)
+
+        # Product counts for avg_products_per_quoted_lead
+        quoted_product_counts = [products_per_lead.get(l.id, 0) for l in group_leads if _is_effectively_quoted(l, quoted_lead_ids)]
+        avg_products = round(sum(quoted_product_counts) / len(quoted_product_counts), 1) if quoted_product_counts else 0
+
+        # Rate calculations depend on report_mode
+        if report_mode == "internet":
+            quote_rate = round(quoted / contacted, 3) if contacted > 0 else 0
+            close_rate_primary = round(won / quoted, 3) if quoted > 0 else 0
+        else:
+            quote_rate = round(quoted / entered, 3) if entered > 0 else 0
+            close_rate_primary = round(won / entered, 3) if entered > 0 else 0
+
+        close_rate_entered = round(won / entered, 3) if entered > 0 else 0
+        close_rate_quoted = round(won / quoted, 3) if quoted > 0 else 0
+
+        # Timing metrics
+        speed_to_contact = [_hours_between(l.enter_stage_date, l.contact_date) for l in group_leads]
+        speed_to_quote = [_hours_between(l.contact_date, l.quote_date) for l in group_leads]
+        created_to_quote = [_hours_between(l.enter_stage_date, l.quote_date) for l in group_leads]
+        quote_to_bind = [_hours_between(l.quote_date, l.sold_date) for l in group_leads]
+
+        return {
+            "leads_entered": entered,
+            "contacted": contacted,
+            "quoted_leads": quoted,
+            "won": won,
+            "lost": lost,
+            "expired": expired,
+            "active": entered - won - lost - expired,
+            "quote_rate_pct": f"{quote_rate * 100:.1f}%",
+            "close_rate_entered_pct": f"{close_rate_entered * 100:.1f}%",
+            "close_rate_quoted_pct": f"{close_rate_quoted * 100:.1f}%",
+            "bundled": bundled,
+            "mono_line": mono,
+            "bundle_rate_pct": f"{round(bundled / quoted * 100, 1) if quoted > 0 else 0}%",
+            "avg_products_per_quoted_lead": avg_products,
+            "timing": {
+                "speed_to_contact": _timing_stats(speed_to_contact),
+                "speed_to_quote": _timing_stats(speed_to_quote),
+                "created_to_quote": _timing_stats(created_to_quote),
+                "quote_to_bind": _timing_stats(quote_to_bind),
+            },
+        }
+
+    # Compute overall summary
+    summary = _compute_group_metrics(leads)
+
+    response = {
+        "date_range": {"from": start, "to": date_to or _today_pacific().isoformat()},
+        "filters": {
+            "producer": producer,
+            "pipeline_id": pipeline_id,
+            "pipeline_name": pipeline_name,
+            "lead_source": lead_source,
+            "source_group": source_group,
+            "channel_type": channel_type,
+            "report_mode": report_mode,
+        },
+        "summary": summary,
+    }
+
+    # Group breakdowns
+    if not summary_only and group_by:
+        def _group_key(lead):
+            if group_by == "producer":
+                return lead.assign_to_firstname or "Unknown"
+            elif group_by == "pipeline":
+                return lead.workflow_name or pipelines_map.get(lead.pipeline_id, "Unknown")
+            elif group_by == "source":
+                return lead.lead_source_name or "Unknown"
+            elif group_by == "day":
+                return (lead.enter_stage_date or "")[:10] or "Unknown"
+            elif group_by == "week":
+                dt = _parse_date_str(lead.enter_stage_date)
+                if dt:
+                    # ISO week: YYYY-Www
+                    return f"{dt.isocalendar()[0]}-W{dt.isocalendar()[1]:02d}"
+                return "Unknown"
+            return "all"
+
+        groups = {}
+        for lead in leads:
+            key = _group_key(lead)
+            groups.setdefault(key, []).append(lead)
+
+        group_results = []
+        for key, group_leads in sorted(groups.items()):
+            metrics = _compute_group_metrics(group_leads)
+            metrics["key"] = key
+            # Add classification for pipeline groups
+            if group_by == "pipeline":
+                classification = classify_pipeline(key)
+                metrics["channel_type"] = classification["channel_type"]
+                metrics["intent_type"] = classification["intent_type"]
+            elif group_by == "source":
+                metrics["source_group"] = classify_source(key)
+            group_results.append(metrics)
+
+        # Sort by leads_entered descending for readability
+        group_results.sort(key=lambda x: -x["leads_entered"])
+        response["groups"] = group_results
+
+    # Per-lead detail (off by default)
+    if include_leads:
+        response["leads"] = [
+            {
+                **_serialize_lead(l, _is_effectively_quoted(l, quoted_lead_ids), pipelines_map, stages_map),
+                "is_bundled": l.id in bundled_ids,
+                "channel_type": classify_pipeline(l.workflow_name or pipelines_map.get(l.pipeline_id)).get("channel_type"),
+                "intent_type": classify_pipeline(l.workflow_name or pipelines_map.get(l.pipeline_id)).get("intent_type"),
+                "source_group": classify_source(l.lead_source_name),
+            }
+            for l in leads
+        ]
+
+    return response

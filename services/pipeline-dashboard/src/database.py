@@ -374,4 +374,26 @@ async def init_db():
                 ))
                 logger.info("Notes/tasks backfill: flag set — next sync will fetch notes and tasks for all leads")
 
+    # Notes/tasks backfill v2: re-set flag after fixing the backfill loop bug
+    async with async_session() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(SyncMeta).where(SyncMeta.key == "notes_tasks_backfill_v2")
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                logger.info("Notes/tasks backfill v2: re-setting backfill flag after loop fix")
+                await session.execute(text("UPDATE pd_leads SET detail_synced_at = NULL"))
+                await session.merge(SyncMeta(
+                    key="detail_backfill_needed",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
+                await session.merge(SyncMeta(
+                    key="notes_tasks_backfill_v2",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
+                logger.info("Notes/tasks backfill v2: flag set")
+
 

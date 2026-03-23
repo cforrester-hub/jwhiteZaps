@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import json as json_module
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, or_, select, text
 
 from .az_client import (
     _rate_limit_delay,
@@ -453,16 +453,26 @@ async def _sync_all_inner():
 
     logger.info(f"Detail sync: {detail_success} succeeded, {detail_errors} failed")
 
-    # Clear backfill flag if set
+    # Clear backfill flag only when all quote-likely leads have been detail-synced
     if needs_detail_backfill:
         async with async_session() as session:
-            async with session.begin():
-                await session.merge(SyncMeta(
-                    key="detail_backfill_needed",
-                    value="false",
-                    updated_at=sync_start,
-                ))
-        logger.info("Detail backfill complete — flag cleared")
+            remaining = await session.execute(
+                select(func.count(Lead.id)).where(
+                    quote_likely_filter,
+                    Lead.detail_synced_at == None,
+                )
+            )
+            remaining_count = remaining.scalar() or 0
+            if remaining_count == 0:
+                async with session.begin():
+                    await session.merge(SyncMeta(
+                        key="detail_backfill_needed",
+                        value="false",
+                        updated_at=sync_start,
+                    ))
+                logger.info("Detail backfill complete — all quote-likely leads synced, flag cleared")
+            else:
+                logger.info(f"Detail backfill in progress — {remaining_count} leads remaining")
 
     # Step 2.6: Sync notes for delta leads that weren't in the detail sync
     # The detail sync (Step 2.5) only covers quote-likely leads.

@@ -206,3 +206,25 @@ class LeadOpportunity(Base):
     __table_args__ = (
         Index("ix_pd_lead_opportunities_lead", "lead_id"),
     )
+
+
+class LeadNote(Base):
+    """Cached AgencyZoom lead notes (read-only)."""
+
+    __tablename__ = "pd_lead_notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    note_type = Column(String(50), nullable=True)
+    create_date = Column(String(50), nullable=True)
+    created_by = Column(String(255), nullable=True)
+    title = Column(String(500), nullable=True)
+    body = Column(Text, nullable=True)
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_notes_lead", "lead_id"),
+        Index("ix_pd_lead_notes_type", "note_type"),
+        Index("ix_pd_lead_notes_date", "create_date"),
+    )

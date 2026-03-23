@@ -15,12 +15,13 @@ from .az_client import (
     fetch_employees,
     fetch_lead_detail,
     fetch_lead_files,
+    fetch_lead_notes,
     fetch_lead_quotes,
     fetch_pipelines_and_stages,
     system_login,
 )
 from .config import get_settings
-from .database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, SyncMeta, async_session
+from .database import Employee, Lead, LeadFile, LeadNote, LeadOpportunity, LeadQuote, Pipeline, Stage, SyncMeta, async_session
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 
@@ -395,6 +396,28 @@ async def _sync_all_inner():
             except Exception as e:
                 logger.warning(f"Failed to sync files for lead {lead.id}: {e}")
 
+            # Fetch and sync notes
+            try:
+                notes = await fetch_lead_notes(jwt, lead.id)
+                async with async_session() as session:
+                    async with session.begin():
+                        await session.execute(
+                            delete(LeadNote).where(LeadNote.lead_id == lead.id)
+                        )
+                        for n in notes:
+                            await session.merge(LeadNote(
+                                lead_id=lead.id,
+                                note_type=n.get("type"),
+                                create_date=n.get("createDate"),
+                                created_by=n.get("createdBy"),
+                                title=n.get("title"),
+                                body=n.get("body"),
+                                raw_json=n,
+                                synced_at=sync_start,
+                            ))
+            except Exception as e:
+                logger.warning(f"Failed to sync notes for lead {lead.id}: {e}")
+
             detail_success += 1
         except Exception as e:
             detail_errors += 1
@@ -412,6 +435,44 @@ async def _sync_all_inner():
                     updated_at=sync_start,
                 ))
         logger.info("Detail backfill complete — flag cleared")
+
+    # Step 2.6: Sync notes for delta leads that weren't in the detail sync
+    # The detail sync (Step 2.5) only covers quote-likely leads.
+    # For coaching, we need notes on ALL recently-changed leads.
+    if is_delta:
+        async with async_session() as session:
+            # Find leads updated in this delta that DON'T have detail_synced_at set
+            # (meaning they weren't covered by Step 2.5)
+            notes_query = select(Lead).where(
+                Lead.synced_at >= sync_start,
+                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start),
+            )
+            notes_result = await session.execute(notes_query)
+            leads_needing_notes = notes_result.scalars().all()
+
+        if leads_needing_notes:
+            logger.info(f"Syncing notes for {len(leads_needing_notes)} non-quoted delta leads")
+            for lead in leads_needing_notes:
+                try:
+                    notes = await fetch_lead_notes(jwt, lead.id)
+                    async with async_session() as session:
+                        async with session.begin():
+                            await session.execute(
+                                delete(LeadNote).where(LeadNote.lead_id == lead.id)
+                            )
+                            for n in notes:
+                                await session.merge(LeadNote(
+                                    lead_id=lead.id,
+                                    note_type=n.get("type"),
+                                    create_date=n.get("createDate"),
+                                    created_by=n.get("createdBy"),
+                                    title=n.get("title"),
+                                    body=n.get("body"),
+                                    raw_json=n,
+                                    synced_at=sync_start,
+                                ))
+                except Exception as e:
+                    logger.warning(f"Failed to sync notes for lead {lead.id}: {e}")
 
     # Step 3: Delete stale leads only on full sync (delta only upserts recent changes)
     if not is_delta and synced_pipeline_ids:

@@ -18,7 +18,7 @@ from ..az_client import (
     system_login,
 )
 from ..config import get_settings
-from ..database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, async_session
+from ..database import Employee, Lead, LeadFile, LeadNote, LeadOpportunity, LeadQuote, Pipeline, Stage, async_session
 from ..normalization import classify_pipeline, classify_source, get_compliance_status
 
 logger = logging.getLogger(__name__)

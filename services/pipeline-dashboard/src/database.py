@@ -350,6 +350,28 @@ async def init_db():
                     value="true",
                     updated_at=datetime.utcnow(),
                 ))
-                logger.info("Pipeline fix v1: complete — next sync will be a full 18-month re-sync")
+                logger.info("Pipeline fix v1: complete — next sync will be a full 12-month re-sync")
+
+    # Notes/tasks backfill: reset detail_synced_at to re-fetch with notes and tasks
+    async with async_session() as session:
+        async with session.begin():
+            result = await session.execute(
+                select(SyncMeta).where(SyncMeta.key == "notes_tasks_backfill_v1")
+            )
+            existing = result.scalar_one_or_none()
+            if existing is None:
+                logger.info("Notes/tasks backfill: resetting detail_synced_at for full re-sync")
+                await session.execute(text("UPDATE pd_leads SET detail_synced_at = NULL"))
+                await session.merge(SyncMeta(
+                    key="detail_backfill_needed",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
+                await session.merge(SyncMeta(
+                    key="notes_tasks_backfill_v1",
+                    value="true",
+                    updated_at=datetime.utcnow(),
+                ))
+                logger.info("Notes/tasks backfill: flag set — next sync will fetch notes and tasks for all leads")
 
 

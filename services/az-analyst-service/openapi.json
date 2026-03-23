@@ -789,6 +789,286 @@
         }
       }
     },
+    "/api/analysis/pipeline-compliance": {
+      "get": {
+        "operationId": "getPipelineCompliance",
+        "summary": "Quote compliance metrics with SLA thresholds by pipeline intent",
+        "description": "Returns quote compliance rates by pipeline — how many leads got a quote vs. did not. Filters by producer, pipeline, and date range. summary_only=true omits unquoted lead list for faster response.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter by producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline name (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "description": "Start date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, omit unquoted_leads array (default true)",
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline compliance metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "scope": { "type": "object" },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "total_leads": { "type": "integer" },
+                        "quoted": { "type": "integer" },
+                        "not_quoted": { "type": "integer" },
+                        "quote_rate_pct": { "type": "string" },
+                        "compliance_status": { "type": "string" }
+                      }
+                    },
+                    "unquoted_leads": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Lead" }
+                    },
+                    "source_notes": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/lost-deal-analysis": {
+      "get": {
+        "operationId": "getLostDealAnalysis",
+        "summary": "Audit quoted leads that didn't close",
+        "description": "Finds leads that were quoted but ended as lost or expired. Returns close rate, post-quote leakage, and optionally recoverable leads. summary_only=true omits lead arrays for faster response.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter by producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline ID",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline name (partial match)",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "description": "Start date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "include_recoverable",
+            "in": "query",
+            "required": false,
+            "description": "If true, include recoverable leads in response (default true)",
+            "schema": { "type": "boolean", "default": true }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "If true, omit lead arrays (default true)",
+            "schema": { "type": "boolean", "default": true }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lost deal analysis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "scope": { "type": "object" },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "quoted": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "lost": { "type": "integer" },
+                        "expired": { "type": "integer" },
+                        "close_rate_pct": { "type": "string" },
+                        "post_quote_leakage_pct": { "type": "string" },
+                        "recoverable_count": { "type": "integer" }
+                      }
+                    },
+                    "failure_reasons": { "type": "object" },
+                    "recoverable_leads": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Lead" }
+                    },
+                    "lost_or_expired_quoted_leads": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/Lead" }
+                    },
+                    "source_notes": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/producer-scorecard": {
+      "get": {
+        "operationId": "getProducerScorecard",
+        "summary": "Cross-pipeline KPI summary with team rankings for one producer",
+        "description": "Returns a single producer's KPIs (quote rate, close rate, leakage, avg time-to-quote) with team rank for each metric, plus a per-pipeline breakdown. Requires producer, date_from, and date_to.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": true,
+            "description": "Producer first name",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": true,
+            "description": "Start date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": true,
+            "description": "End date YYYY-MM-DD",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Producer scorecard with KPIs and team rankings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "producer": { "type": "string" },
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": { "type": "string" },
+                        "to": { "type": "string" }
+                      }
+                    },
+                    "kpis": {
+                      "type": "object",
+                      "properties": {
+                        "new_leads": { "type": "integer" },
+                        "quoted": { "type": "integer" },
+                        "won": { "type": "integer" },
+                        "lost": { "type": "integer" },
+                        "expired": { "type": "integer" },
+                        "quote_rate_pct": { "type": "string" },
+                        "close_rate_pct": { "type": "string" },
+                        "pre_quote_leakage_pct": { "type": "string" },
+                        "post_quote_leakage_pct": { "type": "string" },
+                        "avg_time_to_quote_hours": { "type": "number", "nullable": true }
+                      }
+                    },
+                    "rankings": {
+                      "type": "object",
+                      "properties": {
+                        "quote_rate_rank": { "type": "integer" },
+                        "close_rate_rank": { "type": "integer" },
+                        "lead_to_close_rank": { "type": "integer" },
+                        "total_producers": { "type": "integer" }
+                      }
+                    },
+                    "pipeline_breakdown": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    },
+                    "source_notes": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analysis/search": {
       "get": {
         "operationId": "searchLeads",

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AgencyZoom Analyst",
-    "description": "Analyze AgencyZoom lead data — producer activity, lead details, pipeline analytics, tasks, and search. IMPORTANT: All timestamps and dates in responses are in Pacific time (America/Los_Angeles). When displaying or comparing dates/times, treat them as Pacific. 'Today' means today in Pacific time.",
+    "description": "Analyze AgencyZoom lead data \u2014 producer activity, lead details, pipeline analytics, tasks, and search. IMPORTANT: All timestamps and dates in responses are in Pacific time (America/Los_Angeles). When displaying or comparing dates/times, treat them as Pacific. 'Today' means today in Pacific time.",
     "version": "1.0.0"
   },
   "servers": [
@@ -22,42 +22,58 @@
             "in": "query",
             "required": false,
             "description": "Producer first name (e.g. Gabriela). Omit for company-wide.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date",
             "in": "query",
             "required": false,
             "description": "Date in YYYY-MM-DD format. Defaults to today Pacific.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "days",
             "in": "query",
             "required": false,
             "description": "Look back N days (default 1)",
-            "schema": { "type": "integer", "default": 1 }
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
           },
           {
             "name": "include_details",
             "in": "query",
             "required": false,
             "description": "If true, fetches notes and tasks from AgencyZoom API for top leads. Slower (~30s).",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           },
           {
             "name": "summary_only",
             "in": "query",
             "required": false,
             "description": "If true, return only summary counts without per-lead list (faster).",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           },
           {
             "name": "group_by_day",
             "in": "query",
             "required": false,
             "description": "If true, break down activity counts by day within the date range.",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -71,42 +87,76 @@
                     "producer": {
                       "type": "object",
                       "properties": {
-                        "firstname": { "type": "string" },
-                        "lastname": { "type": "string", "nullable": true },
-                        "id": { "type": "integer", "nullable": true }
+                        "firstname": {
+                          "type": "string"
+                        },
+                        "lastname": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "id": {
+                          "type": "integer",
+                          "nullable": true
+                        }
                       }
                     },
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
                     "summary": {
                       "type": "object",
                       "properties": {
-                        "leads_active": { "type": "integer" },
-                        "new": { "type": "integer" },
-                        "quoted": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "lost": { "type": "integer" },
-                        "contacted": { "type": "integer" },
-                        "expired": { "type": "integer" }
+                        "leads_active": {
+                          "type": "integer"
+                        },
+                        "new": {
+                          "type": "integer"
+                        },
+                        "quoted": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "lost": {
+                          "type": "integer"
+                        },
+                        "contacted": {
+                          "type": "integer"
+                        },
+                        "expired": {
+                          "type": "integer"
+                        }
                       }
                     },
                     "leads": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Lead" }
+                      "items": {
+                        "$ref": "#/components/schemas/Lead"
+                      }
                     },
                     "by_pipeline": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
-                          "name": { "type": "string" },
-                          "active": { "type": "integer" },
-                          "total_assigned": { "type": "integer" }
+                          "name": {
+                            "type": "string"
+                          },
+                          "active": {
+                            "type": "integer"
+                          },
+                          "total_assigned": {
+                            "type": "integer"
+                          }
                         }
                       }
                     }
@@ -129,21 +179,29 @@
             "in": "path",
             "required": true,
             "description": "The AgencyZoom lead ID",
-            "schema": { "type": "integer" }
+            "schema": {
+              "type": "integer"
+            }
           },
           {
             "name": "include_notes",
             "in": "query",
             "required": false,
             "description": "Fetch live notes from AgencyZoom API (default true)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           },
           {
             "name": "include_tasks",
             "in": "query",
             "required": false,
             "description": "Fetch live tasks from AgencyZoom API (default true)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "responses": {
@@ -154,28 +212,44 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "lead": { "$ref": "#/components/schemas/Lead" },
+                    "lead": {
+                      "$ref": "#/components/schemas/Lead"
+                    },
                     "quotes": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Quote" }
+                      "items": {
+                        "$ref": "#/components/schemas/Quote"
+                      }
                     },
                     "opportunities": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Opportunity" }
+                      "items": {
+                        "$ref": "#/components/schemas/Opportunity"
+                      }
                     },
-                    "quote_count": { "type": "integer" },
-                    "is_bundled": { "type": "boolean" },
+                    "quote_count": {
+                      "type": "integer"
+                    },
+                    "is_bundled": {
+                      "type": "boolean"
+                    },
                     "files": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/File" }
+                      "items": {
+                        "$ref": "#/components/schemas/File"
+                      }
                     },
                     "notes": {
                       "type": "array",
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     },
                     "tasks": {
                       "type": "array",
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     }
                   }
                 }
@@ -189,35 +263,43 @@
       "get": {
         "operationId": "getPipelineAnalytics",
         "summary": "Get pipeline-level analytics with stage and status breakdowns",
-        "description": "Returns lead counts by pipeline, stage, and status with conversion rates. Uses synced data only — no live API calls, fast response.",
+        "description": "Returns lead counts by pipeline, stage, and status with conversion rates. Uses synced data only \u2014 no live API calls, fast response.",
         "parameters": [
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter to a specific pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "producer",
             "in": "query",
             "required": false,
             "description": "Filter to a specific producer by first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": false,
             "description": "Start date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": false,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -233,40 +315,70 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "string" },
-                          "name": { "type": "string" },
-                          "total": { "type": "integer" },
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "total": {
+                            "type": "integer"
+                          },
                           "by_stage": {
                             "type": "array",
                             "items": {
                               "type": "object",
                               "properties": {
-                                "stage": { "type": "string" },
-                                "count": { "type": "integer" }
+                                "stage": {
+                                  "type": "string"
+                                },
+                                "count": {
+                                  "type": "integer"
+                                }
                               }
                             }
                           },
                           "by_status": {
                             "type": "object",
                             "properties": {
-                              "new": { "type": "integer" },
-                              "quoted": { "type": "integer" },
-                              "won": { "type": "integer" },
-                              "lost": { "type": "integer" },
-                              "contacted": { "type": "integer" },
-                              "expired": { "type": "integer" }
+                              "new": {
+                                "type": "integer"
+                              },
+                              "quoted": {
+                                "type": "integer"
+                              },
+                              "won": {
+                                "type": "integer"
+                              },
+                              "lost": {
+                                "type": "integer"
+                              },
+                              "contacted": {
+                                "type": "integer"
+                              },
+                              "expired": {
+                                "type": "integer"
+                              }
                             }
                           },
-                          "conversion_rate": { "type": "number" }
+                          "conversion_rate": {
+                            "type": "number"
+                          }
                         }
                       }
                     },
                     "totals": {
                       "type": "object",
                       "properties": {
-                        "leads": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "conversion_rate": { "type": "number" }
+                        "leads": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "conversion_rate": {
+                          "type": "number"
+                        }
                       }
                     }
                   }
@@ -280,7 +392,7 @@
     "/api/analysis/quote-analysis": {
       "get": {
         "operationId": "getQuoteAnalysis",
-        "summary": "Analyze quote patterns — bundled vs mono-line, carriers, and products",
+        "summary": "Analyze quote patterns \u2014 bundled vs mono-line, carriers, and products",
         "description": "Bundled vs mono-line breakdown, carrier/product counts. Finds ALL leads with quotes regardless of status. Includes status_mismatch count. Use summary_only=true for large datasets.",
         "parameters": [
           {
@@ -288,70 +400,93 @@
             "in": "query",
             "required": false,
             "description": "Filter to a specific producer by first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter to a specific pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": false,
             "description": "Filter by last_activity_date start YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": false,
             "description": "Filter by last_activity_date end YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "days",
             "in": "query",
             "required": false,
             "description": "Look back N days (shortcut for date_from, ignored if date_from set)",
-            "schema": { "type": "integer", "default": 0 }
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
           },
           {
             "name": "pipeline_name",
             "in": "query",
             "required": false,
-            "description": "Filter by pipeline name (partial match)",
-            "schema": { "type": "string" }
+            "description": "Partial match on pipeline name. Use short fragments like 'NPL Call' or 'Internet', not full guessed names.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "lead_source",
             "in": "query",
             "required": false,
             "description": "Filter by lead source name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "source_group",
             "in": "query",
             "required": false,
             "description": "Filter by classified source group: vendor_lead, inbound, book, referral, targeted, partner",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "bundled_only",
             "in": "query",
             "required": false,
             "description": "If true, only return leads with quotes spanning multiple product lines",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           },
           {
             "name": "summary_only",
             "in": "query",
             "required": false,
             "description": "If true, return only summary stats without per-lead detail (faster, smaller response). Recommended for large datasets.",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -368,37 +503,70 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "lead": { "$ref": "#/components/schemas/Lead" },
+                          "lead": {
+                            "$ref": "#/components/schemas/Lead"
+                          },
                           "quotes": {
                             "type": "array",
-                            "items": { "$ref": "#/components/schemas/Quote" }
+                            "items": {
+                              "$ref": "#/components/schemas/Quote"
+                            }
                           },
-                          "is_bundled": { "type": "boolean" },
+                          "is_bundled": {
+                            "type": "boolean"
+                          },
                           "product_lines": {
                             "type": "array",
-                            "items": { "type": "string" }
+                            "items": {
+                              "type": "string"
+                            }
                           },
-                          "total_premium": { "type": "number", "nullable": true }
+                          "total_premium": {
+                            "type": "number",
+                            "nullable": true
+                          }
                         }
                       }
                     },
                     "summary": {
                       "type": "object",
                       "properties": {
-                        "total": { "type": "integer" },
-                        "bundled": { "type": "integer" },
-                        "mono_line": { "type": "integer" },
-                        "total_effectively_quoted": { "type": "integer", "description": "Total leads that have been quoted (quote records OR quote_date set)" },
-                        "with_quote_records": { "type": "integer", "description": "Leads with structured quote records (carrier/product/premium)" },
-                        "quote_date_only": { "type": "integer", "description": "Leads with quote_date set but no structured quote records" },
-                        "bundle_rate_pct": { "type": "string", "description": "Percentage of quoted leads (with records) that are bundled" },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "bundled": {
+                          "type": "integer"
+                        },
+                        "mono_line": {
+                          "type": "integer"
+                        },
+                        "total_effectively_quoted": {
+                          "type": "integer",
+                          "description": "Total leads that have been quoted (quote records OR quote_date set)"
+                        },
+                        "with_quote_records": {
+                          "type": "integer",
+                          "description": "Leads with structured quote records (carrier/product/premium)"
+                        },
+                        "quote_date_only": {
+                          "type": "integer",
+                          "description": "Leads with quote_date set but no structured quote records"
+                        },
+                        "bundle_rate_pct": {
+                          "type": "string",
+                          "description": "Percentage of quoted leads (with records) that are bundled"
+                        },
                         "by_carrier": {
                           "type": "object",
-                          "additionalProperties": { "type": "integer" }
+                          "additionalProperties": {
+                            "type": "integer"
+                          }
                         },
                         "by_product": {
                           "type": "object",
-                          "additionalProperties": { "type": "integer" }
+                          "additionalProperties": {
+                            "type": "integer"
+                          }
                         }
                       }
                     }
@@ -421,28 +589,37 @@
             "in": "query",
             "required": true,
             "description": "Producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "status",
             "in": "query",
             "required": false,
             "description": "Filter: open, completed, or all (default all)",
-            "schema": { "type": "string", "default": "all" }
+            "schema": {
+              "type": "string",
+              "default": "all"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": false,
             "description": "Start date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": false,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -456,15 +633,25 @@
                     "producer": {
                       "type": "object",
                       "properties": {
-                        "firstname": { "type": "string" },
-                        "lastname": { "type": "string" },
-                        "id": { "type": "integer" }
+                        "firstname": {
+                          "type": "string"
+                        },
+                        "lastname": {
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
                       }
                     },
-                    "task_count": { "type": "integer" },
+                    "task_count": {
+                      "type": "integer"
+                    },
                     "tasks": {
                       "type": "array",
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     }
                   }
                 }
@@ -478,35 +665,44 @@
       "get": {
         "operationId": "getTeamPerformance",
         "summary": "Per-producer performance breakdown: close rates, lead counts, new lead aging",
-        "description": "Returns all active producers ranked by close rate. Distinguishes true new leads (entered this period) from backlog (stale leads still in 'new' status). Includes aging buckets for new leads (0-1, 2-3, 4-7, 8-14, 15+ days). Uses synced data — no live API calls, fast response.",
+        "description": "Returns all active producers ranked by close rate. Distinguishes true new leads (entered this period) from backlog (stale leads still in 'new' status). Includes aging buckets for new leads (0-1, 2-3, 4-7, 8-14, 15+ days). Uses synced data \u2014 no live API calls, fast response.",
         "parameters": [
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter to a specific pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": false,
             "description": "Activity date start YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": false,
             "description": "Activity date end YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "days",
             "in": "query",
             "required": false,
             "description": "Look back N days if date_from not set (default 30)",
-            "schema": { "type": "integer", "default": 30 }
+            "schema": {
+              "type": "integer",
+              "default": 30
+            }
           }
         ],
         "responses": {
@@ -520,8 +716,12 @@
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
                     "producers": {
@@ -529,31 +729,78 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "id": { "type": "integer", "nullable": true },
-                          "name": { "type": "string" },
-                          "firstname": { "type": "string", "nullable": true },
-                          "lastname": { "type": "string", "nullable": true },
-                          "total": { "type": "integer" },
-                          "new": { "type": "integer" },
-                          "quoted": { "type": "integer" },
-                          "won": { "type": "integer" },
-                          "lost": { "type": "integer" },
-                          "contacted": { "type": "integer" },
-                          "expired": { "type": "integer" },
-                          "decided": { "type": "integer" },
-                          "close_rate": { "type": "number" },
-                          "close_rate_pct": { "type": "string" },
-                          "new_this_period": { "type": "integer", "description": "New leads where enter_stage_date falls within the query date range" },
-                          "new_backlog": { "type": "integer", "description": "Leads still in 'new' status but entered before the date range (stale)" },
+                          "id": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "firstname": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "lastname": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "total": {
+                            "type": "integer"
+                          },
+                          "new": {
+                            "type": "integer"
+                          },
+                          "quoted": {
+                            "type": "integer"
+                          },
+                          "won": {
+                            "type": "integer"
+                          },
+                          "lost": {
+                            "type": "integer"
+                          },
+                          "contacted": {
+                            "type": "integer"
+                          },
+                          "expired": {
+                            "type": "integer"
+                          },
+                          "decided": {
+                            "type": "integer"
+                          },
+                          "close_rate": {
+                            "type": "number"
+                          },
+                          "close_rate_pct": {
+                            "type": "string"
+                          },
+                          "new_this_period": {
+                            "type": "integer",
+                            "description": "New leads where enter_stage_date falls within the query date range"
+                          },
+                          "new_backlog": {
+                            "type": "integer",
+                            "description": "Leads still in 'new' status but entered before the date range (stale)"
+                          },
                           "new_aging": {
                             "type": "object",
                             "description": "How long new leads have been sitting in their current stage",
                             "properties": {
-                              "0-1_days": { "type": "integer" },
-                              "2-3_days": { "type": "integer" },
-                              "4-7_days": { "type": "integer" },
-                              "8-14_days": { "type": "integer" },
-                              "15+_days": { "type": "integer" }
+                              "0-1_days": {
+                                "type": "integer"
+                              },
+                              "2-3_days": {
+                                "type": "integer"
+                              },
+                              "4-7_days": {
+                                "type": "integer"
+                              },
+                              "8-14_days": {
+                                "type": "integer"
+                              },
+                              "15+_days": {
+                                "type": "integer"
+                              }
                             }
                           }
                         }
@@ -562,16 +809,36 @@
                     "team_totals": {
                       "type": "object",
                       "properties": {
-                        "total_leads": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "lost": { "type": "integer" },
-                        "decided": { "type": "integer" },
-                        "close_rate": { "type": "number" },
-                        "close_rate_pct": { "type": "string" },
-                        "producers_count": { "type": "integer" },
-                        "new": { "type": "integer" },
-                        "new_this_period": { "type": "integer" },
-                        "new_backlog": { "type": "integer" }
+                        "total_leads": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "lost": {
+                          "type": "integer"
+                        },
+                        "decided": {
+                          "type": "integer"
+                        },
+                        "close_rate": {
+                          "type": "number"
+                        },
+                        "close_rate_pct": {
+                          "type": "string"
+                        },
+                        "producers_count": {
+                          "type": "integer"
+                        },
+                        "new": {
+                          "type": "integer"
+                        },
+                        "new_this_period": {
+                          "type": "integer"
+                        },
+                        "new_backlog": {
+                          "type": "integer"
+                        }
                       }
                     }
                   }
@@ -593,91 +860,121 @@
             "in": "query",
             "required": false,
             "description": "Filter by producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter by pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_name",
             "in": "query",
             "required": false,
-            "description": "Filter by pipeline name (partial match)",
-            "schema": { "type": "string" }
+            "description": "Partial match on pipeline name. Use short fragments like 'NPL Call' or 'Internet', not full guessed names.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "lead_source",
             "in": "query",
             "required": false,
             "description": "Filter by lead source name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "source_group",
             "in": "query",
             "required": false,
             "description": "Filter by classified source group: vendor_lead, inbound, book, referral, targeted, partner",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "channel_type",
             "in": "query",
             "required": false,
             "description": "Filter by channel type: internet, inbound, internal, reactivation, outbound, etc.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": false,
             "description": "Start date YYYY-MM-DD (defaults to 30 days back)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": false,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "days",
             "in": "query",
             "required": false,
             "description": "Look back N days if date_from not set (default 30)",
-            "schema": { "type": "integer", "default": 30 }
+            "schema": {
+              "type": "integer",
+              "default": 30
+            }
           },
           {
             "name": "group_by",
             "in": "query",
             "required": false,
             "description": "Break down results by: producer, pipeline, source, day, or week",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "report_mode",
             "in": "query",
             "required": false,
             "description": "standard (rates from leads_entered) or internet (rates from contacted/quoted)",
-            "schema": { "type": "string", "default": "standard" }
+            "schema": {
+              "type": "string",
+              "default": "standard"
+            }
           },
           {
             "name": "summary_only",
             "in": "query",
             "required": false,
             "description": "If true, omit the groups array (default true for safety)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           },
           {
             "name": "include_leads",
             "in": "query",
             "required": false,
             "description": "If true, include per-lead detail in response (default false)",
-            "schema": { "type": "boolean", "default": false }
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "responses": {
@@ -691,30 +988,60 @@
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
                     "summary": {
                       "type": "object",
                       "properties": {
-                        "leads_entered": { "type": "integer" },
-                        "contacted": { "type": "integer" },
-                        "quoted": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "lost": { "type": "integer" },
-                        "contact_rate_pct": { "type": "string" },
-                        "quote_rate_pct": { "type": "string" },
-                        "close_rate_pct": { "type": "string" },
-                        "bundle_rate_pct": { "type": "string" },
-                        "avg_days_to_quote": { "type": "number", "nullable": true },
-                        "avg_days_to_close": { "type": "number", "nullable": true }
+                        "leads_entered": {
+                          "type": "integer"
+                        },
+                        "contacted": {
+                          "type": "integer"
+                        },
+                        "quoted": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "lost": {
+                          "type": "integer"
+                        },
+                        "contact_rate_pct": {
+                          "type": "string"
+                        },
+                        "quote_rate_pct": {
+                          "type": "string"
+                        },
+                        "close_rate_pct": {
+                          "type": "string"
+                        },
+                        "bundle_rate_pct": {
+                          "type": "string"
+                        },
+                        "avg_days_to_quote": {
+                          "type": "number",
+                          "nullable": true
+                        },
+                        "avg_days_to_close": {
+                          "type": "number",
+                          "nullable": true
+                        }
                       }
                     },
                     "groups": {
                       "type": "array",
                       "description": "Per-group breakdown when group_by is set and summary_only=false",
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     }
                   }
                 }
@@ -735,21 +1062,28 @@
             "in": "query",
             "required": false,
             "description": "Filter by producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter by pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "days",
             "in": "query",
             "required": false,
             "description": "How far back to scan (default 90)",
-            "schema": { "type": "integer", "default": 90 }
+            "schema": {
+              "type": "integer",
+              "default": 90
+            }
           }
         ],
         "responses": {
@@ -760,17 +1094,34 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "total_leads_scanned": { "type": "integer" },
-                    "health_score_pct": { "type": "number", "description": "0-100 score; higher is better" },
+                    "total_leads_scanned": {
+                      "type": "integer"
+                    },
+                    "health_score_pct": {
+                      "type": "number",
+                      "description": "0-100 score; higher is better"
+                    },
                     "issues": {
                       "type": "object",
                       "properties": {
-                        "quoted_wrong_status": { "type": "integer" },
-                        "won_without_quotes": { "type": "integer" },
-                        "expired_with_quotes": { "type": "integer" },
-                        "missing_contact_date": { "type": "integer" },
-                        "stuck_in_new": { "type": "integer" },
-                        "timeline_anomalies": { "type": "integer" }
+                        "quoted_wrong_status": {
+                          "type": "integer"
+                        },
+                        "won_without_quotes": {
+                          "type": "integer"
+                        },
+                        "expired_with_quotes": {
+                          "type": "integer"
+                        },
+                        "missing_contact_date": {
+                          "type": "integer"
+                        },
+                        "stuck_in_new": {
+                          "type": "integer"
+                        },
+                        "timeline_anomalies": {
+                          "type": "integer"
+                        }
                       }
                     },
                     "sample_leads": {
@@ -778,7 +1129,9 @@
                       "description": "Sample leads per issue category",
                       "additionalProperties": {
                         "type": "array",
-                        "items": { "$ref": "#/components/schemas/Lead" }
+                        "items": {
+                          "$ref": "#/components/schemas/Lead"
+                        }
                       }
                     }
                   }
@@ -793,49 +1146,62 @@
       "get": {
         "operationId": "getPipelineCompliance",
         "summary": "Quote compliance metrics with SLA thresholds by pipeline intent",
-        "description": "Returns quote compliance rates by pipeline — how many leads got a quote vs. did not. Filters by producer, pipeline, and date range. summary_only=true omits unquoted lead list for faster response.",
+        "description": "Returns quote compliance rates by pipeline \u2014 how many leads got a quote vs. did not. Filters by producer, pipeline, and date range. summary_only=true omits unquoted lead list for faster response.",
         "parameters": [
           {
             "name": "producer",
             "in": "query",
             "required": false,
             "description": "Filter by producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter by pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_name",
             "in": "query",
             "required": false,
-            "description": "Filter by pipeline name (partial match)",
-            "schema": { "type": "string" }
+            "description": "Partial match on pipeline name. Use short fragments like 'NPL Call' or 'Internet', not full guessed names.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": true,
             "description": "Start date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": true,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "summary_only",
             "in": "query",
             "required": false,
             "description": "If true, omit unquoted_leads array (default true)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "responses": {
@@ -849,28 +1215,48 @@
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
-                    "scope": { "type": "object" },
+                    "scope": {
+                      "type": "object"
+                    },
                     "summary": {
                       "type": "object",
                       "properties": {
-                        "total_leads": { "type": "integer" },
-                        "quoted": { "type": "integer" },
-                        "not_quoted": { "type": "integer" },
-                        "quote_rate_pct": { "type": "string" },
-                        "compliance_status": { "type": "string" }
+                        "total_leads": {
+                          "type": "integer"
+                        },
+                        "quoted": {
+                          "type": "integer"
+                        },
+                        "not_quoted": {
+                          "type": "integer"
+                        },
+                        "quote_rate_pct": {
+                          "type": "string"
+                        },
+                        "compliance_status": {
+                          "type": "string"
+                        }
                       }
                     },
                     "unquoted_leads": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Lead" }
+                      "items": {
+                        "$ref": "#/components/schemas/Lead"
+                      }
                     },
                     "source_notes": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -891,49 +1277,65 @@
             "in": "query",
             "required": false,
             "description": "Filter by producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_id",
             "in": "query",
             "required": false,
             "description": "Filter by pipeline ID",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "pipeline_name",
             "in": "query",
             "required": false,
-            "description": "Filter by pipeline name (partial match)",
-            "schema": { "type": "string" }
+            "description": "Partial match on pipeline name. Use short fragments like 'NPL Call' or 'Internet', not full guessed names.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": true,
             "description": "Start date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": true,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "include_recoverable",
             "in": "query",
             "required": false,
             "description": "If true, include recoverable leads in response (default true)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           },
           {
             "name": "summary_only",
             "in": "query",
             "required": false,
             "description": "If true, omit lead arrays (default true)",
-            "schema": { "type": "boolean", "default": true }
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
           }
         ],
         "responses": {
@@ -947,35 +1349,63 @@
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
-                    "scope": { "type": "object" },
+                    "scope": {
+                      "type": "object"
+                    },
                     "summary": {
                       "type": "object",
                       "properties": {
-                        "quoted": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "lost": { "type": "integer" },
-                        "expired": { "type": "integer" },
-                        "close_rate_pct": { "type": "string" },
-                        "post_quote_leakage_pct": { "type": "string" },
-                        "recoverable_count": { "type": "integer" }
+                        "quoted": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "lost": {
+                          "type": "integer"
+                        },
+                        "expired": {
+                          "type": "integer"
+                        },
+                        "close_rate_pct": {
+                          "type": "string"
+                        },
+                        "post_quote_leakage_pct": {
+                          "type": "string"
+                        },
+                        "recoverable_count": {
+                          "type": "integer"
+                        }
                       }
                     },
-                    "failure_reasons": { "type": "object" },
+                    "failure_reasons": {
+                      "type": "object"
+                    },
                     "recoverable_leads": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Lead" }
+                      "items": {
+                        "$ref": "#/components/schemas/Lead"
+                      }
                     },
                     "lost_or_expired_quoted_leads": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Lead" }
+                      "items": {
+                        "$ref": "#/components/schemas/Lead"
+                      }
                     },
                     "source_notes": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -996,21 +1426,27 @@
             "in": "query",
             "required": true,
             "description": "Producer first name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_from",
             "in": "query",
             "required": true,
             "description": "Start date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "date_to",
             "in": "query",
             "required": true,
             "description": "End date YYYY-MM-DD",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1021,45 +1457,84 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "producer": { "type": "string" },
+                    "producer": {
+                      "type": "string"
+                    },
                     "date_range": {
                       "type": "object",
                       "properties": {
-                        "from": { "type": "string" },
-                        "to": { "type": "string" }
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
                       }
                     },
                     "kpis": {
                       "type": "object",
                       "properties": {
-                        "new_leads": { "type": "integer" },
-                        "quoted": { "type": "integer" },
-                        "won": { "type": "integer" },
-                        "lost": { "type": "integer" },
-                        "expired": { "type": "integer" },
-                        "quote_rate_pct": { "type": "string" },
-                        "close_rate_pct": { "type": "string" },
-                        "pre_quote_leakage_pct": { "type": "string" },
-                        "post_quote_leakage_pct": { "type": "string" },
-                        "avg_time_to_quote_hours": { "type": "number", "nullable": true }
+                        "new_leads": {
+                          "type": "integer"
+                        },
+                        "quoted": {
+                          "type": "integer"
+                        },
+                        "won": {
+                          "type": "integer"
+                        },
+                        "lost": {
+                          "type": "integer"
+                        },
+                        "expired": {
+                          "type": "integer"
+                        },
+                        "quote_rate_pct": {
+                          "type": "string"
+                        },
+                        "close_rate_pct": {
+                          "type": "string"
+                        },
+                        "pre_quote_leakage_pct": {
+                          "type": "string"
+                        },
+                        "post_quote_leakage_pct": {
+                          "type": "string"
+                        },
+                        "avg_time_to_quote_hours": {
+                          "type": "number",
+                          "nullable": true
+                        }
                       }
                     },
                     "rankings": {
                       "type": "object",
                       "properties": {
-                        "quote_rate_rank": { "type": "integer" },
-                        "close_rate_rank": { "type": "integer" },
-                        "lead_to_close_rank": { "type": "integer" },
-                        "total_producers": { "type": "integer" }
+                        "quote_rate_rank": {
+                          "type": "integer"
+                        },
+                        "close_rate_rank": {
+                          "type": "integer"
+                        },
+                        "lead_to_close_rank": {
+                          "type": "integer"
+                        },
+                        "total_producers": {
+                          "type": "integer"
+                        }
                       }
                     },
                     "pipeline_breakdown": {
                       "type": "array",
-                      "items": { "type": "object" }
+                      "items": {
+                        "type": "object"
+                      }
                     },
                     "source_notes": {
                       "type": "array",
-                      "items": { "type": "string" }
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -1073,35 +1548,44 @@
       "get": {
         "operationId": "searchLeads",
         "summary": "Search leads by name, phone, or email",
-        "description": "Searches synced lead data. At least one search parameter is required. Fast response — no live API calls.",
+        "description": "Searches synced lead data. At least one search parameter is required. Fast response \u2014 no live API calls.",
         "parameters": [
           {
             "name": "query",
             "in": "query",
             "required": false,
             "description": "Search by name (partial match)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "phone",
             "in": "query",
             "required": false,
             "description": "Search by phone number (partial match)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "email",
             "in": "query",
             "required": false,
             "description": "Search by email (partial match)",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "limit",
             "in": "query",
             "required": false,
             "description": "Max results (default 20, max 100)",
-            "schema": { "type": "integer", "default": 20 }
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
           }
         ],
         "responses": {
@@ -1112,10 +1596,14 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "count": { "type": "integer" },
+                    "count": {
+                      "type": "integer"
+                    },
                     "leads": {
                       "type": "array",
-                      "items": { "$ref": "#/components/schemas/Lead" }
+                      "items": {
+                        "$ref": "#/components/schemas/Lead"
+                      }
                     }
                   }
                 }
@@ -1131,79 +1619,252 @@
       "Lead": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "name": { "type": "string" },
-          "firstname": { "type": "string", "nullable": true },
-          "lastname": { "type": "string", "nullable": true },
-          "pipeline": { "type": "string", "nullable": true },
-          "pipeline_id": { "type": "string", "nullable": true },
-          "stage": { "type": "string", "nullable": true },
-          "stage_id": { "type": "string", "nullable": true },
-          "status": { "type": "string" },
-          "status_code": { "type": "integer", "nullable": true },
-          "last_activity": { "type": "string", "nullable": true },
-          "enter_stage_date": { "type": "string", "nullable": true },
-          "contact_date": { "type": "string", "nullable": true },
-          "lead_source": { "type": "string", "nullable": true },
-          "lead_type": { "type": "string", "nullable": true },
-          "premium": { "type": "number", "nullable": true },
-          "quoted": { "type": "number", "nullable": true },
-          "phone": { "type": "string", "nullable": true },
-          "email": { "type": "string", "nullable": true },
-          "assigned_to": { "type": "integer", "nullable": true },
-          "assign_to_firstname": { "type": "string", "nullable": true },
-          "assign_to_lastname": { "type": "string", "nullable": true },
-          "street_address": { "type": "string", "nullable": true },
-          "city": { "type": "string", "nullable": true },
-          "state": { "type": "string", "nullable": true },
-          "zip_code": { "type": "string", "nullable": true },
-          "sold_date": { "type": "string", "nullable": true },
-          "x_date": { "type": "string", "nullable": true },
-          "quote_date": { "type": "string", "nullable": true },
-          "customer_id": { "type": "integer", "nullable": true },
-          "tag_names": { "type": "array", "items": { "type": "string" }, "nullable": true },
-          "lead_source_id": { "type": "integer", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "firstname": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastname": {
+            "type": "string",
+            "nullable": true
+          },
+          "pipeline": {
+            "type": "string",
+            "nullable": true
+          },
+          "pipeline_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "stage": {
+            "type": "string",
+            "nullable": true
+          },
+          "stage_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": "integer",
+            "nullable": true
+          },
+          "last_activity": {
+            "type": "string",
+            "nullable": true
+          },
+          "enter_stage_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "contact_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "lead_source": {
+            "type": "string",
+            "nullable": true
+          },
+          "lead_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "premium": {
+            "type": "number",
+            "nullable": true
+          },
+          "quoted": {
+            "type": "number",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "assigned_to": {
+            "type": "integer",
+            "nullable": true
+          },
+          "assign_to_firstname": {
+            "type": "string",
+            "nullable": true
+          },
+          "assign_to_lastname": {
+            "type": "string",
+            "nullable": true
+          },
+          "street_address": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "nullable": true
+          },
+          "zip_code": {
+            "type": "string",
+            "nullable": true
+          },
+          "sold_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "x_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "quote_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "customer_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "tag_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "lead_source_id": {
+            "type": "integer",
+            "nullable": true
+          }
         }
       },
       "Quote": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "lead_id": { "type": "integer", "nullable": true },
-          "carrier_name": { "type": "string", "nullable": true },
-          "product_name": { "type": "string", "nullable": true },
-          "premium": { "type": "number", "nullable": true },
-          "items": { "type": "array", "items": { "type": "object" }, "nullable": true },
-          "sold": { "type": "boolean", "nullable": true },
-          "effective_date": { "type": "string", "nullable": true },
-          "potential_revenue": { "type": "number", "nullable": true },
-          "property_address": { "type": "string", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "lead_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "carrier_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "product_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "premium": {
+            "type": "number",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true
+          },
+          "sold": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "effective_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "potential_revenue": {
+            "type": "number",
+            "nullable": true
+          },
+          "property_address": {
+            "type": "string",
+            "nullable": true
+          }
         }
       },
       "Opportunity": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "lead_id": { "type": "integer" },
-          "carrier_id": { "type": "integer", "nullable": true },
-          "product_line_id": { "type": "integer", "nullable": true },
-          "status": { "type": "integer", "nullable": true },
-          "premium": { "type": "number", "nullable": true },
-          "items": { "type": "integer", "nullable": true },
-          "property_address": { "type": "string", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "lead_id": {
+            "type": "integer"
+          },
+          "carrier_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "product_line_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "nullable": true
+          },
+          "premium": {
+            "type": "number",
+            "nullable": true
+          },
+          "items": {
+            "type": "integer",
+            "nullable": true
+          },
+          "property_address": {
+            "type": "string",
+            "nullable": true
+          }
         }
       },
       "File": {
         "type": "object",
         "properties": {
-          "id": { "type": "integer" },
-          "lead_id": { "type": "integer", "nullable": true },
-          "title": { "type": "string", "nullable": true },
-          "media_type": { "type": "string", "nullable": true },
-          "file_type": { "type": "string", "nullable": true },
-          "size": { "type": "integer", "nullable": true },
-          "create_date": { "type": "string", "nullable": true },
-          "comments": { "type": "string", "nullable": true }
+          "id": {
+            "type": "integer"
+          },
+          "lead_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "media_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "file_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "size": {
+            "type": "integer",
+            "nullable": true
+          },
+          "create_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "comments": {
+            "type": "string",
+            "nullable": true
+          }
         }
       }
     },
@@ -1216,6 +1877,8 @@
     }
   },
   "security": [
-    { "ApiKeyAuth": [] }
+    {
+      "ApiKeyAuth": []
+    }
   ]
 }

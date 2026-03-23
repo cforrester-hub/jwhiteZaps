@@ -1773,6 +1773,7 @@ async def coaching_analysis(
     leads_with_no_notes = 0
     leads_with_no_contact = 0
     leads_quoted_no_followup = 0
+    leads_missing_tasks = 0
 
     for lead in leads:
         lead_notes = notes_by_lead.get(lead.id, [])
@@ -1835,6 +1836,10 @@ async def coaching_analysis(
 
         if overdue_tasks:
             lead_flags.append(f"overdue_tasks_{len(overdue_tasks)}")
+
+        if not lead_tasks:
+            leads_missing_tasks += 1
+            lead_flags.append("missing_tasks")
 
         if hours_to_contact and hours_to_contact > 24:
             lead_flags.append("slow_first_contact")
@@ -1918,6 +1923,7 @@ async def coaching_analysis(
             "leads_no_notes": leads_with_no_notes,
             "leads_no_contact": leads_with_no_contact,
             "leads_quoted_no_followup": leads_quoted_no_followup,
+            "leads_missing_tasks": leads_missing_tasks,
             "total_emails": total_emails,
             "total_texts": total_texts,
             "total_calls": total_calls,

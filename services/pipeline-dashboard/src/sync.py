@@ -475,69 +475,73 @@ async def _sync_all_inner():
             else:
                 logger.info(f"Detail backfill in progress — {remaining_count} leads remaining")
 
-    # Step 2.6: Sync notes for delta leads that weren't in the detail sync
+    # Step 2.6: Sync notes/tasks for leads that weren't in the detail sync
     # The detail sync (Step 2.5) only covers quote-likely leads.
     # For coaching, we need notes on ALL recently-changed leads.
-    if is_delta:
-        async with async_session() as session:
-            # Find leads updated in this delta that DON'T have detail_synced_at set
-            # (meaning they weren't covered by Step 2.5)
+    # Runs on both delta and full syncs to cover non-quoted leads.
+    async with async_session() as session:
+        if is_delta:
             notes_query = select(Lead).where(
                 Lead.synced_at >= sync_start,
-                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start),
+                Lead.detail_synced_at == None,
             )
-            notes_result = await session.execute(notes_query)
-            leads_needing_notes = notes_result.scalars().all()
+        else:
+            notes_query = select(Lead).where(
+                Lead.detail_synced_at == None,
+            ).order_by(Lead.last_activity_date.desc())
 
-        if leads_needing_notes:
-            logger.info(f"Syncing notes/tasks for {len(leads_needing_notes)} non-quoted delta leads")
-            for lead in leads_needing_notes:
-                try:
-                    notes = await fetch_lead_notes(jwt, lead.id)
-                    async with async_session() as session:
-                        async with session.begin():
-                            await session.execute(
-                                delete(LeadNote).where(LeadNote.lead_id == lead.id)
-                            )
-                            for n in notes:
-                                await session.merge(LeadNote(
-                                    lead_id=lead.id,
-                                    note_type=n.get("type"),
-                                    create_date=n.get("createDate"),
-                                    created_by=n.get("createdBy"),
-                                    title=n.get("title"),
-                                    body=n.get("body"),
-                                    raw_json=n,
-                                    synced_at=sync_start,
-                                ))
-                except Exception as e:
-                    logger.warning(f"Failed to sync notes for lead {lead.id}: {e}")
+        notes_result = await session.execute(notes_query)
+        leads_needing_notes = notes_result.scalars().all()
 
-                try:
-                    tasks = await fetch_lead_tasks(jwt, lead.id)
-                    async with async_session() as session:
-                        async with session.begin():
-                            await session.execute(
-                                delete(LeadTask).where(LeadTask.lead_id == lead.id)
-                            )
-                            for t in tasks:
-                                t_id = t.get("id")
-                                if t_id is None:
-                                    continue
-                                await session.merge(LeadTask(
-                                    id=t_id,
-                                    lead_id=lead.id,
-                                    title=t.get("title"),
-                                    status=t.get("status"),
-                                    due_date=t.get("dueDate"),
-                                    completed_date=t.get("completedDate"),
-                                    assigned_to=t.get("assignedTo") if isinstance(t.get("assignedTo"), str) else None,
-                                    task_type=t.get("type"),
-                                    raw_json=t,
-                                    synced_at=sync_start,
-                                ))
-                except Exception as e:
-                    logger.warning(f"Failed to sync tasks for lead {lead.id}: {e}")
+    if leads_needing_notes:
+        logger.info(f"Syncing notes/tasks for {len(leads_needing_notes)} non-quoted leads")
+        for lead in leads_needing_notes:
+            try:
+                notes = await fetch_lead_notes(jwt, lead.id)
+                async with async_session() as session:
+                    async with session.begin():
+                        await session.execute(
+                            delete(LeadNote).where(LeadNote.lead_id == lead.id)
+                        )
+                        for n in notes:
+                            await session.merge(LeadNote(
+                                lead_id=lead.id,
+                                note_type=n.get("type"),
+                                create_date=n.get("createDate"),
+                                created_by=n.get("createdBy"),
+                                title=n.get("title"),
+                                body=n.get("body"),
+                                raw_json=n,
+                                synced_at=sync_start,
+                            ))
+            except Exception as e:
+                logger.warning(f"Failed to sync notes for lead {lead.id}: {e}")
+
+            try:
+                tasks = await fetch_lead_tasks(jwt, lead.id)
+                async with async_session() as session:
+                    async with session.begin():
+                        await session.execute(
+                            delete(LeadTask).where(LeadTask.lead_id == lead.id)
+                        )
+                        for t in tasks:
+                            t_id = t.get("id")
+                            if t_id is None:
+                                continue
+                            await session.merge(LeadTask(
+                                id=t_id,
+                                lead_id=lead.id,
+                                title=t.get("title"),
+                                status=str(t["status"]) if t.get("status") is not None else None,
+                                due_date=t.get("dueDate"),
+                                completed_date=t.get("completeDate"),
+                                assigned_to=t.get("assignedTo") if isinstance(t.get("assignedTo"), str) else None,
+                                task_type=t.get("type"),
+                                raw_json=t,
+                                synced_at=sync_start,
+                            ))
+            except Exception as e:
+                logger.warning(f"Failed to sync tasks for lead {lead.id}: {e}")
 
     # Step 3: Delete stale leads only on full sync (delta only upserts recent changes)
     if not is_delta and synced_pipeline_ids:

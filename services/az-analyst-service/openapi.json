@@ -1612,6 +1612,141 @@
           }
         }
       }
+    },
+    "/api/analysis/coaching-analysis": {
+      "get": {
+        "operationId": "getCoachingAnalysis",
+        "summary": "Per-lead coaching analysis with notes, tasks, and coaching flags",
+        "description": "Returns communication patterns, follow-up gaps, and coaching opportunities for a producer. Includes per-lead note timeline and coaching flags.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": true,
+            "description": "Producer first name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Start date YYYY-MM-DD (defaults to yesterday)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "End date YYYY-MM-DD (defaults to date_from)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days if date_from not set (default 1)",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "include_note_content",
+            "in": "query",
+            "required": false,
+            "description": "Include note/email/text body text (default true)",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "max_notes_per_lead",
+            "in": "query",
+            "required": false,
+            "description": "Cap notes per lead (default 20)",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Coaching analysis with per-lead breakdown",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "producer": {
+                      "type": "string"
+                    },
+                    "date_range": {
+                      "type": "object",
+                      "properties": {
+                        "from": {
+                          "type": "string"
+                        },
+                        "to": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "leads_active": {
+                          "type": "integer"
+                        },
+                        "leads_no_notes": {
+                          "type": "integer"
+                        },
+                        "leads_no_contact": {
+                          "type": "integer"
+                        },
+                        "leads_quoted_no_followup": {
+                          "type": "integer"
+                        },
+                        "total_emails": {
+                          "type": "integer"
+                        },
+                        "total_texts": {
+                          "type": "integer"
+                        },
+                        "total_calls": {
+                          "type": "integer"
+                        },
+                        "total_tasks": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "coaching_flag_summary": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
+                    },
+                    "leads": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

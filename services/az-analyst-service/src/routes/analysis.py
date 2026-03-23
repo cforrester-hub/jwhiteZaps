@@ -1671,3 +1671,259 @@ async def producer_scorecard(
             "Rankings computed against all active producers in the same date range",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Coaching Analysis
+# ---------------------------------------------------------------------------
+
+def _strip_html(text: str | None) -> str:
+    """Strip HTML tags from note body for cleaner LLM consumption."""
+    if not text:
+        return ""
+    import re
+    clean = re.sub(r'<[^>]+>', ' ', text)
+    return ' '.join(clean.split())[:500]  # cap at 500 chars
+
+
+@router.get("/coaching-analysis", dependencies=[Depends(verify_api_key)])
+async def coaching_analysis(
+    producer: str = Query(..., description="Producer firstname"),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD (defaults to yesterday)"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD (defaults to date_from)"),
+    days: int = Query(1, description="Look back N days if date_from not set", ge=1, le=30),
+    include_note_content: bool = Query(True, description="Include note body text (for LLM analysis)"),
+    max_notes_per_lead: int = Query(20, description="Cap notes per lead to control response size", ge=1, le=100),
+):
+    """Coaching analysis for a producer — surfaces communication patterns, follow-up gaps, and opportunities.
+
+    Returns per-lead activity breakdown with notes, tasks, timing, and coaching flags.
+    Designed for LLM consumption to generate coaching feedback.
+    """
+    # Compute date range
+    if date_from:
+        start = date_from
+    else:
+        start = (_today_pacific() - timedelta(days=days)).isoformat()
+    if date_to:
+        end = date_to
+    else:
+        end = date_from if date_from else (_today_pacific() - timedelta(days=1)).isoformat()
+    end_ts = end + "T23:59:59"
+
+    async with async_session() as session:
+        # Get leads with activity in the date range for this producer
+        lead_result = await session.execute(
+            select(Lead).where(
+                func.lower(Lead.assign_to_firstname) == producer.lower(),
+                Lead.last_activity_date >= start,
+                Lead.last_activity_date <= end_ts,
+            ).order_by(Lead.last_activity_date.desc())
+        )
+        leads = lead_result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        if not lead_ids:
+            return {
+                "producer": producer,
+                "date_range": {"from": start, "to": end},
+                "summary": {"leads_active": 0},
+                "leads": [],
+                "coaching_flags": [],
+            }
+
+        # Get quoted lead IDs
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids)
+
+        # Get all notes for these leads in the date range
+        notes_result = await session.execute(
+            select(LeadNote).where(
+                LeadNote.lead_id.in_(lead_ids),
+            ).order_by(LeadNote.create_date.asc())
+        )
+        all_notes = notes_result.scalars().all()
+
+        # Get all tasks for these leads
+        tasks_result = await session.execute(
+            select(LeadTask).where(LeadTask.lead_id.in_(lead_ids))
+        )
+        all_tasks = tasks_result.scalars().all()
+
+        # Load name maps
+        pipelines_map, stages_map = await _load_name_maps(session)
+
+    # Group notes and tasks by lead
+    notes_by_lead = {}
+    for n in all_notes:
+        notes_by_lead.setdefault(n.lead_id, []).append(n)
+
+    tasks_by_lead = {}
+    for t in all_tasks:
+        tasks_by_lead.setdefault(t.lead_id, []).append(t)
+
+    # Analyze each lead
+    lead_analyses = []
+    coaching_flags = []
+
+    # Aggregate counters
+    total_emails = 0
+    total_texts = 0
+    total_calls = 0
+    total_tasks_count = 0
+    leads_with_no_notes = 0
+    leads_with_no_contact = 0
+    leads_quoted_no_followup = 0
+
+    for lead in leads:
+        lead_notes = notes_by_lead.get(lead.id, [])
+        lead_tasks = tasks_by_lead.get(lead.id, [])
+        is_quoted = _is_effectively_quoted(lead, quoted_lead_ids)
+
+        # Filter notes to the date range for activity counting
+        notes_in_range = [n for n in lead_notes if n.create_date and n.create_date >= start and n.create_date <= end_ts]
+
+        # Count by type
+        type_counts = {}
+        for n in lead_notes:
+            t = n.note_type or "unknown"
+            type_counts[t] = type_counts.get(t, 0) + 1
+
+        emails = type_counts.get("EMAIL", 0)
+        texts = type_counts.get("TEXT", 0)
+        calls = type_counts.get("comment", 0)  # call logs are stored as "comment" type
+        stage_moves = type_counts.get("MOVE_STAGE", 0)
+
+        total_emails += emails
+        total_texts += texts
+        total_calls += calls
+        total_tasks_count += len(lead_tasks)
+
+        # Timing
+        hours_to_contact = _hours_between(lead.enter_stage_date, lead.contact_date)
+        hours_to_quote = _hours_between(lead.enter_stage_date, lead.quote_date)
+
+        # Open tasks
+        open_tasks = [t for t in lead_tasks if t.status and t.status.lower() not in ("completed", "done")]
+        overdue_tasks = []
+        today = _today_pacific()
+        for t in open_tasks:
+            if t.due_date:
+                due = _parse_date_str(t.due_date)
+                if due and due.date() < today:
+                    overdue_tasks.append(t)
+
+        # Coaching flags for this lead
+        lead_flags = []
+
+        if not lead_notes:
+            leads_with_no_notes += 1
+            lead_flags.append("no_notes_at_all")
+
+        if not lead.contact_date and lead.status == 0:
+            leads_with_no_contact += 1
+            lead_flags.append("new_lead_never_contacted")
+
+        if not notes_in_range and lead_notes:
+            lead_flags.append("no_activity_in_period")
+
+        if is_quoted and lead.status not in (2, 3, 5):
+            # Quoted but still open — check for follow-up after quote
+            post_quote_notes = [n for n in lead_notes if n.create_date and lead.quote_date and n.create_date > lead.quote_date]
+            if not post_quote_notes:
+                leads_quoted_no_followup += 1
+                lead_flags.append("quoted_no_followup")
+
+        if overdue_tasks:
+            lead_flags.append(f"overdue_tasks_{len(overdue_tasks)}")
+
+        if hours_to_contact and hours_to_contact > 24:
+            lead_flags.append("slow_first_contact")
+
+        # Build note timeline (capped)
+        note_timeline = []
+        for n in lead_notes[:max_notes_per_lead]:
+            entry = {
+                "type": n.note_type,
+                "date": n.create_date,
+                "title": n.title,
+            }
+            if include_note_content:
+                entry["body"] = _strip_html(n.body)
+            note_timeline.append(entry)
+
+        # Build task list
+        task_list = [
+            {
+                "title": t.title,
+                "status": t.status,
+                "due_date": t.due_date,
+                "type": t.task_type,
+            }
+            for t in lead_tasks
+        ]
+
+        pipeline_name = lead.workflow_name or pipelines_map.get(lead.pipeline_id)
+        stage_name = lead.workflow_stage_name or stages_map.get(lead.stage_id)
+
+        lead_analyses.append({
+            "lead_id": lead.id,
+            "name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
+            "pipeline": pipeline_name,
+            "stage": stage_name,
+            "status": STATUS_MAP.get(lead.status, "unknown"),
+            "lead_source": lead.lead_source_name,
+            "effectively_quoted": is_quoted,
+            "enter_stage_date": lead.enter_stage_date,
+            "contact_date": lead.contact_date,
+            "quote_date": lead.quote_date,
+            "last_activity": lead.last_activity_date,
+            "hours_to_first_contact": hours_to_contact,
+            "hours_to_quote": hours_to_quote,
+            "activity_counts": {
+                "total_notes": len(lead_notes),
+                "notes_in_period": len(notes_in_range),
+                "emails": emails,
+                "texts": texts,
+                "calls": calls,
+                "stage_moves": stage_moves,
+                "tasks": len(lead_tasks),
+                "open_tasks": len(open_tasks),
+                "overdue_tasks": len(overdue_tasks),
+            },
+            "coaching_flags": lead_flags,
+            "notes": note_timeline,
+            "tasks": task_list,
+        })
+
+        if lead_flags:
+            for flag in lead_flags:
+                coaching_flags.append({
+                    "flag": flag,
+                    "lead_id": lead.id,
+                    "lead_name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
+                    "pipeline": pipeline_name,
+                })
+
+    # Group coaching flags by type
+    flag_summary = {}
+    for cf in coaching_flags:
+        flag_summary[cf["flag"]] = flag_summary.get(cf["flag"], 0) + 1
+
+    return {
+        "producer": producer,
+        "date_range": {"from": start, "to": end},
+        "summary": {
+            "leads_active": len(leads),
+            "leads_with_notes": len(leads) - leads_with_no_notes,
+            "leads_no_notes": leads_with_no_notes,
+            "leads_no_contact": leads_with_no_contact,
+            "leads_quoted_no_followup": leads_quoted_no_followup,
+            "total_emails": total_emails,
+            "total_texts": total_texts,
+            "total_calls": total_calls,
+            "total_tasks": total_tasks_count,
+        },
+        "coaching_flag_summary": flag_summary,
+        "coaching_flags": coaching_flags,
+        "leads": lead_analyses,
+    }

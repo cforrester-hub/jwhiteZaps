@@ -378,5 +378,38 @@ async def get_producer_scorecard(
     })
 
 
+@mcp.tool()
+async def get_coaching_analysis(
+    producer: str,
+    date_from: str = "",
+    date_to: str = "",
+    days: int = 1,
+    include_note_content: bool = True,
+    max_notes_per_lead: int = 20,
+) -> str:
+    """Coaching analysis — surfaces communication patterns, follow-up gaps, and coaching opportunities.
+
+    Returns per-lead activity breakdown with notes (emails, texts, calls), tasks,
+    timing metrics, and coaching flags (no_contact, slow_response, quoted_no_followup,
+    overdue_tasks, etc.). Designed for generating specific, actionable coaching feedback.
+
+    Args:
+        producer: Producer first name (required)
+        date_from: Start date YYYY-MM-DD (optional, defaults to yesterday)
+        date_to: End date YYYY-MM-DD (optional, defaults to date_from)
+        days: Look back N days if date_from not set (default 1 = yesterday)
+        include_note_content: Include note/email/text body text (default true)
+        max_notes_per_lead: Cap notes per lead to control response size (default 20)
+    """
+    return await _call_api("/coaching-analysis", {
+        "producer": producer,
+        "date_from": date_from,
+        "date_to": date_to,
+        "days": days,
+        "include_note_content": str(include_note_content).lower(),
+        "max_notes_per_lead": max_notes_per_lead,
+    })
+
+
 if __name__ == "__main__":
     mcp.run()

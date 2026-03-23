@@ -270,6 +270,15 @@ async def fetch_lead_notes(jwt: str, lead_id: int) -> list[dict]:
     return data.get("notes", data.get("items", []))
 
 
+async def fetch_lead_tasks(jwt: str, lead_id: int) -> list[dict]:
+    """Fetch tasks for a specific lead."""
+    await _rate_limit_delay()
+    data = await _make_request("GET", f"/v1/api/leads/{lead_id}/tasks", jwt)
+    if isinstance(data, list):
+        return data
+    return data.get("tasks", data.get("items", []))
+
+
 async def fetch_lead_files(jwt: str, lead_id: int, file_type: int = None) -> list[dict]:
     """Fetch files for a specific lead. file_type=1 for quotes only."""
     await _rate_limit_delay()

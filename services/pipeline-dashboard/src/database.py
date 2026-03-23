@@ -253,6 +253,28 @@ class LeadNote(Base):
     )
 
 
+class LeadTask(Base):
+    """Cached AgencyZoom lead tasks."""
+
+    __tablename__ = "pd_lead_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=False)  # AZ task ID
+    lead_id = Column(Integer, ForeignKey("pd_leads.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=True)
+    status = Column(String(50), nullable=True)  # open, completed, etc.
+    due_date = Column(String(50), nullable=True)
+    completed_date = Column(String(50), nullable=True)
+    assigned_to = Column(String(255), nullable=True)
+    task_type = Column(String(100), nullable=True)  # sales, onboarding, etc.
+    raw_json = Column(JSONB, nullable=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_pd_lead_tasks_lead", "lead_id"),
+        Index("ix_pd_lead_tasks_status", "status"),
+    )
+
+
 class SyncMeta(Base):
     """Tracks sync metadata (e.g., last successful full/delta sync time)."""
 

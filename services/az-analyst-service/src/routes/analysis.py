@@ -1693,11 +1693,15 @@ async def coaching_analysis(
     date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD (defaults to date_from)"),
     days: int = Query(1, description="Look back N days if date_from not set", ge=1, le=30),
     include_note_content: bool = Query(True, description="Include note body text (for LLM analysis)"),
-    max_notes_per_lead: int = Query(20, description="Cap notes per lead to control response size", ge=1, le=100),
+    max_notes_per_lead: int = Query(10, description="Cap notes per lead to control response size", ge=1, le=100),
+    summary_only: bool = Query(False, description="Return only summary and coaching flags, omit per-lead detail"),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
 ):
     """Coaching analysis for a producer — surfaces communication patterns, follow-up gaps, and opportunities.
 
     Returns per-lead activity breakdown with notes, tasks, timing, and coaching flags.
+    Use summary_only=true for high-volume producers to avoid oversized responses.
     Designed for LLM consumption to generate coaching feedback.
     """
     # Compute date range
@@ -1713,12 +1717,18 @@ async def coaching_analysis(
 
     async with async_session() as session:
         # Get leads with activity in the date range for this producer
+        conditions = [
+            func.lower(Lead.assign_to_firstname) == producer.lower(),
+            Lead.last_activity_date >= start,
+            Lead.last_activity_date <= end_ts,
+        ]
+        if pipeline_name:
+            conditions.append(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+
         lead_result = await session.execute(
-            select(Lead).where(
-                func.lower(Lead.assign_to_firstname) == producer.lower(),
-                Lead.last_activity_date >= start,
-                Lead.last_activity_date <= end_ts,
-            ).order_by(Lead.last_activity_date.desc())
+            select(Lead).where(*conditions).order_by(Lead.last_activity_date.desc())
         )
         leads = lead_result.scalars().all()
         lead_ids = [l.id for l in leads]
@@ -1930,6 +1940,6 @@ async def coaching_analysis(
             "total_tasks": total_tasks_count,
         },
         "coaching_flag_summary": flag_summary,
-        "coaching_flags": coaching_flags,
-        "leads": lead_analyses,
+        "coaching_flags": coaching_flags if not summary_only else [],
+        "leads": lead_analyses if not summary_only else [],
     }

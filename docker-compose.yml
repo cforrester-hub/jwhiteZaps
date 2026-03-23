@@ -88,6 +88,8 @@ services:
     container_name: loki
     restart: unless-stopped
     command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"  # Exposed to host so Docker Loki logging driver can reach it via localhost:3100
     volumes:
       - loki-data:/loki
     networks:

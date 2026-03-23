@@ -287,5 +287,96 @@ async def get_data_quality_report(
     })
 
 
+@mcp.tool()
+async def get_pipeline_compliance(
+    date_from: str,
+    date_to: str,
+    producer: str = "",
+    pipeline_id: str = "",
+    pipeline_name: str = "",
+    summary_only: bool = True,
+) -> str:
+    """Quote compliance metrics for a pipeline — quote rate, compliance status, unquoted leads.
+
+    Returns passing/warning/failing status based on pipeline intent type thresholds.
+    High-intent pipelines (Call/Walk In) expect 90%+ quote rates.
+    Use summary_only=false to see the list of unquoted leads.
+
+    Args:
+        date_from: Start date YYYY-MM-DD (required, filters on enter_stage_date)
+        date_to: End date YYYY-MM-DD (required)
+        producer: Filter by producer first name (optional)
+        pipeline_id: Filter by pipeline ID (optional)
+        pipeline_name: Filter by pipeline name, partial match (optional)
+        summary_only: Omit unquoted lead list (default true)
+    """
+    return await _call_api("/pipeline-compliance", {
+        "producer": producer,
+        "pipeline_id": pipeline_id,
+        "pipeline_name": pipeline_name,
+        "date_from": date_from,
+        "date_to": date_to,
+        "summary_only": str(summary_only).lower(),
+    })
+
+
+@mcp.tool()
+async def get_lost_deal_analysis(
+    date_from: str,
+    date_to: str,
+    producer: str = "",
+    pipeline_id: str = "",
+    pipeline_name: str = "",
+    include_recoverable: bool = True,
+    summary_only: bool = True,
+) -> str:
+    """Audit quoted leads that didn't close — post-quote leakage, failure reasons, recoverable leads.
+
+    Shows close rate among quoted leads, leakage percentage, and identifies
+    leads that may be recoverable (quoted, not won, recent activity).
+
+    Args:
+        date_from: Start date YYYY-MM-DD (required)
+        date_to: End date YYYY-MM-DD (required)
+        producer: Filter by producer first name (optional)
+        pipeline_id: Filter by pipeline ID (optional)
+        pipeline_name: Filter by pipeline name, partial match (optional)
+        include_recoverable: Include recoverable lead identification (default true)
+        summary_only: Omit per-lead detail lists (default true)
+    """
+    return await _call_api("/lost-deal-analysis", {
+        "producer": producer,
+        "pipeline_id": pipeline_id,
+        "pipeline_name": pipeline_name,
+        "date_from": date_from,
+        "date_to": date_to,
+        "include_recoverable": str(include_recoverable).lower(),
+        "summary_only": str(summary_only).lower(),
+    })
+
+
+@mcp.tool()
+async def get_producer_scorecard(
+    producer: str,
+    date_from: str,
+    date_to: str,
+) -> str:
+    """One-response KPI summary for a producer across all pipelines with team rankings.
+
+    Returns quote rate, close rate, leakage metrics, timing, per-pipeline breakdown,
+    and rank vs other producers on key metrics.
+
+    Args:
+        producer: Producer first name (required)
+        date_from: Start date YYYY-MM-DD (required)
+        date_to: End date YYYY-MM-DD (required)
+    """
+    return await _call_api("/producer-scorecard", {
+        "producer": producer,
+        "date_from": date_from,
+        "date_to": date_to,
+    })
+
+
 if __name__ == "__main__":
     mcp.run()

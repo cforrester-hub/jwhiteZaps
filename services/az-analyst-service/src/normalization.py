@@ -81,3 +81,25 @@ def classify_pipeline(workflow_name: str | None) -> dict:
 def classify_source(lead_source_name: str | None) -> str:
     """Return source_group for a lead source name."""
     return SOURCE_GROUP_MAP.get(lead_source_name or "", "other")
+
+
+# Compliance thresholds by intent_type
+# quote_rate thresholds: passing >= high, warning >= low, failing < low
+COMPLIANCE_THRESHOLDS = {
+    "high_intent": {"passing": 0.90, "warning": 0.70},
+    "existing_customer": {"passing": 0.80, "warning": 0.60},
+    "cold_purchased": {"passing": 0.50, "warning": 0.30},
+    "targeted": {"passing": 0.40, "warning": 0.20},
+    "warm": {"passing": 0.60, "warning": 0.40},
+    "other": {"passing": 0.50, "warning": 0.30},
+}
+
+
+def get_compliance_status(quote_rate: float, intent_type: str) -> str:
+    """Determine compliance status based on quote rate and pipeline intent."""
+    thresholds = COMPLIANCE_THRESHOLDS.get(intent_type, COMPLIANCE_THRESHOLDS["other"])
+    if quote_rate >= thresholds["passing"]:
+        return "passing"
+    elif quote_rate >= thresholds["warning"]:
+        return "warning"
+    return "failing"

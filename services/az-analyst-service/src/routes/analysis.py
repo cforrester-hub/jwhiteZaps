@@ -19,7 +19,7 @@ from ..az_client import (
 )
 from ..config import get_settings
 from ..database import Employee, Lead, LeadFile, LeadOpportunity, LeadQuote, Pipeline, Stage, async_session
-from ..normalization import classify_pipeline, classify_source
+from ..normalization import classify_pipeline, classify_source, get_compliance_status
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -1249,4 +1249,425 @@ async def data_quality_report(
         "health_score_pct": f"{health_score}%",
         "issues": issues,
         "sample_leads": sample_leads,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Pipeline Compliance
+# ---------------------------------------------------------------------------
+
+@router.get("/pipeline-compliance", dependencies=[Depends(verify_api_key)])
+async def pipeline_compliance(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    date_from: str = Query(..., description="Start date YYYY-MM-DD (filters on enter_stage_date)"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
+    summary_only: bool = Query(True, description="Omit unquoted leads list (default true)"),
+):
+    """Quote compliance and SLA metrics for a pipeline scope.
+
+    Returns quote rate, compliance status (passing/warning/failing based on pipeline
+    intent type), timing metrics, and optionally the list of unquoted leads.
+    """
+    end = date_to + "T23:59:59"
+
+    async with async_session() as session:
+        conditions = [
+            Lead.enter_stage_date >= date_from,
+            Lead.enter_stage_date <= end,
+        ]
+        if producer:
+            conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+        if pipeline_name:
+            conditions.append(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+
+        result = await session.execute(select(Lead).where(*conditions))
+        leads = result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+        pipelines_map, stages_map = await _load_name_maps(session)
+
+    # Determine pipeline for compliance thresholds
+    pipeline_names_seen = set(l.workflow_name or pipelines_map.get(l.pipeline_id, "Unknown") for l in leads)
+    primary_pipeline = pipeline_names_seen.pop() if len(pipeline_names_seen) == 1 else None
+    intent = classify_pipeline(primary_pipeline).get("intent_type", "other") if primary_pipeline else "other"
+
+    # Classify leads
+    total = len(leads)
+    quoted_leads = [l for l in leads if _is_effectively_quoted(l, quoted_lead_ids)]
+    unquoted_leads = [l for l in leads if not _is_effectively_quoted(l, quoted_lead_ids)]
+    quoted = len(quoted_leads)
+    not_quoted = len(unquoted_leads)
+
+    quote_rate = quoted / total if total > 0 else 0
+
+    # Timing for quoted leads
+    time_to_quote = [_hours_between(l.enter_stage_date, l.quote_date) for l in quoted_leads]
+
+    # Same-day quotes
+    same_day = 0
+    quoted_after_24h = 0
+    for l in quoted_leads:
+        hours = _hours_between(l.enter_stage_date, l.quote_date)
+        if hours is not None:
+            if hours <= 24:
+                entered_day = (l.enter_stage_date or "")[:10]
+                quoted_day = (l.quote_date or "")[:10]
+                if entered_day and quoted_day and entered_day == quoted_day:
+                    same_day += 1
+            if hours > 24:
+                quoted_after_24h += 1
+
+    # No quote, no disposition — we don't have disposition_reason from AZ
+    # so all unquoted leads count here
+    no_quote_no_disposition = not_quoted
+
+    compliance_status = get_compliance_status(quote_rate, intent)
+    timing = _timing_stats(time_to_quote)
+
+    source_notes = []
+    if not primary_pipeline:
+        source_notes.append("Multiple pipelines in scope — compliance threshold uses 'other' defaults")
+    source_notes.append("disposition_reason not available from AgencyZoom API — all unquoted leads counted as no_quote_no_disposition")
+
+    summary = {
+        "total_leads": total,
+        "quoted": quoted,
+        "not_quoted": not_quoted,
+        "quote_rate_pct": f"{round(quote_rate * 100, 1)}%",
+        "same_day_quote_pct": f"{round(same_day / total * 100, 1) if total > 0 else 0}%",
+        "avg_time_to_quote_hours": timing["avg_hours"],
+        "median_time_to_quote_hours": timing["median_hours"],
+        "quoted_after_24h": quoted_after_24h,
+        "no_quote_no_disposition": no_quote_no_disposition,
+        "compliance_status": compliance_status,
+        "pipeline_intent_type": intent,
+    }
+
+    response = {
+        "date_range": {"from": date_from, "to": date_to},
+        "scope": {
+            "producer": producer,
+            "pipeline_id": pipeline_id,
+            "pipeline_name": primary_pipeline or pipeline_name,
+        },
+        "summary": summary,
+        "source_notes": source_notes,
+    }
+
+    if not summary_only:
+        response["unquoted_leads"] = [
+            {
+                "lead_id": l.id,
+                "name": f"{l.firstname or ''} {l.lastname or ''}".strip(),
+                "pipeline_name": l.workflow_name or pipelines_map.get(l.pipeline_id),
+                "status": STATUS_MAP.get(l.status, "unknown"),
+                "stage": l.workflow_stage_name or stages_map.get(l.stage_id),
+                "lead_source": l.lead_source_name,
+                "created_at": l.enter_stage_date,
+                "last_activity_at": l.last_activity_date,
+            }
+            for l in unquoted_leads
+        ]
+    else:
+        response["unquoted_leads"] = []
+
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Lost Deal Analysis
+# ---------------------------------------------------------------------------
+
+@router.get("/lost-deal-analysis", dependencies=[Depends(verify_api_key)])
+async def lost_deal_analysis(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    date_from: str = Query(..., description="Start date YYYY-MM-DD"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
+    include_recoverable: bool = Query(True, description="Include recoverable lead list"),
+    summary_only: bool = Query(True, description="Omit per-lead detail lists"),
+):
+    """Audit quoted leads that did not close. Identifies post-quote leakage and recoverable opportunities."""
+    end = date_to + "T23:59:59"
+
+    async with async_session() as session:
+        # Get all leads in scope
+        conditions = [
+            Lead.last_activity_date >= date_from,
+            Lead.last_activity_date <= end,
+        ]
+        if producer:
+            conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+        if pipeline_name:
+            conditions.append(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+
+        result = await session.execute(select(Lead).where(*conditions))
+        leads = result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+        pipelines_map, stages_map = await _load_name_maps(session)
+
+    # Filter to effectively quoted leads only
+    quoted_leads = [l for l in leads if _is_effectively_quoted(l, quoted_lead_ids)]
+    quoted = len(quoted_leads)
+    won = sum(1 for l in quoted_leads if l.status == 2)
+    lost = sum(1 for l in quoted_leads if l.status == 3)
+    expired = sum(1 for l in quoted_leads if l.status == 5)
+    still_open = quoted - won - lost - expired
+
+    close_rate = round(won / quoted, 3) if quoted > 0 else 0
+    leakage = lost + expired
+    post_quote_leakage = round(leakage / quoted, 3) if quoted > 0 else 0
+
+    # Failure reasons — group by status since we don't have disposition_reason
+    failure_reasons = {}
+    for l in quoted_leads:
+        if l.status in (3, 5):  # lost or expired
+            status_name = STATUS_MAP.get(l.status, "unknown")
+            failure_reasons[status_name] = failure_reasons.get(status_name, 0) + 1
+
+    # Recoverable leads: quoted, not won, not expired too long ago, status is NEW/CONTACTED/LOST
+    recoverable = []
+    if include_recoverable:
+        today = _today_pacific()
+        for l in quoted_leads:
+            if l.status == 2:  # already won
+                continue
+            # Consider recoverable if last activity within 60 days
+            days_since = None
+            dt = _parse_date_str(l.last_activity_date)
+            if dt:
+                days_since = (datetime.combine(today, datetime.min.time()) - dt).days
+            if days_since is not None and days_since <= 60:
+                recoverable.append(l)
+
+    source_notes = [
+        "disposition_reason not available from AZ API — failure_reasons grouped by status only",
+        "follow_up_count_after_quote not available — notes are not synced; would require live API calls",
+        "Recoverable heuristic: quoted + not won + last activity within 60 days",
+    ]
+
+    def _lead_lite(l):
+        return {
+            "lead_id": l.id,
+            "name": f"{l.firstname or ''} {l.lastname or ''}".strip(),
+            "pipeline_name": l.workflow_name or pipelines_map.get(l.pipeline_id),
+            "status": STATUS_MAP.get(l.status, "unknown"),
+            "lead_source": l.lead_source_name,
+            "created_at": l.enter_stage_date,
+            "quoted_at": l.quote_date,
+            "sold_at": l.sold_date,
+            "last_activity_at": l.last_activity_date,
+            "time_to_quote_hours": _hours_between(l.enter_stage_date, l.quote_date),
+        }
+
+    response = {
+        "date_range": {"from": date_from, "to": date_to},
+        "scope": {
+            "producer": producer,
+            "pipeline_id": pipeline_id,
+            "pipeline_name": pipeline_name,
+        },
+        "summary": {
+            "quoted": quoted,
+            "won": won,
+            "lost": lost,
+            "expired": expired,
+            "still_open": still_open,
+            "close_rate_pct": f"{close_rate * 100:.1f}%",
+            "post_quote_leakage_pct": f"{post_quote_leakage * 100:.1f}%",
+            "recoverable_count": len(recoverable),
+            "avg_follow_up_count_after_quote": None,
+            "no_follow_up_after_quote_pct": None,
+        },
+        "failure_reasons": failure_reasons,
+        "source_notes": source_notes,
+    }
+
+    if not summary_only:
+        lost_expired = [l for l in quoted_leads if l.status in (3, 5)]
+        response["lost_or_expired_quoted_leads"] = [_lead_lite(l) for l in lost_expired]
+        response["recoverable_leads"] = [_lead_lite(l) for l in recoverable]
+    else:
+        response["lost_or_expired_quoted_leads"] = []
+        response["recoverable_leads"] = []
+
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Producer Scorecard
+# ---------------------------------------------------------------------------
+
+@router.get("/producer-scorecard", dependencies=[Depends(verify_api_key)])
+async def producer_scorecard(
+    producer: str = Query(..., description="Producer firstname"),
+    date_from: str = Query(..., description="Start date YYYY-MM-DD"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
+):
+    """One-response KPI summary for a producer across all pipelines with team rankings."""
+    end = date_to + "T23:59:59"
+
+    async with async_session() as session:
+        # Get this producer's leads
+        result = await session.execute(
+            select(Lead).where(
+                func.lower(Lead.assign_to_firstname) == producer.lower(),
+                Lead.enter_stage_date >= date_from,
+                Lead.enter_stage_date <= end,
+            )
+        )
+        leads = result.scalars().all()
+        lead_ids = [l.id for l in leads]
+
+        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
+        pipelines_map, _ = await _load_name_maps(session)
+
+        # Get ALL producers' leads for ranking
+        all_result = await session.execute(
+            select(Lead).where(
+                Lead.enter_stage_date >= date_from,
+                Lead.enter_stage_date <= end,
+            )
+        )
+        all_leads = all_result.scalars().all()
+        all_lead_ids = [l.id for l in all_leads]
+        all_quoted_ids = await _get_quoted_lead_ids(session, all_lead_ids) if all_lead_ids else set()
+
+        # Get active producers
+        emp_result = await session.execute(
+            select(Employee).where(Employee.is_producer == 1, Employee.is_active == 1)
+        )
+        all_producers = emp_result.scalars().all()
+
+    # Helper to compute metrics for a set of leads
+    def _compute_kpis(lead_set, q_ids):
+        total = len(lead_set)
+        quoted = sum(1 for l in lead_set if _is_effectively_quoted(l, q_ids))
+        won = sum(1 for l in lead_set if l.status == 2)
+        lost = sum(1 for l in lead_set if l.status == 3)
+        expired = sum(1 for l in lead_set if l.status == 5)
+
+        # Leakage
+        terminal_unquoted = sum(1 for l in lead_set if l.status in (3, 5) and not _is_effectively_quoted(l, q_ids))
+        quoted_terminal = sum(1 for l in lead_set if l.status in (3, 5) and _is_effectively_quoted(l, q_ids))
+
+        quote_rate = round(quoted / total, 3) if total > 0 else 0
+        close_rate = round(won / quoted, 3) if quoted > 0 else 0
+        pre_leak = round(terminal_unquoted / total, 3) if total > 0 else 0
+        post_leak = round(quoted_terminal / quoted, 3) if quoted > 0 else 0
+
+        time_to_quote = [_hours_between(l.enter_stage_date, l.quote_date) for l in lead_set if _is_effectively_quoted(l, q_ids)]
+        timing = _timing_stats(time_to_quote)
+
+        return {
+            "new_leads": total,
+            "quoted": quoted,
+            "won": won,
+            "lost": lost,
+            "expired": expired,
+            "quote_rate_pct": f"{quote_rate * 100:.1f}%",
+            "close_rate_pct": f"{close_rate * 100:.1f}%",
+            "pre_quote_leakage_pct": f"{pre_leak * 100:.1f}%",
+            "post_quote_leakage_pct": f"{post_leak * 100:.1f}%",
+            "avg_time_to_quote_hours": timing["avg_hours"],
+            "_quote_rate": quote_rate,
+            "_close_rate": close_rate,
+            "_lead_to_close": round(won / total, 3) if total > 0 else 0,
+        }
+
+    # This producer's KPIs
+    kpis = _compute_kpis(leads, quoted_lead_ids)
+
+    # Pipeline breakdown
+    by_pipeline = {}
+    for l in leads:
+        pname = l.workflow_name or pipelines_map.get(l.pipeline_id, "Unknown")
+        by_pipeline.setdefault(pname, []).append(l)
+
+    pipeline_breakdown = []
+    for pname, p_leads in sorted(by_pipeline.items(), key=lambda x: -len(x[1])):
+        p_kpis = _compute_kpis(p_leads, quoted_lead_ids)
+        pipeline_breakdown.append({
+            "pipeline_name": pname,
+            "leads": len(p_leads),
+            "quote_rate_pct": p_kpis["quote_rate_pct"],
+            "close_rate_pct": p_kpis["close_rate_pct"],
+            "pre_quote_leakage_pct": p_kpis["pre_quote_leakage_pct"],
+            "post_quote_leakage_pct": p_kpis["post_quote_leakage_pct"],
+        })
+
+    # Rankings: compute KPIs for all producers and rank
+    producer_kpis = {}
+    producer_map = {p.id: p for p in all_producers}
+    for l in all_leads:
+        pid = l.assigned_to
+        if pid not in producer_kpis:
+            producer_kpis[pid] = []
+        producer_kpis[pid].append(l)
+
+    rankings_data = []
+    for pid, p_leads in producer_kpis.items():
+        prod = producer_map.get(pid)
+        name = prod.firstname if prod else str(pid)
+        pk = _compute_kpis(p_leads, all_quoted_ids)
+        rankings_data.append({
+            "name": name,
+            "quote_rate": pk["_quote_rate"],
+            "close_rate": pk["_close_rate"],
+            "lead_to_close": pk["_lead_to_close"],
+        })
+
+    # Sort and rank
+    by_qr = sorted(rankings_data, key=lambda x: -x["quote_rate"])
+    by_cr = sorted(rankings_data, key=lambda x: -x["close_rate"])
+    by_ltc = sorted(rankings_data, key=lambda x: -x["lead_to_close"])
+
+    def _find_rank(sorted_list, producer_name):
+        for i, item in enumerate(sorted_list):
+            if item["name"].lower() == producer_name.lower():
+                return i + 1
+        return None
+
+    # Find employee name for matching
+    emp_match = None
+    for p in all_producers:
+        if p.firstname and p.firstname.lower() == producer.lower():
+            emp_match = p
+            break
+
+    producer_display = emp_match.firstname if emp_match else producer
+
+    rankings = {
+        "quote_rate_rank": _find_rank(by_qr, producer_display),
+        "close_rate_rank": _find_rank(by_cr, producer_display),
+        "lead_to_close_rank": _find_rank(by_ltc, producer_display),
+        "total_producers": len(rankings_data),
+    }
+
+    # Clean internal fields from kpis
+    del kpis["_quote_rate"]
+    del kpis["_close_rate"]
+    del kpis["_lead_to_close"]
+
+    return {
+        "producer": producer_display,
+        "date_range": {"from": date_from, "to": date_to},
+        "kpis": kpis,
+        "rankings": rankings,
+        "pipeline_breakdown": pipeline_breakdown,
+        "source_notes": [
+            "pre_quote_leakage = leads that reached terminal status (lost/expired) without being quoted",
+            "post_quote_leakage = quoted leads that reached terminal status without winning",
+            "Rankings computed against all active producers in the same date range",
+        ],
     }

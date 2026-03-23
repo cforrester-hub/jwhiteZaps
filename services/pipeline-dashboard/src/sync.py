@@ -282,10 +282,10 @@ async def _sync_all_inner():
 
     async with async_session() as session:
         if needs_detail_backfill:
-            # Full backfill: leads likely to have quotes that haven't been detail-synced
+            # Full backfill: leads likely to have quotes that haven't been detail-synced yet
             query = select(Lead).where(
                 quote_likely_filter,
-                (Lead.detail_synced_at == None) | (Lead.detail_synced_at < sync_start),
+                Lead.detail_synced_at == None,
             )
         elif is_delta:
             # Delta: only leads updated in this sync cycle that are likely to have quotes

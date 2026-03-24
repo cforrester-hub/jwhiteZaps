@@ -29,22 +29,8 @@
             <td class="num">{{ group.quoted_leads | default(0) }}</td>
             <td class="num">{{ group.won | default(0) }}</td>
             <td class="num">{{ group.lost | default(0) }}</td>
-            <td class="num">
-                {% if group.quote_rate_pct is not none %}
-                    {{ "%.0f"|format(group.quote_rate_pct) }}%
-                {% else %}
-                    —
-                {% endif %}
-            </td>
-            <td class="num">
-                {% if group.close_rate_quoted_pct is not none %}
-                    {{ "%.0f"|format(group.close_rate_quoted_pct) }}%
-                {% elif group.close_rate_entered_pct is not none %}
-                    {{ "%.0f"|format(group.close_rate_entered_pct) }}%
-                {% else %}
-                    —
-                {% endif %}
-            </td>
+            <td class="num">{{ group.quote_rate_pct | default("—") }}</td>
+            <td class="num">{{ group.close_rate_quoted_pct | default(group.close_rate_entered_pct | default("—")) }}</td>
         </tr>
         {% endfor %}
     </tbody>

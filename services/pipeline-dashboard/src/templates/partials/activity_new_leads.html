@@ -22,13 +22,7 @@
             <td class="num">{{ group.quoted_leads | default(0) }}</td>
             <td class="num">{{ group.won | default(0) }}</td>
             <td class="num">{{ group.lost | default(0) }}</td>
-            <td class="num">
-                {% if group.quote_rate_pct is not none %}
-                    {{ "%.0f"|format(group.quote_rate_pct) }}%
-                {% else %}
-                    —
-                {% endif %}
-            </td>
+            <td class="num">{{ group.quote_rate_pct | default("—") }}</td>
         </tr>
         {% endfor %}
     </tbody>

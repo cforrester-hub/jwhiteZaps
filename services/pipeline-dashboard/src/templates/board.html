@@ -38,7 +38,7 @@
     </nav>
 
     <!-- Collapsible filter panel -->
-    <div id="filter-panel" class="filter-panel">
+    <div id="filter-panel" class="filter-panel open">
         <div class="filter-panel-inner">
             <!-- Producer filter -->
             <div class="filter-section">
@@ -93,6 +93,18 @@
                 </div>
             </div>
         </div>
+
+        <!-- Pipeline summary row -->
+        <div class="filter-pipeline-summary" id="filter-pipeline-summary">
+            <div class="pipeline-pill active" onclick="selectPipeline(this, 'all')">
+                <span class="pipeline-pill-name">All Pipelines</span>
+            </div>
+            {% for pipeline in pipelines %}
+            <div class="pipeline-pill" onclick="selectPipeline(this, '{{ pipeline.id }}')">
+                <span class="pipeline-pill-name">{{ pipeline.name }}</span>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 
     <!-- Loading indicator -->
@@ -121,7 +133,7 @@
         producers: [],
         activityBuckets: [],
         search: '',
-        panelOpen: false,
+        panelOpen: true,
         myLeadsActive: false,
     };
 
@@ -164,6 +176,16 @@
         const sections = document.querySelectorAll('.pipeline-section');
         const allCollapsed = sections.length > 0 && Array.from(sections).every(s => s.classList.contains('collapsed'));
         btn.textContent = allCollapsed ? '+ Expand All' : '− Collapse All';
+    }
+
+    function selectPipeline(pill, pipelineId) {
+        // Update pill active state
+        document.querySelectorAll('.pipeline-pill').forEach(function(p) { p.classList.remove('active'); });
+        pill.classList.add('active');
+        // Sync the dropdown
+        document.getElementById('pipeline-select').value = pipelineId;
+        // Reload board
+        loadBoard();
     }
 
     let allProducers = [];

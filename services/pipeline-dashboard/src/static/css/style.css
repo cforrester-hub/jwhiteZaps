@@ -859,10 +859,3 @@ body {
 .prompt-option .prompt-desc { font-size: 11px; color: #888; margin-top: 2px; }
 .prompt-option:hover .prompt-desc { color: rgba(255,255,255,0.7); }
 
-/* Pipeline summary pills in filter panel */
-.filter-pipeline-summary { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px 12px;
-    border-top: 1px solid #2a2a4a; }
-.pipeline-pill { padding: 4px 12px; border-radius: 4px; border: 1px solid #3a3f5c; background: transparent;
-    color: #aaa; cursor: pointer; font-size: 12px; transition: all 0.2s; white-space: nowrap; }
-.pipeline-pill:hover { border-color: #6c5ce7; color: #fff; }
-.pipeline-pill.active { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }

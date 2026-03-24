@@ -185,16 +185,28 @@
         }
     }
 
-    function reloadSection(id, url) {
-        htmx.ajax('GET', url, {target: '#' + id, swap: 'innerHTML'});
-    }
-
     function reloadAll() {
         const qs = buildParams();
-        reloadSection('activity-summary', '/pipeline/api/activity/summary?' + qs);
-        reloadSection('activity-new-leads', '/pipeline/api/activity/new-leads?' + qs);
-        reloadSection('activity-producers', '/pipeline/api/activity/producers?' + qs);
-        reloadSection('activity-coaching', '/pipeline/api/activity/coaching?' + qs);
+        const sections = [
+            ['activity-summary', '/pipeline/api/activity/summary'],
+            ['activity-new-leads', '/pipeline/api/activity/new-leads'],
+            ['activity-producers', '/pipeline/api/activity/producers'],
+            ['activity-coaching', '/pipeline/api/activity/coaching'],
+        ];
+        sections.forEach(function(s) {
+            var el = document.getElementById(s[0]);
+            if (!el) return;
+            var url = s[1] + '?' + qs;
+            el.textContent = 'Loading...';
+            fetch(url, {credentials: 'same-origin'})
+                .then(function(r) { return r.text(); })
+                .then(function(html) {
+                    el.outerHTML = '<div id="' + s[0] + '">' + html + '</div>';
+                })
+                .catch(function() {
+                    el.textContent = 'Failed to load.';
+                });
+        });
     }
 
     function copyCoachingPrompt() {

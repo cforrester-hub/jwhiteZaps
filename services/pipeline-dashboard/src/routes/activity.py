@@ -70,7 +70,28 @@ async def activity_page(request: Request):
     user = await get_current_user(request)
     if user is None:
         return templates.TemplateResponse("login.html", {"request": request, "error": ""})
-    return templates.TemplateResponse("activity.html", {"request": request, "user": user})
+
+    # Fetch producer and pipeline lists for filter dropdowns
+    from ..database import Employee, Pipeline, async_session
+    from sqlalchemy import select
+
+    producers = []
+    pipelines = []
+    async with async_session() as session:
+        emp_result = await session.execute(
+            select(Employee).where(Employee.is_producer == 1, Employee.is_active == 1).order_by(Employee.firstname)
+        )
+        producers = [{"firstname": e.firstname, "lastname": e.lastname} for e in emp_result.scalars().all()]
+
+        pip_result = await session.execute(select(Pipeline).order_by(Pipeline.name))
+        pipelines = [{"id": p.id, "name": p.name} for p in pip_result.scalars().all()]
+
+    return templates.TemplateResponse("activity.html", {
+        "request": request,
+        "user": user,
+        "producers": producers,
+        "pipelines": pipelines,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +105,7 @@ async def activity_summary(
     date_from: str = None,
     date_to: str = None,
     producer: str = None,
+    pipeline_name: str = None,
 ):
     """Summary cards partial."""
     user = await get_current_user(request)
@@ -96,6 +118,7 @@ async def activity_summary(
         "date_to": dt,
         "summary_only": "true",
         "producer": producer,
+        "pipeline_name": pipeline_name,
     })
 
     return templates.TemplateResponse("partials/activity_summary.html", {
@@ -113,6 +136,7 @@ async def activity_new_leads(
     date_from: str = None,
     date_to: str = None,
     producer: str = None,
+    pipeline_name: str = None,
 ):
     """New leads by pipeline partial."""
     user = await get_current_user(request)
@@ -126,6 +150,7 @@ async def activity_new_leads(
         "group_by": "pipeline",
         "summary_only": "false",
         "producer": producer,
+        "pipeline_name": pipeline_name,
     })
 
     return templates.TemplateResponse("partials/activity_new_leads.html", {
@@ -143,6 +168,7 @@ async def activity_producers(
     date_from: str = None,
     date_to: str = None,
     producer: str = None,
+    pipeline_name: str = None,
 ):
     """Producer activity table partial."""
     user = await get_current_user(request)
@@ -156,6 +182,7 @@ async def activity_producers(
         "group_by": "producer",
         "summary_only": "false",
         "producer": producer,
+        "pipeline_name": pipeline_name,
     })
 
     return templates.TemplateResponse("partials/activity_producers.html", {
@@ -173,6 +200,7 @@ async def activity_coaching(
     date_from: str = None,
     date_to: str = None,
     producer: str = None,
+    pipeline_name: str = None,
 ):
     """Coaching flags partial."""
     user = await get_current_user(request)
@@ -189,6 +217,8 @@ async def activity_coaching(
     }
     if producer:
         params["producer"] = producer
+    if pipeline_name:
+        params["pipeline_name"] = pipeline_name
 
     # If no producer specified, get coaching for each active producer
     coaching_data = []
@@ -204,6 +234,7 @@ async def activity_coaching(
                     "date_from": df,
                     "date_to": dt,
                     "summary_only": "true",
+                    "pipeline_name": pipeline_name,
                 })
                 if c and c.get("coaching_flag_summary"):
                     coaching_data.append({

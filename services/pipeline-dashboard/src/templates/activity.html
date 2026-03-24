@@ -44,6 +44,14 @@
             {% endfor %}
         </select>
 
+        <label style="color:#888; font-size:12px;">Pipeline</label>
+        <select id="pipeline-select" class="pipeline-select" style="min-width:180px; font-size:13px; padding:5px 10px;" onchange="reloadAll()">
+            <option value="">All Pipelines</option>
+            {% for pipeline in pipelines %}
+            <option value="{{ pipeline.name }}">{{ pipeline.name }}</option>
+            {% endfor %}
+        </select>
+
         <button class="btn-copy-prompt" id="btn-copy" onclick="copyCoachingPrompt()">Copy Coaching Prompt</button>
     </div>
 
@@ -156,11 +164,13 @@
     function buildParams() {
         const { date_from, date_to } = resolveDates();
         const producer = document.getElementById('producer-select').value;
+        const pipeline = document.getElementById('pipeline-select').value;
         const params = new URLSearchParams();
         params.set('preset', filterState.preset);
         if (date_from) params.set('date_from', date_from);
         if (date_to) params.set('date_to', date_to);
         if (producer) params.set('producer', producer);
+        if (pipeline) params.set('pipeline_name', pipeline);
         return params.toString();
     }
 
@@ -212,6 +222,7 @@
     function copyCoachingPrompt() {
         const { date_from, date_to } = resolveDates();
         const producer = document.getElementById('producer-select').value || 'All Producers';
+        const pipeline = document.getElementById('pipeline-select').value || 'All Pipelines';
         const dateLabel = date_from === date_to ? date_from : date_from + ' to ' + date_to;
 
         let lines = [];
@@ -232,7 +243,8 @@
         // Data section
         lines.push('=== ACTIVITY DATA ===');
         lines.push('Period: ' + dateLabel);
-        lines.push('Scope: ' + producer);
+        lines.push('Producer: ' + producer);
+        lines.push('Pipeline: ' + pipeline);
         lines.push('');
 
         // Summary metrics

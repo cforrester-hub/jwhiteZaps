@@ -125,6 +125,7 @@ def _serialize_lead(lead: Lead, effectively_quoted: bool = False,
         "status": STATUS_MAP.get(lead.status, "unknown"),
         "status_code": lead.status,
         "last_activity": lead.last_activity_date,
+        "create_date": lead.create_date,
         "enter_stage_date": lead.enter_stage_date,
         "contact_date": lead.contact_date,
         "lead_source": lead.lead_source_name,
@@ -939,10 +940,13 @@ async def funnel_performance(
     end = (date_to or _today_pacific().isoformat()) + "T23:59:59"
 
     async with async_session() as session:
-        # Build query filtering on enter_stage_date (funnel entry)
+        # Build query filtering on create_date (when lead was created in AZ)
+        # Falls back to enter_stage_date if create_date is not populated
         conditions = [
-            Lead.enter_stage_date >= start,
-            Lead.enter_stage_date <= end,
+            or_(
+                (Lead.create_date >= start) & (Lead.create_date <= end),
+                (Lead.create_date == None) & (Lead.enter_stage_date >= start) & (Lead.enter_stage_date <= end),
+            ),
         ]
         if producer:
             conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())

@@ -132,6 +132,7 @@ class Lead(Base):
     status = Column(Integer, nullable=True)  # 0=NEW,1=QUOTED,2=WON,3=LOST,4=CONTACTED,5=EXPIRED
     premium = Column(Float, nullable=True)
     quoted = Column(Float, nullable=True)
+    create_date = Column(String(50), nullable=True)  # when lead was created in AZ
     enter_stage_date = Column(String(50), nullable=True)
     last_activity_date = Column(String(50), nullable=True)
     contact_date = Column(String(50), nullable=True)
@@ -315,6 +316,7 @@ async def init_db():
         for col, coltype in [
             ("detail_json", "JSONB"),
             ("detail_synced_at", "TIMESTAMP"),
+            ("create_date", "VARCHAR(50)"),
         ]:
             await conn.execute(text(
                 f"ALTER TABLE pd_leads ADD COLUMN IF NOT EXISTS {col} {coltype}"

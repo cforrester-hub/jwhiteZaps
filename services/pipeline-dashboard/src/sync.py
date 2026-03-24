@@ -243,6 +243,7 @@ async def _sync_all_inner():
                         status=lead.get("status"),
                         premium=lead.get("premium"),
                         quoted=lead.get("quoted"),
+                        create_date=_convert_az_date(lead.get("createDate")),
                         enter_stage_date=_convert_az_date(lead.get("enterStageDate")),
                         last_activity_date=_convert_az_date(lead.get("lastActivityDate")),
                         contact_date=_convert_az_date(lead.get("contactDate")),

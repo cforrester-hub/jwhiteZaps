@@ -1810,20 +1810,26 @@ async def coaching_analysis(
         # Filter notes to the date range for activity counting
         notes_in_range = [n for n in lead_notes if n.create_date and n.create_date >= start and n.create_date <= end_ts]
 
-        # Count by type
-        type_counts = {}
+        # Count by type — period only (not lifetime)
+        period_type_counts = {}
+        for n in notes_in_range:
+            t = n.note_type or "unknown"
+            period_type_counts[t] = period_type_counts.get(t, 0) + 1
+
+        emails_period = period_type_counts.get("EMAIL", 0)
+        texts_period = period_type_counts.get("TEXT", 0)
+        calls_period = period_type_counts.get("comment", 0)  # call logs are stored as "comment" type
+        stage_moves_period = period_type_counts.get("MOVE_STAGE", 0)
+
+        # Lifetime counts for reference
+        lifetime_type_counts = {}
         for n in lead_notes:
             t = n.note_type or "unknown"
-            type_counts[t] = type_counts.get(t, 0) + 1
+            lifetime_type_counts[t] = lifetime_type_counts.get(t, 0) + 1
 
-        emails = type_counts.get("EMAIL", 0)
-        texts = type_counts.get("TEXT", 0)
-        calls = type_counts.get("comment", 0)  # call logs are stored as "comment" type
-        stage_moves = type_counts.get("MOVE_STAGE", 0)
-
-        total_emails += emails
-        total_texts += texts
-        total_calls += calls
+        total_emails += emails_period
+        total_texts += texts_period
+        total_calls += calls_period
         total_tasks_count += len(lead_tasks)
 
         # Timing
@@ -1912,12 +1918,15 @@ async def coaching_analysis(
             "hours_to_first_contact": hours_to_contact,
             "hours_to_quote": hours_to_quote,
             "activity_counts": {
-                "total_notes": len(lead_notes),
                 "notes_in_period": len(notes_in_range),
-                "emails": emails,
-                "texts": texts,
-                "calls": calls,
-                "stage_moves": stage_moves,
+                "emails_in_period": emails_period,
+                "texts_in_period": texts_period,
+                "calls_in_period": calls_period,
+                "stage_moves_in_period": stage_moves_period,
+                "total_notes_lifetime": len(lead_notes),
+                "emails_lifetime": lifetime_type_counts.get("EMAIL", 0),
+                "texts_lifetime": lifetime_type_counts.get("TEXT", 0),
+                "calls_lifetime": lifetime_type_counts.get("comment", 0),
                 "tasks": len(lead_tasks),
                 "open_tasks": len(open_tasks),
                 "overdue_tasks": len(overdue_tasks),
@@ -1951,9 +1960,9 @@ async def coaching_analysis(
             "leads_no_contact": leads_with_no_contact,
             "leads_quoted_no_followup": leads_quoted_no_followup,
             "leads_missing_tasks": leads_missing_tasks,
-            "total_emails": total_emails,
-            "total_texts": total_texts,
-            "total_calls": total_calls,
+            "emails_in_period": total_emails,
+            "texts_in_period": total_texts,
+            "calls_in_period": total_calls,
             "total_tasks": total_tasks_count,
         },
         "coaching_flag_summary": flag_summary,

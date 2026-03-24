@@ -91,10 +91,11 @@ async def activity_summary(
         return HTMLResponse("")
 
     df, dt = _resolve_dates(preset, date_from, date_to)
-    data = await _analyst_get("/team-performance", {
+    data = await _analyst_get("/funnel-performance", {
         "date_from": df,
         "date_to": dt,
-        "days": 1 if df == dt else None,
+        "summary_only": "true",
+        "producer": producer,
     })
 
     return templates.TemplateResponse("partials/activity_summary.html", {

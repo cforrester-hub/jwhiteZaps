@@ -10,6 +10,7 @@ from .config import get_settings
 from .database import init_db
 from .scheduler import add_cron_job, get_scheduler, shutdown_scheduler, start_scheduler
 from .sync import sync_all
+from .routes.activity import router as activity_router
 from .routes.api import router as api_router
 from .routes.board import router as board_router
 from .routes.pages import router as pages_router
@@ -59,5 +60,6 @@ app.mount("/pipeline/static", StaticFiles(directory="src/static"), name="static"
 
 # Include routers
 app.include_router(api_router)
+app.include_router(activity_router)
 app.include_router(board_router)
 app.include_router(pages_router)

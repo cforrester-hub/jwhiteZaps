@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     agencyzoom_username: str = ""
     agencyzoom_password: str = ""
 
+    # AZ Analyst API (for activity summary page)
+    analyst_api_url: str = "http://az-analyst-service:8000"
+    analyst_api_key: str = ""
+
     # Session
     session_expiry_hours: int = 8
 

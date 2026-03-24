@@ -391,7 +391,7 @@ async def _sync_all_inner():
                                 media_type=f.get("mediaType"),
                                 file_type=f.get("fileType"),
                                 size=f.get("size"),
-                                create_date=f.get("createDate"),
+                                create_date=_convert_az_date(f.get("createDate")),
                                 comments=f.get("comments"),
                                 raw_json=f,
                                 synced_at=sync_start,
@@ -411,7 +411,7 @@ async def _sync_all_inner():
                             await session.merge(LeadNote(
                                 lead_id=lead.id,
                                 note_type=n.get("type"),
-                                create_date=n.get("createDate"),
+                                create_date=_convert_az_date(n.get("createDate")),
                                 created_by=n.get("createdBy"),
                                 title=n.get("title"),
                                 body=n.get("body"),
@@ -508,7 +508,7 @@ async def _sync_all_inner():
                             await session.merge(LeadNote(
                                 lead_id=lead.id,
                                 note_type=n.get("type"),
-                                create_date=n.get("createDate"),
+                                create_date=_convert_az_date(n.get("createDate")),
                                 created_by=n.get("createdBy"),
                                 title=n.get("title"),
                                 body=n.get("body"),

@@ -66,6 +66,22 @@ def _timing_stats(values: list[float]) -> dict:
     }
 
 
+def _utc_to_pacific(date_str: str | None) -> str | None:
+    """Convert a UTC date string to Pacific time for display."""
+    if not date_str or len(date_str) < 10:
+        return date_str
+    try:
+        if len(date_str) >= 19:
+            dt = datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
+        else:
+            return date_str  # date-only, no conversion needed
+        utc_dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        pacific_dt = utc_dt.astimezone(ZoneInfo("America/Los_Angeles"))
+        return pacific_dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return date_str
+
+
 async def _load_name_maps(session) -> tuple[dict, dict]:
     """Load pipeline and stage name lookup maps from DB."""
     pipeline_result = await session.execute(select(Pipeline))
@@ -124,10 +140,10 @@ def _serialize_lead(lead: Lead, effectively_quoted: bool = False,
         "stage_id": lead.stage_id,
         "status": STATUS_MAP.get(lead.status, "unknown"),
         "status_code": lead.status,
-        "last_activity": lead.last_activity_date,
-        "create_date": lead.create_date,
-        "enter_stage_date": lead.enter_stage_date,
-        "contact_date": lead.contact_date,
+        "last_activity": _utc_to_pacific(lead.last_activity_date),
+        "create_date": _utc_to_pacific(lead.create_date),
+        "enter_stage_date": _utc_to_pacific(lead.enter_stage_date),
+        "contact_date": _utc_to_pacific(lead.contact_date),
         "lead_source": lead.lead_source_name,
         "lead_source_id": lead.lead_source_id,
         "lead_type": lead.lead_type,
@@ -143,9 +159,9 @@ def _serialize_lead(lead: Lead, effectively_quoted: bool = False,
         "city": lead.city,
         "state": lead.state,
         "zip_code": lead.zip_code,
-        "sold_date": lead.sold_date,
-        "x_date": lead.x_date,
-        "quote_date": lead.quote_date,
+        "sold_date": _utc_to_pacific(lead.sold_date),
+        "x_date": _utc_to_pacific(lead.x_date),
+        "quote_date": _utc_to_pacific(lead.quote_date),
         "customer_id": lead.customer_id,
         "tag_names": lead.tag_names,
         "effectively_quoted": effectively_quoted,

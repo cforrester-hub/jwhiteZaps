@@ -26,8 +26,9 @@ class Settings(BaseSettings):
     # Sync
     sync_interval_cron: str = "3,33 * * * *"
 
-    # Timezone that AgencyZoom returns dates in (confirmed UTC despite AZ UI showing Pacific)
-    az_timezone: str = "UTC"
+    # AZ returns UTC timestamps. We store them as-is (UTC) in the DB.
+    # Conversion to Pacific happens at the API/presentation layer, not during sync.
+    az_timezone: str = "America/Los_Angeles"
 
     # Logging
     log_level: str = "INFO"

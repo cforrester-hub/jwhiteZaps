@@ -185,22 +185,16 @@
         }
     }
 
+    function reloadSection(id, url) {
+        htmx.ajax('GET', url, {target: '#' + id, swap: 'innerHTML'});
+    }
+
     function reloadAll() {
         const qs = buildParams();
-        const sections = [
-            { id: 'activity-summary', base: '/pipeline/api/activity/summary' },
-            { id: 'activity-new-leads', base: '/pipeline/api/activity/new-leads' },
-            { id: 'activity-producers', base: '/pipeline/api/activity/producers' },
-            { id: 'activity-coaching', base: '/pipeline/api/activity/coaching' },
-        ];
-
-        sections.forEach(({ id, base }) => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            const url = base + '?' + qs;
-            el.setAttribute('hx-get', url);
-            htmx.ajax('GET', url, { target: '#' + id, swap: 'innerHTML' });
-        });
+        reloadSection('activity-summary', '/pipeline/api/activity/summary?' + qs);
+        reloadSection('activity-new-leads', '/pipeline/api/activity/new-leads?' + qs);
+        reloadSection('activity-producers', '/pipeline/api/activity/producers?' + qs);
+        reloadSection('activity-coaching', '/pipeline/api/activity/coaching?' + qs);
     }
 
     function copyCoachingPrompt() {

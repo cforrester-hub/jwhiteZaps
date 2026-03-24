@@ -254,16 +254,23 @@ async def producer_activity(
         lead_ids = [l.id for l in leads]
         quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids) if lead_ids else set()
 
-        # Count by status, using real quoting detection
+        # Count by status, using real quoting and contact detection
+        # AZ never reliably sets status=1 (QUOTED) or status=4 (CONTACTED)
+        # Use quote records/quote_date for quoted, contact_date for contacted
         status_counts = {"new": 0, "quoted": 0, "won": 0, "lost": 0, "contacted": 0, "expired": 0}
         for lead in leads:
-            if _is_effectively_quoted(lead, quoted_lead_ids) and lead.status not in (2, 3, 5):
-                # Lead has quotes but isn't won/lost/expired — count as quoted
+            if lead.status == 2:
+                status_counts["won"] += 1
+            elif lead.status == 3:
+                status_counts["lost"] += 1
+            elif lead.status == 5:
+                status_counts["expired"] += 1
+            elif _is_effectively_quoted(lead, quoted_lead_ids):
                 status_counts["quoted"] += 1
+            elif lead.contact_date:
+                status_counts["contacted"] += 1
             else:
-                status_name = STATUS_MAP.get(lead.status, "unknown")
-                if status_name in status_counts:
-                    status_counts[status_name] += 1
+                status_counts["new"] += 1
 
         # Group by pipeline
         pipeline_groups = {}
@@ -665,15 +672,21 @@ async def team_performance(
             }
         entry = by_producer[pid]
         entry["total"] += 1
-        if _is_effectively_quoted(lead, quoted_lead_ids) and lead.status not in (2, 3, 5):
+        if lead.status == 2:
+            entry["won"] += 1
+        elif lead.status == 3:
+            entry["lost"] += 1
+        elif lead.status == 5:
+            entry["expired"] += 1
+        elif _is_effectively_quoted(lead, quoted_lead_ids):
             entry["quoted"] += 1
+        elif lead.contact_date:
+            entry["contacted"] += 1
         else:
-            status_name = STATUS_MAP.get(lead.status, "unknown")
-            if status_name in entry:
-                entry[status_name] += 1
+            entry["new"] += 1
 
-        # New lead breakdown — only for leads that are truly new (not effectively quoted)
-        if lead.status == 0 and not _is_effectively_quoted(lead, quoted_lead_ids):
+        # New lead breakdown — only for leads that are truly new (not contacted or quoted)
+        if lead.status == 0 and not _is_effectively_quoted(lead, quoted_lead_ids) and not lead.contact_date:
             if _entered_in_range(lead):
                 entry["new_this_period"] += 1
             else:

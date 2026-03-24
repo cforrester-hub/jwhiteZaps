@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}Activity Summary - Pipeline Dashboard{% endblock %}
+{% block body %}
+<div class="activity-page">
+    <!-- Top nav bar -->
+    <nav class="nav-bar">
+        <div class="nav-left">
+            <h1 class="nav-title">Pipeline Dashboard</h1>
+            <div class="nav-links">
+                <a href="/pipeline/" class="nav-link">Pipeline Board</a>
+                <a href="/pipeline/activity" class="nav-link active">Activity Summary</a>
+            </div>
+        </div>
+        <div class="nav-center"></div>
+        <div class="nav-right">
+            <span class="user-name">{{ user.display_name }}</span>
+            <form action="/pipeline/api/logout" method="post" style="display:inline;">
+                <button type="submit" class="btn-logout">Logout</button>
+            </form>
+        </div>
+    </nav>
+
+    <!-- Filter bar -->
+    <div class="activity-filters">
+        <button class="date-preset active" data-preset="today" onclick="setPreset(this)">Today</button>
+        <button class="date-preset" data-preset="yesterday" onclick="setPreset(this)">Yesterday</button>
+        <button class="date-preset" data-preset="this_week" onclick="setPreset(this)">This Week</button>
+        <button class="date-preset" data-preset="custom" onclick="setPreset(this)">Custom</button>
+
+        <div class="custom-dates" id="custom-date-inputs" style="display:none;">
+            <label>From</label>
+            <input type="date" id="date-from" onchange="onCustomDateChange()">
+            <label>To</label>
+            <input type="date" id="date-to" onchange="onCustomDateChange()">
+        </div>
+
+        <div style="width:1px; height:24px; background:#3a3f5c; margin:0 4px;"></div>
+
+        <label style="color:#888; font-size:12px;">Producer</label>
+        <select id="producer-select" class="pipeline-select" style="min-width:160px; font-size:13px; padding:5px 10px;" onchange="reloadAll()">
+            <option value="">All Producers</option>
+            {% for producer in producers %}
+            <option value="{{ producer.firstname }}">{{ producer.firstname }} {{ producer.lastname }}</option>
+            {% endfor %}
+        </select>
+
+        <button class="btn-copy-prompt" id="btn-copy" onclick="copyCoachingPrompt()">Copy Coaching Prompt</button>
+    </div>
+
+    <!-- HTMX content sections -->
+    <div class="activity-content">
+        <!-- Summary cards -->
+        <div class="activity-section">
+            <h2>Team Overview</h2>
+            <div id="activity-summary"
+                 hx-get="/pipeline/api/activity/summary"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-indicator="#loading-summary">
+                <div class="no-data">Loading...</div>
+            </div>
+            <div id="loading-summary" class="htmx-indicator activity-loading">
+                <div class="loading-bar" style="margin-top:8px;"></div>
+            </div>
+        </div>
+
+        <!-- New leads by pipeline -->
+        <div class="activity-section">
+            <h2>New Leads by Pipeline</h2>
+            <div id="activity-new-leads"
+                 hx-get="/pipeline/api/activity/new-leads"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-indicator="#loading-new-leads">
+                <div class="no-data">Loading...</div>
+            </div>
+            <div id="loading-new-leads" class="htmx-indicator activity-loading">
+                <div class="loading-bar" style="margin-top:8px;"></div>
+            </div>
+        </div>
+
+        <!-- Producer activity -->
+        <div class="activity-section">
+            <h2>Producer Activity</h2>
+            <div id="activity-producers"
+                 hx-get="/pipeline/api/activity/producers"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-indicator="#loading-producers">
+                <div class="no-data">Loading...</div>
+            </div>
+            <div id="loading-producers" class="htmx-indicator activity-loading">
+                <div class="loading-bar" style="margin-top:8px;"></div>
+            </div>
+        </div>
+
+        <!-- Coaching flags -->
+        <div class="activity-section">
+            <h2>Coaching Flags</h2>
+            <div id="activity-coaching"
+                 hx-get="/pipeline/api/activity/coaching"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-indicator="#loading-coaching">
+                <div class="no-data">Loading...</div>
+            </div>
+            <div id="loading-coaching" class="htmx-indicator activity-loading">
+                <div class="loading-bar" style="margin-top:8px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const filterState = {
+        preset: 'today',
+        date_from: '',
+        date_to: '',
+        producer: '',
+    };
+
+    function todayStr() {
+        return new Date().toISOString().slice(0, 10);
+    }
+
+    function yesterdayStr() {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().slice(0, 10);
+    }
+
+    function weekStartStr() {
+        const d = new Date();
+        const day = d.getDay(); // 0=Sun
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Mon
+        const mon = new Date(d);
+        mon.setDate(diff);
+        return mon.toISOString().slice(0, 10);
+    }
+
+    function resolveDates() {
+        switch (filterState.preset) {
+            case 'today':
+                return { date_from: todayStr(), date_to: todayStr() };
+            case 'yesterday':
+                return { date_from: yesterdayStr(), date_to: yesterdayStr() };
+            case 'this_week':
+                return { date_from: weekStartStr(), date_to: todayStr() };
+            case 'custom':
+                return { date_from: filterState.date_from, date_to: filterState.date_to };
+            default:
+                return { date_from: todayStr(), date_to: todayStr() };
+        }
+    }
+
+    function buildParams() {
+        const { date_from, date_to } = resolveDates();
+        const producer = document.getElementById('producer-select').value;
+        const params = new URLSearchParams();
+        params.set('preset', filterState.preset);
+        if (date_from) params.set('date_from', date_from);
+        if (date_to) params.set('date_to', date_to);
+        if (producer) params.set('producer', producer);
+        return params.toString();
+    }
+
+    function setPreset(btn) {
+        document.querySelectorAll('.date-preset').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filterState.preset = btn.dataset.preset;
+
+        const customInputs = document.getElementById('custom-date-inputs');
+        customInputs.style.display = filterState.preset === 'custom' ? 'flex' : 'none';
+
+        if (filterState.preset !== 'custom') {
+            reloadAll();
+        }
+    }
+
+    function onCustomDateChange() {
+        filterState.date_from = document.getElementById('date-from').value;
+        filterState.date_to = document.getElementById('date-to').value;
+        if (filterState.date_from && filterState.date_to) {
+            reloadAll();
+        }
+    }
+
+    function reloadAll() {
+        const qs = buildParams();
+        const sections = [
+            { id: 'activity-summary', base: '/pipeline/api/activity/summary' },
+            { id: 'activity-new-leads', base: '/pipeline/api/activity/new-leads' },
+            { id: 'activity-producers', base: '/pipeline/api/activity/producers' },
+            { id: 'activity-coaching', base: '/pipeline/api/activity/coaching' },
+        ];
+
+        sections.forEach(({ id, base }) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const url = base + '?' + qs;
+            el.setAttribute('hx-get', url);
+            htmx.ajax('GET', url, { target: '#' + id, swap: 'innerHTML' });
+        });
+    }
+
+    function copyCoachingPrompt() {
+        const { date_from, date_to } = resolveDates();
+        const producer = document.getElementById('producer-select').value || 'All Producers';
+        const dateLabel = date_from === date_to ? date_from : date_from + ' to ' + date_to;
+
+        let lines = [];
+        lines.push('== Agency Activity Coaching Summary ==');
+        lines.push('Period: ' + dateLabel);
+        lines.push('Producer filter: ' + producer);
+        lines.push('');
+
+        // Summary metrics
+        lines.push('--- Team Overview ---');
+        document.querySelectorAll('#activity-summary [data-metric]').forEach(el => {
+            const metric = el.dataset.metric;
+            const value = el.dataset.value;
+            const label = el.querySelector('.card-label');
+            lines.push((label ? label.textContent.trim() : metric) + ': ' + value);
+        });
+        lines.push('');
+
+        // Producer table
+        lines.push('--- Producer Activity ---');
+        const prodTable = document.querySelector('#activity-producers .activity-table');
+        if (prodTable) {
+            const headers = Array.from(prodTable.querySelectorAll('th')).map(th => th.textContent.trim());
+            lines.push(headers.join('\t'));
+            prodTable.querySelectorAll('tbody tr').forEach(row => {
+                const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.trim());
+                lines.push(cells.join('\t'));
+            });
+        }
+        lines.push('');
+
+        // Coaching flags
+        lines.push('--- Coaching Flags ---');
+        const flagEls = document.querySelectorAll('#activity-coaching .coaching-flag');
+        if (flagEls.length === 0) {
+            lines.push('No coaching flags detected.');
+        } else {
+            flagEls.forEach(el => {
+                lines.push(el.textContent.trim().replace(/\s+/g, ' '));
+            });
+        }
+
+        const text = lines.join('\n');
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('btn-copy');
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.textContent = 'Copy Coaching Prompt';
+                btn.classList.remove('copied');
+            }, 2000);
+        }).catch(() => {
+            alert('Copy failed. Please copy manually.');
+        });
+    }
+
+    // Initialize custom date inputs to today
+    document.addEventListener('DOMContentLoaded', function() {
+        const today = todayStr();
+        document.getElementById('date-from').value = today;
+        document.getElementById('date-to').value = today;
+    });
+</script>
+{% endblock %}

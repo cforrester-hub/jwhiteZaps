@@ -1,0 +1,52 @@
+{% if data is none or not data.groups %}
+<div class="no-data">No data available for this period.</div>
+{% else %}
+{% set sorted_groups = data.groups | sort(attribute='leads_entered', reverse=true) %}
+<table class="activity-table" id="producers-table">
+    <thead>
+        <tr>
+            <th>Producer</th>
+            <th class="num">Leads</th>
+            <th class="num">Contacted</th>
+            <th class="num">Quoted</th>
+            <th class="num">Won</th>
+            <th class="num">Lost</th>
+            <th class="num">Quote Rate</th>
+            <th class="num">Close Rate</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for group in sorted_groups %}
+        <tr data-producer="{{ group.key }}"
+            data-leads="{{ group.leads_entered | default(0) }}"
+            data-contacted="{{ group.contacted | default(0) }}"
+            data-quoted="{{ group.quoted_leads | default(0) }}"
+            data-won="{{ group.won | default(0) }}"
+            data-lost="{{ group.lost | default(0) }}">
+            <td>{{ group.key }}</td>
+            <td class="num">{{ group.leads_entered | default(0) }}</td>
+            <td class="num">{{ group.contacted | default(0) }}</td>
+            <td class="num">{{ group.quoted_leads | default(0) }}</td>
+            <td class="num">{{ group.won | default(0) }}</td>
+            <td class="num">{{ group.lost | default(0) }}</td>
+            <td class="num">
+                {% if group.quote_rate_pct is not none %}
+                    {{ "%.0f"|format(group.quote_rate_pct) }}%
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+            <td class="num">
+                {% if group.close_rate_quoted_pct is not none %}
+                    {{ "%.0f"|format(group.close_rate_quoted_pct) }}%
+                {% elif group.close_rate_entered_pct is not none %}
+                    {{ "%.0f"|format(group.close_rate_entered_pct) }}%
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

@@ -1,0 +1,49 @@
+{% set FLAG_LABELS = {
+    'no_notes_at_all': 'leads with no synced activity',
+    'new_lead_never_contacted': 'new leads never contacted',
+    'quoted_no_followup': 'quoted leads with no follow-up',
+    'slow_first_contact': 'slow first contact (24h+)',
+    'no_activity_in_period': 'leads with no activity in period',
+} %}
+
+{% set has_flags = namespace(value=false) %}
+
+{% if coaching_data %}
+    {% for item in coaching_data %}
+        {% if item.flags %}
+            {% for flag_key, flag_count in item.flags.items() %}
+                {% if flag_key != 'missing_tasks' and flag_count > 0 %}
+                    {% set has_flags.value = true %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{% if not coaching_data or not has_flags.value %}
+<div class="coaching-success">No coaching flags detected for this period.</div>
+{% else %}
+<div class="coaching-flags">
+    {% for item in coaching_data %}
+        {% if item.flags %}
+            {% for flag_key, flag_count in item.flags.items() %}
+                {% if flag_key != 'missing_tasks' and flag_count > 0 %}
+                    {% if flag_key.startswith('overdue_tasks') %}
+                        {% set label = 'overdue tasks' %}
+                    {% elif flag_key in FLAG_LABELS %}
+                        {% set label = FLAG_LABELS[flag_key] %}
+                    {% else %}
+                        {% set label = flag_key | replace('_', ' ') %}
+                    {% endif %}
+                    <div class="coaching-flag">
+                        <span class="flag-icon">&#9888;</span>
+                        <span class="flag-producer">{{ item.producer }}</span>
+                        &mdash;
+                        {{ flag_count }} {{ label }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+</div>
+{% endif %}

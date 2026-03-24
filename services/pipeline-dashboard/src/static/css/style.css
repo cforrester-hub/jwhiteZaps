@@ -753,3 +753,85 @@ body {
     .filter-panel-inner { gap: 16px; }
     .filter-section + .filter-section { border-left: none; padding-left: 0; }
 }
+
+/* ===== NAV LINKS (shared board + activity) ===== */
+.nav-links { display: flex; gap: 4px; margin-left: 16px; }
+.nav-link { padding: 6px 12px; border-radius: 4px; color: #aaa; text-decoration: none; font-size: 13px; transition: all 0.2s; }
+.nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.nav-link.active { color: #fff; background: #6c5ce7; }
+
+/* ===== ACTIVITY SUMMARY PAGE ===== */
+.activity-page { display: flex; flex-direction: column; min-height: 100vh; background: #f0f2f5; }
+
+.activity-filters {
+    background: #16213e; padding: 12px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+
+.date-preset {
+    padding: 6px 14px; border-radius: 4px; border: 1px solid #3a3f5c; background: transparent;
+    color: #ccc; cursor: pointer; font-size: 13px; transition: all 0.2s;
+}
+.date-preset:hover { border-color: #6c5ce7; color: #fff; }
+.date-preset.active { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
+
+.custom-dates { display: flex; gap: 8px; align-items: center; }
+.custom-dates input {
+    padding: 5px 8px; border-radius: 4px; border: 1px solid #3a3f5c;
+    background: #1a1a2e; color: #fff; font-size: 12px;
+}
+.custom-dates label { color: #888; font-size: 12px; }
+
+.btn-copy-prompt {
+    padding: 6px 14px; border-radius: 4px; border: 1px solid #2e7d32; background: transparent;
+    color: #4caf50; cursor: pointer; font-size: 13px; margin-left: auto; transition: all 0.2s;
+}
+.btn-copy-prompt:hover { background: #2e7d32; color: #fff; }
+.btn-copy-prompt.copied { background: #2e7d32; color: #fff; }
+
+.activity-content { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+.activity-section {
+    background: #fff; border-radius: 8px; padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.activity-section h2 { font-size: 15px; color: #333; margin: 0 0 16px 0; font-weight: 600; }
+
+.summary-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.summary-card {
+    flex: 1; min-width: 120px; text-align: center; padding: 16px;
+    background: #f8f9fa; border-radius: 8px; border: 1px solid #e8eaed;
+}
+.summary-card .card-value { font-size: 28px; font-weight: 700; color: #1a1a2e; }
+.summary-card .card-label { font-size: 12px; color: #666; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-card.won .card-value { color: #2e7d32; }
+.summary-card.lost .card-value { color: #c62828; }
+.summary-card.expired .card-value { color: #ef6c00; }
+.summary-card.quoted .card-value { color: #6c5ce7; }
+
+.activity-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.activity-table th {
+    text-align: left; padding: 8px 12px; border-bottom: 2px solid #e8eaed;
+    color: #666; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.activity-table td { padding: 8px 12px; border-bottom: 1px solid #f0f2f5; }
+.activity-table tr:hover { background: #f8f9fa; }
+.activity-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.activity-table th.num { text-align: right; }
+
+.coaching-flags { display: flex; flex-direction: column; gap: 8px; }
+.coaching-flag {
+    padding: 10px 14px; border-radius: 6px; background: #fff3e0; border-left: 4px solid #ef6c00;
+    font-size: 13px; color: #333; display: flex; align-items: center; gap: 8px;
+}
+.coaching-flag .flag-icon { font-size: 16px; }
+.coaching-flag .flag-producer { font-weight: 600; }
+
+.coaching-success {
+    padding: 12px; background: #e8f5e9; border-radius: 6px;
+    color: #2e7d32; font-size: 13px; text-align: center;
+}
+
+.no-data { color: #999; font-size: 13px; text-align: center; padding: 20px; }
+
+.htmx-indicator.activity-loading { display: none; }
+.htmx-request .htmx-indicator.activity-loading { display: block; }

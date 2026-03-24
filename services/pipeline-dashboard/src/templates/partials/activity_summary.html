@@ -1,0 +1,39 @@
+{% if data is none %}
+<div class="no-data">No data available for this period.</div>
+{% else %}
+{% set totals = namespace(leads_entered=0, contacted=0, quoted=0, won=0, lost=0, expired=0) %}
+{% for p in data.producers %}
+    {% set totals.leads_entered = totals.leads_entered + (p.new | default(0)) %}
+    {% set totals.contacted = totals.contacted + (p.contacted | default(0)) %}
+    {% set totals.quoted = totals.quoted + (p.quoted | default(0)) %}
+    {% set totals.won = totals.won + (p.won | default(0)) %}
+    {% set totals.lost = totals.lost + (p.lost | default(0)) %}
+    {% set totals.expired = totals.expired + (p.expired | default(0)) %}
+{% endfor %}
+<div class="summary-cards">
+    <div class="summary-card" data-metric="leads_entered" data-value="{{ totals.leads_entered }}">
+        <div class="card-value">{{ totals.leads_entered }}</div>
+        <div class="card-label">Leads Entered</div>
+    </div>
+    <div class="summary-card" data-metric="contacted" data-value="{{ totals.contacted }}">
+        <div class="card-value">{{ totals.contacted }}</div>
+        <div class="card-label">Contacted</div>
+    </div>
+    <div class="summary-card quoted" data-metric="quoted" data-value="{{ totals.quoted }}">
+        <div class="card-value">{{ totals.quoted }}</div>
+        <div class="card-label">Quoted</div>
+    </div>
+    <div class="summary-card won" data-metric="won" data-value="{{ totals.won }}">
+        <div class="card-value">{{ totals.won }}</div>
+        <div class="card-label">Won</div>
+    </div>
+    <div class="summary-card lost" data-metric="lost" data-value="{{ totals.lost }}">
+        <div class="card-value">{{ totals.lost }}</div>
+        <div class="card-label">Lost</div>
+    </div>
+    <div class="summary-card expired" data-metric="expired" data-value="{{ totals.expired }}">
+        <div class="card-value">{{ totals.expired }}</div>
+        <div class="card-label">Expired</div>
+    </div>
+</div>
+{% endif %}

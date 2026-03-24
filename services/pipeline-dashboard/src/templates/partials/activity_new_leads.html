@@ -1,0 +1,36 @@
+{% if data is none or not data.groups %}
+<div class="no-data">No data available for this period.</div>
+{% else %}
+<table class="activity-table">
+    <thead>
+        <tr>
+            <th>Pipeline</th>
+            <th class="num">Leads Entered</th>
+            <th class="num">Contacted</th>
+            <th class="num">Quoted</th>
+            <th class="num">Won</th>
+            <th class="num">Lost</th>
+            <th class="num">Quote Rate</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for group in data.groups %}
+        <tr>
+            <td>{{ group.key }}</td>
+            <td class="num">{{ group.leads_entered | default(0) }}</td>
+            <td class="num">{{ group.contacted | default(0) }}</td>
+            <td class="num">{{ group.quoted_leads | default(0) }}</td>
+            <td class="num">{{ group.won | default(0) }}</td>
+            <td class="num">{{ group.lost | default(0) }}</td>
+            <td class="num">
+                {% if group.quote_rate_pct is not none %}
+                    {{ "%.0f"|format(group.quote_rate_pct) }}%
+                {% else %}
+                    —
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}

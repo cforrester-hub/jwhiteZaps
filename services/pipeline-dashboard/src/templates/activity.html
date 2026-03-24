@@ -107,20 +107,6 @@
             </div>
         </div>
 
-        <!-- Coaching flags -->
-        <div class="activity-section">
-            <h2>Coaching Flags</h2>
-            <div id="activity-coaching"
-                 hx-get="/pipeline/api/activity/coaching"
-                 hx-trigger="load"
-                 hx-swap="innerHTML"
-                 hx-indicator="#loading-coaching">
-                <div class="no-data">Loading...</div>
-            </div>
-            <div id="loading-coaching" class="htmx-indicator activity-loading">
-                <div class="loading-bar" style="margin-top:8px;"></div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -206,7 +192,6 @@
             ['activity-summary', '/pipeline/api/activity/summary'],
             ['activity-new-leads', '/pipeline/api/activity/new-leads'],
             ['activity-producers', '/pipeline/api/activity/producers'],
-            ['activity-coaching', '/pipeline/api/activity/coaching'],
         ];
         sections.forEach(function(s) {
             var el = document.getElementById(s[0]);

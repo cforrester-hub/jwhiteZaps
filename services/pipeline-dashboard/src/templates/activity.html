@@ -25,6 +25,7 @@
         <button class="date-preset active" data-preset="today" onclick="setPreset(this)">Today</button>
         <button class="date-preset" data-preset="yesterday" onclick="setPreset(this)">Yesterday</button>
         <button class="date-preset" data-preset="this_week" onclick="setPreset(this)">This Week</button>
+        <button class="date-preset" data-preset="last_week" onclick="setPreset(this)">Last Week</button>
         <button class="date-preset" data-preset="custom" onclick="setPreset(this)">Custom</button>
 
         <div class="custom-dates" id="custom-date-inputs" style="display:none;">
@@ -137,6 +138,24 @@
         return mon.toISOString().slice(0, 10);
     }
 
+    function lastWeekStartStr() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 7;
+        const mon = new Date(d);
+        mon.setDate(diff);
+        return mon.toISOString().slice(0, 10);
+    }
+
+    function lastWeekEndStr() {
+        const d = new Date();
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 1;
+        const sun = new Date(d);
+        sun.setDate(diff);
+        return sun.toISOString().slice(0, 10);
+    }
+
     function resolveDates() {
         switch (filterState.preset) {
             case 'today':
@@ -145,6 +164,8 @@
                 return { date_from: yesterdayStr(), date_to: yesterdayStr() };
             case 'this_week':
                 return { date_from: weekStartStr(), date_to: todayStr() };
+            case 'last_week':
+                return { date_from: lastWeekStartStr(), date_to: lastWeekEndStr() };
             case 'custom':
                 return { date_from: filterState.date_from, date_to: filterState.date_to };
             default:

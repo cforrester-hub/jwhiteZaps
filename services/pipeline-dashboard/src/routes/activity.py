@@ -54,6 +54,10 @@ def _resolve_dates(preset: str, date_from: str = None, date_to: str = None) -> t
     elif preset == "this_week":
         monday = today - timedelta(days=today.weekday())
         return monday.isoformat(), today.isoformat()
+    elif preset == "last_week":
+        last_monday = today - timedelta(days=today.weekday() + 7)
+        last_sunday = last_monday + timedelta(days=6)
+        return last_monday.isoformat(), last_sunday.isoformat()
     elif preset == "custom" and date_from and date_to:
         return date_from, date_to
     else:  # "today" or default

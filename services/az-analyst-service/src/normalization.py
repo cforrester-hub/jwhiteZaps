@@ -78,9 +78,22 @@ def classify_pipeline(workflow_name: str | None) -> dict:
     }
 
 
+# Pipelines where the lead initiated contact (already contacted on creation)
+# contact_date should equal create_date for these pipelines
+AUTO_CONTACT_PIPELINES = {
+    "1 NPL Call/Walk In",
+    "5 Incoming AOR Transfers",
+}
+
+
 def classify_source(lead_source_name: str | None) -> str:
     """Return source_group for a lead source name."""
     return SOURCE_GROUP_MAP.get(lead_source_name or "", "other")
+
+
+def is_auto_contact_pipeline(workflow_name: str | None) -> bool:
+    """Return True if leads in this pipeline are contacted by definition (they called/walked in)."""
+    return (workflow_name or "") in AUTO_CONTACT_PIPELINES
 
 
 # Compliance thresholds by intent_type

@@ -48,6 +48,22 @@ def _convert_az_date(date_str: str | None) -> str | None:
     except (ValueError, TypeError):
         return date_str
 
+
+# Pipelines where leads are contacted by definition (they called/walked in)
+_AUTO_CONTACT_PIPELINES = {
+    "1 NPL Call/Walk In",
+    "5 Incoming AOR Transfers",
+}
+
+
+def _auto_contact_date(pipeline_id: str, pipeline_names: dict, create_date: str | None) -> str | None:
+    """For auto-contact pipelines, return create_date as contact_date if AZ didn't set one."""
+    pipeline_name = pipeline_names.get(pipeline_id, "")
+    if pipeline_name in _AUTO_CONTACT_PIPELINES and create_date:
+        return _convert_az_date(create_date)
+    return None
+
+
 logger = logging.getLogger(__name__)
 
 sync_in_progress = False
@@ -246,7 +262,7 @@ async def _sync_all_inner():
                         create_date=_convert_az_date(lead.get("createDate")),
                         enter_stage_date=_convert_az_date(lead.get("enterStageDate")),
                         last_activity_date=_convert_az_date(lead.get("lastActivityDate")),
-                        contact_date=_convert_az_date(lead.get("contactDate")),
+                        contact_date=_convert_az_date(lead.get("contactDate")) or _auto_contact_date(lead_pipeline_id, pipeline_names, lead.get("createDate")),
                         lead_source_name=lead.get("leadSourceName"),
                         # Resolve names: prefer lead data, fall back to pipeline/stage lookup
                         workflow_name=lead.get("workflowName") or pipeline_names.get(lead_pipeline_id),

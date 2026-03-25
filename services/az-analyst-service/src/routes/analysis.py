@@ -69,20 +69,24 @@ def _timing_stats(values: list[float]) -> dict:
 def _utc_to_pacific(date_str: str | None) -> str | None:
     """Convert a UTC date string to Pacific time for display.
 
-    Date-only or midnight-UTC fields are treated as noon UTC to ensure they
-    always land on the correct calendar day after Pacific conversion.
+    Date-only or midnight-UTC fields are returned as noon Pacific on that date
+    (a plausible business-hours time that never shifts the calendar day).
     """
     if not date_str or len(date_str) < 10:
         return date_str
     try:
-        if len(date_str) < 19:
-            # Date-only: treat as noon UTC so it stays on the same calendar day in Pacific
-            dt = datetime.strptime(date_str[:10], "%Y-%m-%d").replace(hour=12)
+        is_date_only = len(date_str) < 19
+        if is_date_only:
+            dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
         else:
             dt = datetime.strptime(date_str[:19], "%Y-%m-%d %H:%M:%S")
-            # Midnight UTC = likely date-only stored with time. Treat as noon.
-            if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
-                dt = dt.replace(hour=12)
+
+        # Date-only or midnight = no real time info. Return noon Pacific on that date.
+        if is_date_only or (dt.hour == 0 and dt.minute == 0 and dt.second == 0):
+            pacific_noon = dt.replace(hour=12, minute=0, second=0, tzinfo=ZoneInfo("America/Los_Angeles"))
+            return pacific_noon.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Real timestamp: convert UTC → Pacific
         utc_dt = dt.replace(tzinfo=ZoneInfo("UTC"))
         pacific_dt = utc_dt.astimezone(ZoneInfo("America/Los_Angeles"))
         return pacific_dt.strftime("%Y-%m-%d %H:%M:%S")

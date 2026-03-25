@@ -201,7 +201,7 @@ def _serialize_file(f: LeadFile) -> dict:
         "media_type": f.media_type,
         "file_type": f.file_type,
         "size": f.size,
-        "create_date": f.create_date,
+        "create_date": _utc_to_pacific(f.create_date),
         "comments": f.comments,
     }
 
@@ -1279,7 +1279,7 @@ async def data_quality_report(
             sample_leads[cat] = [
                 {"id": l.id, "name": f"{l.firstname or ''} {l.lastname or ''}".strip(),
                  "status": STATUS_MAP.get(l.status, "unknown"), "producer": l.assign_to_firstname,
-                 "pipeline": l.workflow_name, "enter_stage_date": l.enter_stage_date}
+                 "pipeline": l.workflow_name, "enter_stage_date": _utc_to_pacific(l.enter_stage_date)}
                 for l in cat_leads[:5]
             ]
 
@@ -1409,8 +1409,8 @@ async def pipeline_compliance(
                 "status": STATUS_MAP.get(l.status, "unknown"),
                 "stage": l.workflow_stage_name or stages_map.get(l.stage_id),
                 "lead_source": l.lead_source_name,
-                "created_at": l.enter_stage_date,
-                "last_activity_at": l.last_activity_date,
+                "created_at": _utc_to_pacific(l.enter_stage_date),
+                "last_activity_at": _utc_to_pacific(l.last_activity_date),
             }
             for l in unquoted_leads
         ]
@@ -1504,10 +1504,10 @@ async def lost_deal_analysis(
             "pipeline_name": l.workflow_name or pipelines_map.get(l.pipeline_id),
             "status": STATUS_MAP.get(l.status, "unknown"),
             "lead_source": l.lead_source_name,
-            "created_at": l.enter_stage_date,
-            "quoted_at": l.quote_date,
-            "sold_at": l.sold_date,
-            "last_activity_at": l.last_activity_date,
+            "created_at": _utc_to_pacific(l.enter_stage_date),
+            "quoted_at": _utc_to_pacific(l.quote_date),
+            "sold_at": _utc_to_pacific(l.sold_date),
+            "last_activity_at": _utc_to_pacific(l.last_activity_date),
             "time_to_quote_hours": _hours_between(l.enter_stage_date, l.quote_date),
         }
 
@@ -1906,7 +1906,7 @@ async def coaching_analysis(
         for n in lead_notes[:max_notes_per_lead]:
             entry = {
                 "type": n.note_type,
-                "date": n.create_date,
+                "date": _utc_to_pacific(n.create_date),
                 "title": n.title,
             }
             if include_note_content:
@@ -1918,7 +1918,7 @@ async def coaching_analysis(
             {
                 "title": t.title,
                 "status": t.status,
-                "due_date": t.due_date,
+                "due_date": _utc_to_pacific(t.due_date),
                 "type": t.task_type,
             }
             for t in lead_tasks
@@ -1935,10 +1935,10 @@ async def coaching_analysis(
             "status": STATUS_MAP.get(lead.status, "unknown"),
             "lead_source": lead.lead_source_name,
             "effectively_quoted": is_quoted,
-            "enter_stage_date": lead.enter_stage_date,
-            "contact_date": lead.contact_date,
-            "quote_date": lead.quote_date,
-            "last_activity": lead.last_activity_date,
+            "enter_stage_date": _utc_to_pacific(lead.enter_stage_date),
+            "contact_date": _utc_to_pacific(lead.contact_date),
+            "quote_date": _utc_to_pacific(lead.quote_date),
+            "last_activity": _utc_to_pacific(lead.last_activity_date),
             "hours_to_first_contact": hours_to_contact,
             "hours_to_quote": hours_to_quote,
             "activity_counts": {

@@ -105,12 +105,26 @@ async def _load_name_maps(session) -> tuple[dict, dict]:
     return pipelines_map, stages_map
 
 
-async def _get_quoted_lead_ids(session, lead_ids: list[int] = None) -> set[int]:
+async def _get_quoted_lead_ids(session, lead_ids: list[int] = None, include_dates: bool = False):
     """Get set of lead IDs that have quote records in pd_lead_quotes.
 
     A lead is considered 'effectively quoted' if it has quote records OR quote_date is set.
     This is more reliable than the status field which is never set to QUOTED in AZ.
+
+    If include_dates=True, returns a tuple (set[int], dict[int, datetime]) where the dict
+    maps lead_id -> earliest synced_at date from quote records (used as fallback quote date
+    when lead.quote_date is null).
     """
+    if include_dates:
+        query = select(LeadQuote.lead_id, func.min(LeadQuote.synced_at)).group_by(LeadQuote.lead_id)
+        if lead_ids is not None:
+            query = query.where(LeadQuote.lead_id.in_(lead_ids))
+        result = await session.execute(query)
+        rows = result.all()
+        ids = {row[0] for row in rows}
+        dates = {row[0]: row[1] for row in rows if row[1]}
+        return ids, dates
+
     query = select(LeadQuote.lead_id).distinct()
     if lead_ids is not None:
         query = query.where(LeadQuote.lead_id.in_(lead_ids))
@@ -1829,8 +1843,8 @@ async def coaching_analysis(
                 "coaching_flags": [],
             }
 
-        # Get quoted lead IDs
-        quoted_lead_ids = await _get_quoted_lead_ids(session, lead_ids)
+        # Get quoted lead IDs (with earliest quote dates for follow-up flag logic)
+        quoted_lead_ids, quote_dates_by_lead = await _get_quoted_lead_ids(session, lead_ids, include_dates=True)
 
         # Get all notes for these leads in the date range
         notes_result = await session.execute(
@@ -2025,7 +2039,14 @@ async def coaching_analysis(
 
         if is_quoted and lead.status not in (2, 3, 5):
             # Quoted but still open — check for follow-up after quote
-            post_quote_notes = [n for n in lead_notes if n.create_date and lead.quote_date and n.create_date > lead.quote_date]
+            # Use lead.quote_date if available, otherwise fall back to earliest
+            # LeadQuote synced_at (fixes false flags when quote_date is null)
+            effective_quote_date = lead.quote_date or quote_dates_by_lead.get(lead.id)
+            if effective_quote_date:
+                post_quote_notes = [n for n in lead_notes if n.create_date and n.create_date > effective_quote_date]
+            else:
+                # No quote date at all — can't determine follow-up timing, skip flag
+                post_quote_notes = [True]  # sentinel to avoid false flag
             if not post_quote_notes:
                 leads_quoted_no_followup += 1
                 lead_flags.append("quoted_no_followup")

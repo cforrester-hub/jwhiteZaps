@@ -1951,10 +1951,12 @@ async def coaching_analysis(
                 "texts_in_period": texts_period,
                 "calls_in_period": calls_period,
                 "stage_moves_in_period": stage_moves_period,
+                "total_contact_attempts": (
+                    lifetime_type_counts.get("EMAIL", 0) +
+                    lifetime_type_counts.get("TEXT", 0) +
+                    lifetime_type_counts.get("comment", 0)
+                ),
                 "total_notes_lifetime": len(lead_notes),
-                "emails_lifetime": lifetime_type_counts.get("EMAIL", 0),
-                "texts_lifetime": lifetime_type_counts.get("TEXT", 0),
-                "calls_lifetime": lifetime_type_counts.get("comment", 0),
                 "tasks": len(lead_tasks),
                 "open_tasks": len(open_tasks),
                 "overdue_tasks": len(overdue_tasks),

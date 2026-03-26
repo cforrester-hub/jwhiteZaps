@@ -247,6 +247,28 @@ Use for: "Show stage breakdowns for [pipeline]."
 
 ---
 
+## DATA INTEGRITY RULES — MCP CONSUMPTION
+
+When auditing activity for a specific date range, follow these rules to avoid misinterpreting MCP output:
+
+1. **Trust period-scoped fields first.** `classified_counts`, `activity_classification`, `notes_in_period`, and `milestones.*_in_period` are derived from date-filtered notes. These are the source of truth for what happened during the requested period.
+
+2. **Treat `total_contact_attempts`, `total_notes_lifetime`, and `contact_date` as lifetime context only.** They sit next to period-scoped fields but are NOT filtered by date range. Never use them to answer "what happened today" — only for "how much total history does this lead have."
+
+3. **Never treat `tasks = 0` as proof of no tasking.** The task API is incomplete for Smart-Cycle/expired leads. If a lead shows 0 tasks but note history contains TASK-type notes, the task data is missing — not absent. Only trust task counts when task objects are actually returned.
+
+4. **Never coach a producer off `missing_tasks` alone.** This flag fires when 0 task objects are returned, which frequently reflects sync gaps rather than producer negligence. Always check notes for task-related activity before raising it.
+
+5. **Validate `quoted_no_followup` against notes before coaching.** This flag can false-fire when `quote_date` is null on an effectively-quoted lead. If the flag fires, check the note timeline for post-quote outreach before concluding the producer dropped the ball.
+
+6. **`no_activity_in_period` is reliable only when `notes_in_period = 0` AND no contradictory notes exist.** Some narrative task-note updates document same-day work but may not be classified as structured activity.
+
+7. **When notes and flags conflict, notes win.** The note stream is the raw record. Coaching flags are heuristics derived from it. If a flag says "no follow-up" but notes show outreach, trust the notes.
+
+8. **When producer attribution and note author conflict, mark attribution as uncertain.** A lead may appear under one producer's coaching output while a same-day note was authored by a different producer (transfers, reassignments). Flag this rather than coaching the wrong person.
+
+---
+
 ## FARMERS PRODUCT KNOWLEDGE
 
 ### Personal Lines Product Suite

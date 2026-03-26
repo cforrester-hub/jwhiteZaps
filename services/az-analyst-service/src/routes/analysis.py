@@ -2011,7 +2011,12 @@ async def coaching_analysis(
             leads_with_no_notes += 1
             lead_flags.append("no_notes_at_all")
 
-        if not lead.contact_date and lead.status == 0:
+        # Check for never contacted — but verify against actual notes, not just contact_date
+        # contact_date is often null even when producer has made call/text/email attempts
+        has_any_customer_notes = any(
+            _classify_note(n)["category"] == "customer" for n in lead_notes
+        )
+        if not lead.contact_date and lead.status == 0 and not has_any_customer_notes:
             leads_with_no_contact += 1
             lead_flags.append("new_lead_never_contacted")
 

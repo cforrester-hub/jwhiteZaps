@@ -1904,28 +1904,35 @@ async def _coaching_analysis_impl(
         leads_with_any_customer_notes = {row[0] for row in customer_exists_result.all()}
 
         # 5) Post-quote notes existence (for quoted_no_followup flag)
-        # Note: LeadNote.create_date is String, quote dates are datetime — convert to string for comparison
+        # Build effective quote date per lead: lead.quote_date (String) or earliest LeadQuote synced_at
+        # Both LeadNote.create_date and Lead.quote_date are String columns with space separators
         post_quote_lead_ids = set()
-        eligible_lead_ids = {l.id for l in leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status not in (2, 3, 5)}
-        quote_check_pairs = [
-            (lid, qd) for lid, qd in quote_dates_by_lead.items()
-            if qd and lid in eligible_lead_ids
-        ]
+        quote_check_pairs = []
+        for lead in leads:
+            if not (_is_effectively_quoted(lead, quoted_lead_ids) and lead.status not in (2, 3, 5)):
+                continue
+            # Use lead.quote_date first (String, same format as note dates)
+            # Fall back to synced_at from LeadQuote (datetime, needs conversion)
+            effective_qd = lead.quote_date
+            if not effective_qd:
+                fallback = quote_dates_by_lead.get(lead.id)
+                if fallback:
+                    # Convert datetime to string matching DB format (space separator, not T)
+                    effective_qd = fallback.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fallback, 'strftime') else str(fallback)
+            if effective_qd:
+                quote_check_pairs.append((lead.id, effective_qd))
         if quote_check_pairs:
             post_quote_conditions = []
-            for lid, qd in quote_check_pairs:
-                # Convert datetime to string for comparison with String column
-                qd_str = qd.isoformat() if hasattr(qd, 'isoformat') else str(qd)
+            for lid, qd_str in quote_check_pairs:
                 post_quote_conditions.append(
                     (LeadNote.lead_id == lid) & (LeadNote.create_date > qd_str)
                 )
-            if post_quote_conditions:
-                post_quote_result = await session.execute(
-                    select(LeadNote.lead_id).where(
-                        or_(*post_quote_conditions)
-                    ).group_by(LeadNote.lead_id)
-                )
-                post_quote_lead_ids = {row[0] for row in post_quote_result.all()}
+            post_quote_result = await session.execute(
+                select(LeadNote.lead_id).where(
+                    or_(*post_quote_conditions)
+                ).group_by(LeadNote.lead_id)
+            )
+            post_quote_lead_ids = {row[0] for row in post_quote_result.all()}
 
         # Get all tasks for these leads
         tasks_result = await session.execute(

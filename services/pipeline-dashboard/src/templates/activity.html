@@ -119,41 +119,48 @@
         producer: '',
     };
 
+    function pacificNow() {
+        // Get current date/time in Pacific regardless of browser timezone
+        const s = new Date().toLocaleString('en-US', {timeZone: 'America/Los_Angeles'});
+        return new Date(s);
+    }
+
+    function formatDate(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
+
     function todayStr() {
-        return new Date().toISOString().slice(0, 10);
+        return formatDate(pacificNow());
     }
 
     function yesterdayStr() {
-        const d = new Date();
+        const d = pacificNow();
         d.setDate(d.getDate() - 1);
-        return d.toISOString().slice(0, 10);
+        return formatDate(d);
     }
 
     function weekStartStr() {
-        const d = new Date();
-        const day = d.getDay(); // 0=Sun
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Mon
-        const mon = new Date(d);
-        mon.setDate(diff);
-        return mon.toISOString().slice(0, 10);
+        const d = pacificNow();
+        const day = d.getDay();
+        d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+        return formatDate(d);
     }
 
     function lastWeekStartStr() {
-        const d = new Date();
+        const d = pacificNow();
         const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 7;
-        const mon = new Date(d);
-        mon.setDate(diff);
-        return mon.toISOString().slice(0, 10);
+        d.setDate(d.getDate() - day + (day === 0 ? -6 : 1) - 7);
+        return formatDate(d);
     }
 
     function lastWeekEndStr() {
-        const d = new Date();
+        const d = pacificNow();
         const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 1;
-        const sun = new Date(d);
-        sun.setDate(diff);
-        return sun.toISOString().slice(0, 10);
+        d.setDate(d.getDate() - day + (day === 0 ? -6 : 1) - 1);
+        return formatDate(d);
     }
 
     function resolveDates() {

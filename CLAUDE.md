@@ -159,6 +159,7 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /api/analysis/lost-deal-analysis - Post-quote leakage audit with recoverable leads
 - GET /api/analysis/producer-scorecard - Cross-pipeline KPI summary with team rankings
 - GET /api/analysis/coaching-analysis?producer=&date_from=&date_to=&days= - Per-lead coaching analysis with notes, tasks, and coaching flags
+- GET /api/analysis/sales-analytics?producer=&pipeline_name=&lead_source=&days= - Won revenue, carrier placement, source-to-carrier mapping
 - **Keep in sync:** When adding/changing az-analyst-service endpoints, update the MCP server (`mcp-servers/az-analyst/server.py`) AND the OpenAPI spec (`services/az-analyst-service/openapi.json`) for ChatGPT Custom GPT
 
 ## Development Workflow

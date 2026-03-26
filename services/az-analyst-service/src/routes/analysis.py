@@ -1999,3 +1999,204 @@ async def coaching_analysis(
         "coaching_flags": coaching_flags if not summary_only else [],
         "leads": lead_analyses if not summary_only else [],
     }
+
+
+# ---------------------------------------------------------------------------
+# Sales Analytics
+# ---------------------------------------------------------------------------
+
+@router.get("/sales-analytics", dependencies=[Depends(verify_api_key)])
+async def sales_analytics(
+    producer: Optional[str] = Query(None, description="Filter by producer firstname"),
+    pipeline_name: Optional[str] = Query(None, description="Filter by pipeline name (partial match)"),
+    pipeline_id: Optional[str] = Query(None, description="Filter by pipeline ID"),
+    lead_source: Optional[str] = Query(None, description="Filter by lead source name"),
+    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD (filters on sold_date for won, create_date for all)"),
+    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    days: int = Query(30, description="Look back N days if date_from not set", ge=1, le=365),
+    group_by: Optional[str] = Query(None, description="Group by: producer, carrier, product, source, pipeline"),
+    summary_only: bool = Query(True, description="Omit per-lead detail"),
+):
+    """Sales analytics — premium, revenue, carrier placement, source-to-carrier mapping.
+
+    Analyzes won leads and their quote records to show revenue by producer, carrier,
+    product, and lead source. Also shows quoted-not-won pipeline for revenue recovery.
+    """
+    if date_from:
+        start = date_from
+    else:
+        start = (_today_pacific() - timedelta(days=days - 1)).isoformat()
+    end = (date_to or _today_pacific().isoformat()) + "T23:59:59"
+
+    async with async_session() as session:
+        # Get all leads with quotes in the date range
+        conditions = []
+        if producer:
+            conditions.append(func.lower(Lead.assign_to_firstname) == producer.lower())
+        if pipeline_id:
+            conditions.append(Lead.pipeline_id == pipeline_id)
+        if pipeline_name:
+            conditions.append(Lead.workflow_name.ilike(f"%{pipeline_name}%"))
+        if lead_source:
+            conditions.append(Lead.lead_source_name == lead_source)
+
+        # Get won leads (by sold_date or last_activity in range)
+        won_conditions = conditions.copy()
+        won_conditions.append(Lead.status == 2)
+        won_conditions.append(or_(
+            (Lead.sold_date >= start) & (Lead.sold_date <= end),
+            (Lead.sold_date == None) & (Lead.last_activity_date >= start) & (Lead.last_activity_date <= end),
+        ))
+        won_result = await session.execute(select(Lead).where(*won_conditions))
+        won_leads = won_result.scalars().all()
+
+        # Get all quoted leads in range (for pipeline/recovery)
+        quoted_lead_ids = await _get_quoted_lead_ids(session) if not conditions else set()
+        all_conditions = conditions.copy()
+        all_conditions.append(or_(
+            Lead.create_date >= start,
+            Lead.last_activity_date >= start,
+        ))
+        all_result = await session.execute(select(Lead).where(*all_conditions))
+        all_leads = all_result.scalars().all()
+        all_lead_ids = [l.id for l in all_leads]
+        if not conditions:
+            quoted_lead_ids = await _get_quoted_lead_ids(session, all_lead_ids)
+        else:
+            quoted_lead_ids = await _get_quoted_lead_ids(session, all_lead_ids)
+
+        # Get all quotes for these leads
+        all_relevant_ids = list(set([l.id for l in won_leads] + all_lead_ids))
+        if all_relevant_ids:
+            quote_result = await session.execute(
+                select(LeadQuote).where(LeadQuote.lead_id.in_(all_relevant_ids))
+            )
+            all_quotes = quote_result.scalars().all()
+        else:
+            all_quotes = []
+
+        pipelines_map, stages_map = await _load_name_maps(session)
+
+    # Group quotes by lead
+    quotes_by_lead = {}
+    for q in all_quotes:
+        quotes_by_lead.setdefault(q.lead_id, []).append(q)
+
+    # Won revenue calculations
+    won_premium = 0
+    won_by_carrier = {}
+    won_by_product = {}
+    won_by_source = {}
+    won_by_producer = {}
+    won_by_pipeline = {}
+    source_to_carrier = {}  # lead_source -> {carrier -> count}
+    won_lead_details = []
+
+    for lead in won_leads:
+        lead_quotes = quotes_by_lead.get(lead.id, [])
+        lead_premium = sum(q.premium or 0 for q in lead_quotes)
+        won_premium += lead_premium
+
+        pname = lead.workflow_name or pipelines_map.get(lead.pipeline_id, "Unknown")
+        prod_name = lead.assign_to_firstname or "Unknown"
+        source = lead.lead_source_name or "Unknown"
+
+        # By producer
+        if prod_name not in won_by_producer:
+            won_by_producer[prod_name] = {"count": 0, "premium": 0}
+        won_by_producer[prod_name]["count"] += 1
+        won_by_producer[prod_name]["premium"] += lead_premium
+
+        # By pipeline
+        if pname not in won_by_pipeline:
+            won_by_pipeline[pname] = {"count": 0, "premium": 0}
+        won_by_pipeline[pname]["count"] += 1
+        won_by_pipeline[pname]["premium"] += lead_premium
+
+        # By source
+        if source not in won_by_source:
+            won_by_source[source] = {"count": 0, "premium": 0}
+        won_by_source[source]["count"] += 1
+        won_by_source[source]["premium"] += lead_premium
+
+        # By carrier and product (from quote records)
+        for q in lead_quotes:
+            carrier = q.carrier_name or "Unknown"
+            product = q.product_name or "Unknown"
+
+            if carrier not in won_by_carrier:
+                won_by_carrier[carrier] = {"count": 0, "premium": 0}
+            won_by_carrier[carrier]["count"] += 1
+            won_by_carrier[carrier]["premium"] += q.premium or 0
+
+            if product not in won_by_product:
+                won_by_product[product] = {"count": 0, "premium": 0}
+            won_by_product[product]["count"] += 1
+            won_by_product[product]["premium"] += q.premium or 0
+
+            # Source → carrier mapping
+            if source not in source_to_carrier:
+                source_to_carrier[source] = {}
+            if carrier not in source_to_carrier[source]:
+                source_to_carrier[source][carrier] = {"count": 0, "premium": 0}
+            source_to_carrier[source][carrier]["count"] += 1
+            source_to_carrier[source][carrier]["premium"] += q.premium or 0
+
+        if not summary_only:
+            product_names = sorted(set(q.product_name for q in lead_quotes if q.product_name))
+            carrier_names = sorted(set(q.carrier_name for q in lead_quotes if q.carrier_name))
+            won_lead_details.append({
+                "lead_id": lead.id,
+                "name": f"{lead.firstname or ''} {lead.lastname or ''}".strip(),
+                "producer": prod_name,
+                "pipeline": pname,
+                "lead_source": source,
+                "sold_date": _utc_to_pacific(lead.sold_date),
+                "premium": lead_premium,
+                "carriers": carrier_names,
+                "products": product_names,
+                "is_bundled": len(product_names) > 1,
+                "quote_count": len(lead_quotes),
+            })
+
+    # Quoted-not-won pipeline (recovery opportunity)
+    quoted_not_won = [l for l in all_leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status != 2]
+    pipeline_premium = 0
+    for lead in quoted_not_won:
+        lead_quotes = quotes_by_lead.get(lead.id, [])
+        pipeline_premium += sum(q.premium or 0 for q in lead_quotes)
+
+    # Sort breakdowns
+    def _sort_by_premium(d):
+        return sorted(d.items(), key=lambda x: -x[1]["premium"])
+
+    # Source-to-carrier formatting
+    source_carrier_formatted = {}
+    for source, carriers in source_to_carrier.items():
+        source_carrier_formatted[source] = sorted(
+            [{"carrier": c, **v} for c, v in carriers.items()],
+            key=lambda x: -x["premium"]
+        )
+
+    response = {
+        "date_range": {"from": start, "to": date_to or _today_pacific().isoformat()},
+        "summary": {
+            "won_leads": len(won_leads),
+            "won_premium": round(won_premium, 2),
+            "avg_premium_per_sale": round(won_premium / len(won_leads), 2) if won_leads else 0,
+            "quoted_not_won_leads": len(quoted_not_won),
+            "quoted_not_won_premium": round(pipeline_premium, 2),
+            "total_quoted_leads": len(won_leads) + len(quoted_not_won),
+        },
+        "by_producer": [{"producer": k, **v} for k, v in _sort_by_premium(won_by_producer)],
+        "by_carrier": [{"carrier": k, **v} for k, v in _sort_by_premium(won_by_carrier)],
+        "by_product": [{"product": k, **v} for k, v in _sort_by_premium(won_by_product)],
+        "by_source": [{"source": k, **v} for k, v in _sort_by_premium(won_by_source)],
+        "by_pipeline": [{"pipeline": k, **v} for k, v in _sort_by_premium(won_by_pipeline)],
+        "source_to_carrier": source_carrier_formatted,
+    }
+
+    if not summary_only:
+        response["won_leads_detail"] = won_lead_details
+
+    return response

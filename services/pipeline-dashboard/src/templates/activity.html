@@ -54,7 +54,7 @@
         </select>
 
         <div class="prompt-library" id="prompt-library">
-            <button class="btn-prompt-library" onclick="togglePromptMenu(event)">Analysis Prompts</button>
+            <button class="btn-prompt-library" onclick="togglePromptMenu(event)">&#9776; Analysis Prompts &#9662;</button>
             <div class="prompt-menu" id="prompt-menu">
                 <!-- Categories and options populated by JS -->
             </div>
@@ -347,6 +347,29 @@
                     label: 'Task Workload',
                     desc: 'Open/overdue tasks and follow-up gaps',
                     template: "Review task workload and follow-up discipline for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to identify:\n1. Open tasks by producer\n2. Overdue tasks by producer\n3. Quoted leads with pending follow-up tasks\n4. New leads without a next task\n5. Any signs that task data may be incomplete\n\nThen tell me:\n- Who is overloaded\n- Who is under-following\n- Which tasks need to be worked first today\n- What management action I should take\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
+                }
+            ]
+        },
+        {
+            category: 'Sales',
+            prompts: [
+                {
+                    id: 'sales_performance',
+                    label: 'Sales Performance',
+                    desc: 'Revenue, carrier mix, and close analysis',
+                    template: "Analyze sales performance for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools (getSalesAnalytics and related tools) to evaluate:\n1. Won leads and total premium\n2. Revenue by producer\n3. Revenue by carrier (Farmers vs brokered)\n4. Revenue by product line\n5. Average premium per sale\n6. Bundle rate on won business\n7. Quoted-not-won pipeline (recovery opportunity)\n\nThen tell me:\n- Who is producing the most revenue?\n- What is our carrier mix (Farmers vs brokered)?\n- What products are driving the most premium?\n- Where is revenue sitting on the table (quoted but not closed)?\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
+                },
+                {
+                    id: 'source_to_carrier',
+                    label: 'Source-to-Carrier Analysis',
+                    desc: 'Which sources produce which carrier placements',
+                    template: "Analyze the source-to-carrier placement patterns for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to determine:\n1. For each lead source, which carriers are policies being placed with?\n2. What percentage of each source is going to Farmers vs brokered carriers?\n3. Are there sources that disproportionately go to brokered carriers?\n4. Are producers placing business with the right carriers or defaulting to brokered when Farmers could write it?\n5. Which source + carrier combinations produce the highest premium?\n\nThen tell me:\n- Which sources are most profitable?\n- Are we keeping enough business with Farmers?\n- Are there carrier placement patterns that suggest coaching is needed?\n- What should change to improve our carrier mix?\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
+                },
+                {
+                    id: 'carrier_placement_audit',
+                    label: 'Carrier Placement Audit',
+                    desc: 'Are policies landing with the right carrier?',
+                    template: "Audit carrier placement decisions for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to evaluate:\n1. Won policies by carrier\n2. Premium volume by carrier\n3. Which producers are placing business with which carriers\n4. Whether brokered placements were necessary or if Farmers could have written the risk\n5. Review notes on won leads to understand why specific carriers were chosen\n\nFor each brokered placement, assess:\n- Was it necessary (outside Farmers appetite)?\n- Could the producer have tried harder to keep it with Farmers?\n- Is there a pattern of defaulting to brokered business?\n\nBe direct about whether carrier placement discipline needs coaching.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
         },

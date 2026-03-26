@@ -1775,6 +1775,101 @@
           }
         }
       }
+    },
+    "/api/analysis/sales-analytics": {
+      "get": {
+        "operationId": "getSalesAnalytics",
+        "summary": "Sales analytics: won revenue, carrier placement, source-to-carrier mapping",
+        "description": "Won premium by producer, carrier, product, source, pipeline. Includes source-to-carrier mapping and quoted-not-won recovery pipeline.",
+        "parameters": [
+          {
+            "name": "producer",
+            "in": "query",
+            "required": false,
+            "description": "Filter by producer first name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "query",
+            "required": false,
+            "description": "Partial match on pipeline name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pipeline_id",
+            "in": "query",
+            "required": false,
+            "description": "Filter by pipeline ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lead_source",
+            "in": "query",
+            "required": false,
+            "description": "Filter by lead source name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "description": "Start date YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "description": "End date YYYY-MM-DD",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "description": "Look back N days (default 30)",
+            "schema": {
+              "type": "integer",
+              "default": 30
+            }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "description": "Omit per-lead detail (default true)",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sales analytics with revenue breakdowns",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

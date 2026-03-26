@@ -421,5 +421,47 @@ async def get_coaching_analysis(
     })
 
 
+@mcp.tool()
+async def get_sales_analytics(
+    producer: str = "",
+    pipeline_name: str = "",
+    pipeline_id: str = "",
+    lead_source: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    days: int = 30,
+    group_by: str = "",
+    summary_only: bool = True,
+) -> str:
+    """Sales analytics — won revenue, carrier placement, source-to-carrier mapping, recovery pipeline.
+
+    Shows won premium by producer, carrier, product, source, and pipeline. Includes
+    source-to-carrier mapping (which lead sources produce policies with which carriers)
+    and quoted-not-won pipeline for revenue recovery.
+
+    Args:
+        producer: Filter by producer first name (optional)
+        pipeline_name: Filter by pipeline name, partial match (optional)
+        pipeline_id: Filter by pipeline ID (optional)
+        lead_source: Filter by lead source name (optional)
+        date_from: Start date YYYY-MM-DD (optional, defaults to 30 days back)
+        date_to: End date YYYY-MM-DD (optional)
+        days: Look back N days if date_from not set (default 30)
+        group_by: Group by: producer, carrier, product, source, pipeline (optional)
+        summary_only: Omit per-lead detail (default true)
+    """
+    return await _call_api("/sales-analytics", {
+        "producer": producer,
+        "pipeline_name": pipeline_name,
+        "pipeline_id": pipeline_id,
+        "lead_source": lead_source,
+        "date_from": date_from,
+        "date_to": date_to,
+        "days": days,
+        "group_by": group_by,
+        "summary_only": str(summary_only).lower(),
+    })
+
+
 if __name__ == "__main__":
     mcp.run()

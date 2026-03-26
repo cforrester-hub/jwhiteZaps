@@ -2199,4 +2199,10 @@ async def sales_analytics(
     if not summary_only:
         response["won_leads_detail"] = won_lead_details
 
+    response["source_notes"] = [
+        "Won leads filtered by sold_date in range (or last_activity if sold_date is null). Other tools may use different date filters — counts may not match getLostDealAnalysis or getQuoteAnalysis exactly.",
+        "Carrier/product counts may exceed won lead count because bundled leads have multiple quote records per lead.",
+        "Quoted-not-won includes all effectively quoted leads (any status except won) with activity in range.",
+    ]
+
     return response

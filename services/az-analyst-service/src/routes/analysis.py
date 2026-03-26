@@ -1722,6 +1722,48 @@ async def producer_scorecard(
 # Coaching Analysis
 # ---------------------------------------------------------------------------
 
+def _classify_note(note) -> dict:
+    """Classify a note into category (customer/internal/milestone), type, and direction."""
+    note_type = (note.note_type or "").lower()
+    body = (note.body or "").lower()
+
+    if note_type == "email":
+        direction = "inbound" if ("received" in body or "replied" in body) else "outbound"
+        return {"category": "customer", "type": "email", "direction": direction}
+
+    if note_type == "text":
+        # Customer replies typically contain specific response text, not opt-out language
+        # Default to outbound for producer-sent texts
+        direction = "outbound"
+        if "reply stop" in body or "unsubscribe" in body or "you have successfully been" in body:
+            direction = "inbound"
+        # Check for common inbound patterns
+        elif len(body) < 200 and note.title is None:
+            # Short texts without titles are often customer replies
+            direction = "inbound"
+        return {"category": "customer", "type": "text", "direction": direction}
+
+    if note_type in ("comment", "general"):
+        direction = None
+        body_check = body
+        if "outgoing call" in body_check or "outbound" in body_check or "\U0001f4e4" in (note.body or ""):
+            direction = "outbound"
+        elif "incoming call" in body_check or "inbound" in body_check or "\U0001f4e5" in (note.body or ""):
+            direction = "inbound"
+        return {"category": "customer", "type": "call", "direction": direction}
+
+    if note_type == "move_stage":
+        return {"category": "milestone", "type": "stage_move", "direction": None}
+
+    if note_type == "task":
+        return {"category": "internal", "type": "task", "direction": None}
+
+    if "auto" in note_type:
+        return {"category": "internal", "type": "automation", "direction": None}
+
+    return {"category": "internal", "type": "other", "direction": None}
+
+
 def _strip_html(text: str | None) -> str:
     """Strip HTML tags from note body for cleaner LLM consumption."""
     if not text:
@@ -1821,14 +1863,17 @@ async def coaching_analysis(
     coaching_flags = []
 
     # Aggregate counters
-    total_emails = 0
-    total_texts = 0
-    total_calls = 0
+    total_customer_contacts = 0
+    total_internal_events = 0
+    total_milestones = 0
     total_tasks_count = 0
     leads_with_no_notes = 0
     leads_with_no_contact = 0
     leads_quoted_no_followup = 0
     leads_missing_tasks = 0
+    leads_with_customer_activity = 0
+    leads_with_internal_only = 0
+    leads_advanced = 0
 
     for lead in leads:
         lead_notes = notes_by_lead.get(lead.id, [])
@@ -1838,27 +1883,112 @@ async def coaching_analysis(
         # Filter notes to the date range for activity counting
         notes_in_range = [n for n in lead_notes if n.create_date and n.create_date >= start and n.create_date <= end_ts]
 
-        # Count by type — period only (not lifetime)
-        period_type_counts = {}
+        # Classify each note in period
+        classified = {
+            "outbound_calls": 0, "inbound_calls": 0,
+            "outbound_texts": 0, "inbound_texts": 0,
+            "outbound_emails": 0, "inbound_emails": 0,
+            "task_updates": 0, "automation_events": 0,
+            "stage_moves": 0, "other_internal": 0,
+        }
+        has_customer = False
+        has_internal = False
+        has_milestone = False
+
         for n in notes_in_range:
-            t = n.note_type or "unknown"
-            period_type_counts[t] = period_type_counts.get(t, 0) + 1
+            c = _classify_note(n)
+            if c["category"] == "customer":
+                has_customer = True
+                if c["type"] == "call":
+                    if c["direction"] == "outbound":
+                        classified["outbound_calls"] += 1
+                    elif c["direction"] == "inbound":
+                        classified["inbound_calls"] += 1
+                    else:
+                        classified["outbound_calls"] += 1  # default calls to outbound
+                elif c["type"] == "text":
+                    if c["direction"] == "outbound":
+                        classified["outbound_texts"] += 1
+                    else:
+                        classified["inbound_texts"] += 1
+                elif c["type"] == "email":
+                    if c["direction"] == "outbound":
+                        classified["outbound_emails"] += 1
+                    else:
+                        classified["inbound_emails"] += 1
+            elif c["category"] == "milestone":
+                has_milestone = True
+                classified["stage_moves"] += 1
+            elif c["category"] == "internal":
+                has_internal = True
+                if c["type"] == "task":
+                    classified["task_updates"] += 1
+                elif c["type"] == "automation":
+                    classified["automation_events"] += 1
+                else:
+                    classified["other_internal"] += 1
 
-        emails_period = period_type_counts.get("EMAIL", 0)
-        texts_period = period_type_counts.get("TEXT", 0)
-        calls_period = period_type_counts.get("comment", 0)  # call logs are stored as "comment" type
-        stage_moves_period = period_type_counts.get("MOVE_STAGE", 0)
+        customer_total = (classified["outbound_calls"] + classified["inbound_calls"] +
+                         classified["outbound_texts"] + classified["inbound_texts"] +
+                         classified["outbound_emails"] + classified["inbound_emails"])
+        internal_total = classified["task_updates"] + classified["automation_events"] + classified["other_internal"]
+        milestone_total = classified["stage_moves"]
 
-        # Lifetime counts for reference
+        # Activity classification
+        if not notes_in_range:
+            activity_class = "no_activity"
+        elif has_milestone and has_customer:
+            activity_class = "milestone_and_follow_up"
+        elif has_milestone:
+            activity_class = "milestone_advance"
+        elif has_customer and has_internal:
+            activity_class = "customer_follow_up_and_internal"
+        elif has_customer:
+            activity_class = "customer_follow_up"
+        elif has_internal:
+            activity_class = "internal_only"
+        else:
+            activity_class = "no_activity"
+
+        # Build worked_today_reason
+        reason_parts = []
+        if classified["outbound_calls"]: reason_parts.append(f"{classified['outbound_calls']} outbound call{'s' if classified['outbound_calls'] > 1 else ''}")
+        if classified["inbound_calls"]: reason_parts.append(f"{classified['inbound_calls']} inbound call{'s' if classified['inbound_calls'] > 1 else ''}")
+        if classified["outbound_texts"]: reason_parts.append(f"{classified['outbound_texts']} outbound text{'s' if classified['outbound_texts'] > 1 else ''}")
+        if classified["inbound_texts"]: reason_parts.append(f"{classified['inbound_texts']} inbound text{'s' if classified['inbound_texts'] > 1 else ''}")
+        if classified["outbound_emails"]: reason_parts.append(f"{classified['outbound_emails']} outbound email{'s' if classified['outbound_emails'] > 1 else ''}")
+        if classified["inbound_emails"]: reason_parts.append(f"{classified['inbound_emails']} inbound email{'s' if classified['inbound_emails'] > 1 else ''}")
+        if classified["task_updates"]: reason_parts.append(f"{classified['task_updates']} task update{'s' if classified['task_updates'] > 1 else ''}")
+        if classified["stage_moves"]: reason_parts.append(f"{classified['stage_moves']} stage move{'s' if classified['stage_moves'] > 1 else ''}")
+        if classified["automation_events"]: reason_parts.append(f"{classified['automation_events']} automation event{'s' if classified['automation_events'] > 1 else ''}")
+        worked_reason = ", ".join(reason_parts) if reason_parts else None
+
+        # Milestones detection
+        period_milestones = {
+            "first_contact_in_period": bool(lead.contact_date and lead.contact_date >= start and lead.contact_date <= end_ts),
+            "quote_created_in_period": bool(lead.quote_date and lead.quote_date >= start and lead.quote_date <= end_ts),
+            "stage_moved_in_period": classified["stage_moves"] > 0,
+            "won_in_period": bool(lead.sold_date and lead.sold_date >= start and lead.sold_date <= end_ts),
+            "lost_in_period": False,  # Can't determine from current data without status change history
+        }
+
+        # Lifetime counts for total_contact_attempts
         lifetime_type_counts = {}
         for n in lead_notes:
             t = n.note_type or "unknown"
             lifetime_type_counts[t] = lifetime_type_counts.get(t, 0) + 1
 
-        total_emails += emails_period
-        total_texts += texts_period
-        total_calls += calls_period
+        # Update aggregate counters
+        total_customer_contacts += customer_total
+        total_internal_events += internal_total
+        total_milestones += milestone_total
         total_tasks_count += len(lead_tasks)
+        if has_customer:
+            leads_with_customer_activity += 1
+        elif has_internal and not has_customer:
+            leads_with_internal_only += 1
+        if has_milestone:
+            leads_advanced += 1
 
         # Timing
         hours_to_contact = _hours_between(lead.enter_stage_date, lead.contact_date)
@@ -1945,12 +2075,22 @@ async def coaching_analysis(
             "last_activity": _utc_to_pacific(lead.last_activity_date),
             "hours_to_first_contact": hours_to_contact,
             "hours_to_quote": hours_to_quote,
-            "activity_counts": {
+            "activity_summary": {
+                "has_customer_activity": has_customer,
+                "has_internal_activity": has_internal,
+                "has_milestone_activity": has_milestone,
+                "activity_classification": activity_class,
+                "worked_today_reason": worked_reason,
+            },
+            "classified_counts": {
+                **classified,
+                "total_customer_facing": customer_total,
+                "total_internal": internal_total,
+                "total_milestone": milestone_total,
+            },
+            "milestones": period_milestones,
+            "context": {
                 "notes_in_period": len(notes_in_range),
-                "emails_in_period": emails_period,
-                "texts_in_period": texts_period,
-                "calls_in_period": calls_period,
-                "stage_moves_in_period": stage_moves_period,
                 "total_contact_attempts": (
                     lifetime_type_counts.get("EMAIL", 0) +
                     lifetime_type_counts.get("TEXT", 0) +
@@ -1985,14 +2125,16 @@ async def coaching_analysis(
         "date_range": {"from": start, "to": end},
         "summary": {
             "leads_active": len(leads),
-            "leads_with_notes": len(leads) - leads_with_no_notes,
+            "leads_with_customer_activity": leads_with_customer_activity,
+            "leads_with_internal_only": leads_with_internal_only,
+            "leads_advanced": leads_advanced,
             "leads_no_notes": leads_with_no_notes,
             "leads_no_contact": leads_with_no_contact,
             "leads_quoted_no_followup": leads_quoted_no_followup,
             "leads_missing_tasks": leads_missing_tasks,
-            "emails_in_period": total_emails,
-            "texts_in_period": total_texts,
-            "calls_in_period": total_calls,
+            "total_customer_contacts": total_customer_contacts,
+            "total_internal_events": total_internal_events,
+            "total_milestones": total_milestones,
             "total_tasks": total_tasks_count,
         },
         "coaching_flag_summary": flag_summary,

@@ -1805,6 +1805,20 @@ async def coaching_analysis(
     Use summary_only=true for high-volume producers to avoid oversized responses.
     Designed for LLM consumption to generate coaching feedback.
     """
+    try:
+        return await _coaching_analysis_impl(
+            producer, date_from, date_to, days, include_note_content,
+            max_notes_per_lead, summary_only, pipeline_name, pipeline_id,
+        )
+    except Exception as e:
+        logger.exception(f"Coaching analysis failed for producer={producer}: {e}")
+        raise HTTPException(status_code=500, detail=f"Coaching analysis error: {str(e)}")
+
+
+async def _coaching_analysis_impl(
+    producer, date_from, date_to, days, include_note_content,
+    max_notes_per_lead, summary_only, pipeline_name, pipeline_id,
+):
     # Compute date range
     if date_from:
         start = date_from
@@ -1890,17 +1904,20 @@ async def coaching_analysis(
         leads_with_any_customer_notes = {row[0] for row in customer_exists_result.all()}
 
         # 5) Post-quote notes existence (for quoted_no_followup flag)
+        # Note: LeadNote.create_date is String, quote dates are datetime — convert to string for comparison
         post_quote_lead_ids = set()
+        eligible_lead_ids = {l.id for l in leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status not in (2, 3, 5)}
         quote_check_pairs = [
             (lid, qd) for lid, qd in quote_dates_by_lead.items()
-            if qd and lid in {l.id for l in leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status not in (2, 3, 5)}
+            if qd and lid in eligible_lead_ids
         ]
         if quote_check_pairs:
-            # Build OR conditions for each lead's post-quote check
             post_quote_conditions = []
             for lid, qd in quote_check_pairs:
+                # Convert datetime to string for comparison with String column
+                qd_str = qd.isoformat() if hasattr(qd, 'isoformat') else str(qd)
                 post_quote_conditions.append(
-                    (LeadNote.lead_id == lid) & (LeadNote.create_date > qd)
+                    (LeadNote.lead_id == lid) & (LeadNote.create_date > qd_str)
                 )
             if post_quote_conditions:
                 post_quote_result = await session.execute(

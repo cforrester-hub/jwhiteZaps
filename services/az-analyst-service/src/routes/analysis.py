@@ -1846,13 +1846,69 @@ async def coaching_analysis(
         # Get quoted lead IDs (with earliest quote dates for follow-up flag logic)
         quoted_lead_ids, quote_dates_by_lead = await _get_quoted_lead_ids(session, lead_ids, include_dates=True)
 
-        # Get all notes for these leads in the date range
-        notes_result = await session.execute(
+        # --- Hybrid note loading: period notes as objects, lifetime as aggregates ---
+        # 1) Period notes (full objects for classification + timeline)
+        period_notes_result = await session.execute(
             select(LeadNote).where(
                 LeadNote.lead_id.in_(lead_ids),
+                LeadNote.create_date >= start,
+                LeadNote.create_date <= end_ts,
             ).order_by(LeadNote.create_date.asc())
         )
-        all_notes = notes_result.scalars().all()
+        period_notes = period_notes_result.scalars().all()
+
+        # 2) Recent pre-period notes for context timeline (last N per lead)
+        context_window = max_notes_per_lead
+        context_notes_result = await session.execute(
+            select(LeadNote).where(
+                LeadNote.lead_id.in_(lead_ids),
+                LeadNote.create_date < start,
+            ).order_by(LeadNote.create_date.desc()).limit(context_window * len(lead_ids))
+        )
+        context_notes = context_notes_result.scalars().all()
+
+        # 3) Lifetime aggregates (counts by lead_id + note_type)
+        lifetime_counts_result = await session.execute(
+            select(
+                LeadNote.lead_id,
+                LeadNote.note_type,
+                func.count().label("cnt"),
+            ).where(LeadNote.lead_id.in_(lead_ids))
+            .group_by(LeadNote.lead_id, LeadNote.note_type)
+        )
+        lifetime_counts_rows = lifetime_counts_result.all()
+
+        # 4) Has-any-customer-notes per lead (for new_lead_never_contacted flag)
+        # Customer note types: EMAIL, TEXT, comment, general
+        customer_types = ["EMAIL", "TEXT", "comment", "general"]
+        customer_exists_result = await session.execute(
+            select(LeadNote.lead_id).where(
+                LeadNote.lead_id.in_(lead_ids),
+                func.lower(LeadNote.note_type).in_([t.lower() for t in customer_types]),
+            ).group_by(LeadNote.lead_id)
+        )
+        leads_with_any_customer_notes = {row[0] for row in customer_exists_result.all()}
+
+        # 5) Post-quote notes existence (for quoted_no_followup flag)
+        post_quote_lead_ids = set()
+        quote_check_pairs = [
+            (lid, qd) for lid, qd in quote_dates_by_lead.items()
+            if qd and lid in {l.id for l in leads if _is_effectively_quoted(l, quoted_lead_ids) and l.status not in (2, 3, 5)}
+        ]
+        if quote_check_pairs:
+            # Build OR conditions for each lead's post-quote check
+            post_quote_conditions = []
+            for lid, qd in quote_check_pairs:
+                post_quote_conditions.append(
+                    (LeadNote.lead_id == lid) & (LeadNote.create_date > qd)
+                )
+            if post_quote_conditions:
+                post_quote_result = await session.execute(
+                    select(LeadNote.lead_id).where(
+                        or_(*post_quote_conditions)
+                    ).group_by(LeadNote.lead_id)
+                )
+                post_quote_lead_ids = {row[0] for row in post_quote_result.all()}
 
         # Get all tasks for these leads
         tasks_result = await session.execute(
@@ -1863,10 +1919,24 @@ async def coaching_analysis(
         # Load name maps
         pipelines_map, stages_map = await _load_name_maps(session)
 
-    # Group notes and tasks by lead
+    # Group period notes by lead
     notes_by_lead = {}
-    for n in all_notes:
+    for n in period_notes:
         notes_by_lead.setdefault(n.lead_id, []).append(n)
+
+    # Group context notes by lead (most recent first, cap per lead)
+    context_by_lead = {}
+    for n in context_notes:
+        lst = context_by_lead.setdefault(n.lead_id, [])
+        if len(lst) < context_window:
+            lst.append(n)
+
+    # Build lifetime type counts per lead from aggregate query
+    lifetime_type_counts_by_lead = {}
+    for row in lifetime_counts_rows:
+        lead_id, note_type, cnt = row
+        d = lifetime_type_counts_by_lead.setdefault(lead_id, {})
+        d[note_type or "unknown"] = cnt
 
     tasks_by_lead = {}
     for t in all_tasks:
@@ -1890,12 +1960,14 @@ async def coaching_analysis(
     leads_advanced = 0
 
     for lead in leads:
-        lead_notes = notes_by_lead.get(lead.id, [])
+        lead_period_notes = notes_by_lead.get(lead.id, [])
+        lead_context_notes = context_by_lead.get(lead.id, [])
         lead_tasks = tasks_by_lead.get(lead.id, [])
+        lifetime_type_counts = lifetime_type_counts_by_lead.get(lead.id, {})
         is_quoted = _is_effectively_quoted(lead, quoted_lead_ids)
 
-        # Filter notes to the date range for activity counting
-        notes_in_range = [n for n in lead_notes if n.create_date and n.create_date >= start and n.create_date <= end_ts]
+        # Period notes ARE the date-filtered notes (already filtered by query)
+        notes_in_range = lead_period_notes
 
         # Classify each note in period
         classified = {
@@ -1986,11 +2058,7 @@ async def coaching_analysis(
             "lost_in_period": False,  # Can't determine from current data without status change history
         }
 
-        # Lifetime counts for total_contact_attempts
-        lifetime_type_counts = {}
-        for n in lead_notes:
-            t = n.note_type or "unknown"
-            lifetime_type_counts[t] = lifetime_type_counts.get(t, 0) + 1
+        # lifetime_type_counts already loaded from aggregate query above
 
         # Update aggregate counters
         total_customer_contacts += customer_total
@@ -2021,33 +2089,30 @@ async def coaching_analysis(
         # Coaching flags for this lead
         lead_flags = []
 
-        if not lead_notes:
+        total_notes_lifetime = sum(lifetime_type_counts.values())
+        if total_notes_lifetime == 0:
             leads_with_no_notes += 1
             lead_flags.append("no_notes_at_all")
 
-        # Check for never contacted — but verify against actual notes, not just contact_date
-        # contact_date is often null even when producer has made call/text/email attempts
-        has_any_customer_notes = any(
-            _classify_note(n)["category"] == "customer" for n in lead_notes
-        )
+        # Check for never contacted — use pre-computed customer notes existence
+        has_any_customer_notes = lead.id in leads_with_any_customer_notes
         if not lead.contact_date and lead.status == 0 and not has_any_customer_notes:
             leads_with_no_contact += 1
             lead_flags.append("new_lead_never_contacted")
 
-        if not notes_in_range and lead_notes:
+        if not notes_in_range and total_notes_lifetime > 0:
             lead_flags.append("no_activity_in_period")
 
         if is_quoted and lead.status not in (2, 3, 5):
             # Quoted but still open — check for follow-up after quote
-            # Use lead.quote_date if available, otherwise fall back to earliest
-            # LeadQuote synced_at (fixes false flags when quote_date is null)
+            # Use pre-computed post_quote_lead_ids from DB query
             effective_quote_date = lead.quote_date or quote_dates_by_lead.get(lead.id)
             if effective_quote_date:
-                post_quote_notes = [n for n in lead_notes if n.create_date and n.create_date > effective_quote_date]
+                has_post_quote = lead.id in post_quote_lead_ids
             else:
                 # No quote date at all — can't determine follow-up timing, skip flag
-                post_quote_notes = [True]  # sentinel to avoid false flag
-            if not post_quote_notes:
+                has_post_quote = True
+            if not has_post_quote:
                 leads_quoted_no_followup += 1
                 lead_flags.append("quoted_no_followup")
 
@@ -2061,9 +2126,13 @@ async def coaching_analysis(
         if hours_to_contact and hours_to_contact > 24:
             lead_flags.append("slow_first_contact")
 
-        # Build note timeline (capped)
+        # Build note timeline: period notes first, then recent pre-period context
+        # Context notes are already desc order; reverse for chronological
+        timeline_notes = sorted(lead_context_notes, key=lambda n: n.create_date or "") + lead_period_notes
+        timeline_notes = timeline_notes[-max_notes_per_lead:]  # keep most recent N
+
         note_timeline = []
-        for n in lead_notes[:max_notes_per_lead]:
+        for n in timeline_notes:
             entry = {
                 "type": n.note_type,
                 "date": _utc_to_pacific(n.create_date),
@@ -2122,7 +2191,7 @@ async def coaching_analysis(
                     lifetime_type_counts.get("TEXT", 0) +
                     lifetime_type_counts.get("comment", 0)
                 ),
-                "total_notes_lifetime": len(lead_notes),
+                "total_notes_lifetime": total_notes_lifetime,
                 "tasks": len(lead_tasks),
                 "open_tasks": len(open_tasks),
                 "overdue_tasks": len(overdue_tasks),

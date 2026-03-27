@@ -1979,6 +1979,7 @@ async def _coaching_analysis_impl(
     leads_with_no_contact = 0
     leads_quoted_no_followup = 0
     leads_missing_tasks = 0
+    leads_task_sync_incomplete = 0
     leads_with_customer_activity = 0
     leads_with_internal_only = 0
     leads_advanced = 0
@@ -2143,9 +2144,20 @@ async def _coaching_analysis_impl(
         if overdue_tasks:
             lead_flags.append(f"overdue_tasks_{len(overdue_tasks)}")
 
+        # Task data completeness check
+        has_task_note_evidence = (
+            lifetime_type_counts.get("TASK", 0) > 0 or
+            any((n.note_type or "").lower() == "task" for n in lead_period_notes) or
+            any((n.note_type or "").lower() == "task" for n in lead_context_notes)
+        )
         if not lead_tasks:
-            leads_missing_tasks += 1
-            lead_flags.append("missing_tasks")
+            if has_task_note_evidence:
+                # Task notes exist but task objects weren't returned — API sync gap
+                leads_task_sync_incomplete += 1
+                lead_flags.append("task_sync_incomplete")
+            else:
+                leads_missing_tasks += 1
+                lead_flags.append("missing_tasks")
 
         if hours_to_contact and hours_to_contact > 24:
             lead_flags.append("slow_first_contact")
@@ -2219,6 +2231,11 @@ async def _coaching_analysis_impl(
                 "tasks": len(lead_tasks),
                 "open_tasks": len(open_tasks),
                 "overdue_tasks": len(overdue_tasks),
+                "task_data_status": (
+                    "complete" if lead_tasks else
+                    "incomplete" if has_task_note_evidence else
+                    "unavailable"
+                ),
             },
             "coaching_flags": lead_flags,
             "notes": note_timeline,
@@ -2251,6 +2268,7 @@ async def _coaching_analysis_impl(
             "leads_no_contact": leads_with_no_contact,
             "leads_quoted_no_followup": leads_quoted_no_followup,
             "leads_missing_tasks": leads_missing_tasks,
+            "leads_task_sync_incomplete": leads_task_sync_incomplete,
             "total_customer_contacts": total_customer_contacts,
             "total_internal_events": total_internal_events,
             "total_milestones": total_milestones,

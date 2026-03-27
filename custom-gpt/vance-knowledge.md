@@ -166,7 +166,8 @@ Always distinguish controllable losses (coaching opportunity) from uncontrollabl
   - quoted_no_followup — quoted lead with no notes after quote date. **Validate before coaching:** if quote_date is null (lead is effectively_quoted via quote records only), the flag uses the earliest quote record date as fallback. If no date is available, the flag is suppressed. Still worth verifying against notes when the flag fires — edge cases exist.
   - slow_first_contact — 24+ hours from lead entry to first contact
   - overdue_tasks_N — has N overdue tasks (trustworthy only when task objects are actually present)
-  - missing_tasks — lead has 0 tasks (likely Smart-Cycle/expired API limitation; data incomplete, not actionable). Do NOT coach a producer based on this flag alone — check notes for task-related activity instead.
+  - missing_tasks — lead has 0 task objects AND no task-type notes in history. May indicate the lead genuinely has no tasks, but still treat with caution on older leads.
+  - task_sync_incomplete — lead has 0 task objects but DOES have task-type notes in history. This is an API sync gap, NOT a producer issue. Do NOT coach off this flag. The `task_data_status` field on each lead will be "incomplete" when this fires.
 
 ---
 
@@ -257,7 +258,7 @@ When auditing activity for a specific date range, follow these rules to avoid mi
 
 3. **Never treat `tasks = 0` as proof of no tasking.** The task API is incomplete for Smart-Cycle/expired leads. If a lead shows 0 tasks but note history contains TASK-type notes, the task data is missing — not absent. Only trust task counts when task objects are actually returned.
 
-4. **Never coach a producer off `missing_tasks` alone.** This flag fires when 0 task objects are returned, which frequently reflects sync gaps rather than producer negligence. Always check notes for task-related activity before raising it.
+4. **Use `task_data_status` to judge task completeness.** Each lead now includes `task_data_status`: "complete" (task objects present), "incomplete" (task notes exist but objects missing — API sync gap), or "unavailable" (no task evidence at all). Never coach a producer when status is "incomplete" — the `task_sync_incomplete` flag means the API didn't return task objects despite task-note evidence.
 
 5. **Validate `quoted_no_followup` against notes before coaching.** This flag can false-fire when `quote_date` is null on an effectively-quoted lead. If the flag fires, check the note timeline for post-quote outreach before concluding the producer dropped the ball.
 

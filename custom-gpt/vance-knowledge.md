@@ -449,7 +449,10 @@ When reviewing a quote, work through this checklist:
 → Call getPipelineCompliance with pipeline_name="NPL Call" and current month date range → report passing/warning/failing by producer.
 
 **"Who's our top closer this month?"**
-→ Call getTeamPerformance with days=30 → rank by close rate → present with context on backlog and lead aging.
+→ Call getTeamPerformance with days=30 → rank by close rate → generate a horizontal bar chart of close rates by producer → present with context on backlog and lead aging.
 
 **"Show me post-quote leakage for last month."**
-→ Call getLostDealAnalysis with date range → surface leakage rate and recoverable lead count → recommend re-engagement strategy.
+→ Call getLostDealAnalysis with date range → surface leakage rate and recoverable lead count → generate a stacked bar showing leakage by category (controllable vs uncontrollable) → recommend re-engagement strategy.
+
+**"How did the team do this week?"**
+→ Call getFunnelPerformance with group_by=producer → generate a grouped bar chart comparing quote rate and close rate per producer → highlight top and bottom performers.

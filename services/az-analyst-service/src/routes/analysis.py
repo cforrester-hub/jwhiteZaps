@@ -1367,18 +1367,15 @@ async def pipeline_compliance(
     # Timing for quoted leads
     time_to_quote = [_hours_between(l.enter_stage_date, l.quote_date) for l in quoted_leads]
 
-    # Same-day quotes
-    same_day = 0
+    # Speed-to-quote buckets (within 24h vs after 24h)
+    quoted_within_24h = 0
     quoted_after_24h = 0
     for l in quoted_leads:
         hours = _hours_between(l.enter_stage_date, l.quote_date)
         if hours is not None:
             if hours <= 24:
-                entered_day = (l.enter_stage_date or "")[:10]
-                quoted_day = (l.quote_date or "")[:10]
-                if entered_day and quoted_day and entered_day == quoted_day:
-                    same_day += 1
-            if hours > 24:
+                quoted_within_24h += 1
+            else:
                 quoted_after_24h += 1
 
     # No quote, no disposition — we don't have disposition_reason from AZ
@@ -1398,7 +1395,8 @@ async def pipeline_compliance(
         "quoted": quoted,
         "not_quoted": not_quoted,
         "quote_rate_pct": f"{round(quote_rate * 100, 1)}%",
-        "same_day_quote_pct": f"{round(same_day / total * 100, 1) if total > 0 else 0}%",
+        "quoted_within_24h": quoted_within_24h,
+        "quoted_within_24h_pct": f"{round(quoted_within_24h / total * 100, 1) if total > 0 else 0}%",
         "avg_time_to_quote_hours": timing["avg_hours"],
         "median_time_to_quote_hours": timing["median_hours"],
         "quoted_after_24h": quoted_after_24h,

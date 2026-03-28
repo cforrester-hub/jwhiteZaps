@@ -1910,7 +1910,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "won_leads": { "type": "integer" },
+                    "won_premium": { "type": "number" },
+                    "avg_premium_per_sale": { "type": "number" },
+                    "by_producer": { "type": "object", "description": "Revenue per producer" },
+                    "by_carrier": { "type": "object", "description": "Revenue per carrier" },
+                    "by_product": { "type": "object", "description": "Revenue per product line" },
+                    "by_source": { "type": "object", "description": "Revenue per lead source" },
+                    "by_pipeline": { "type": "object", "description": "Revenue per pipeline" },
+                    "source_to_carrier": { "type": "object", "description": "Lead source to carrier placement mapping" },
+                    "quoted_not_won_leads": { "type": "integer" },
+                    "quoted_not_won_premium": { "type": "number" }
+                  }
                 }
               }
             }

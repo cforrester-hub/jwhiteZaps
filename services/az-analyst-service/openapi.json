@@ -172,7 +172,7 @@
       "get": {
         "operationId": "getLeadDetail",
         "summary": "Get detailed info for a specific lead with quotes, opportunities, files, live notes and tasks",
-        "description": "Returns lead data from the database plus quotes, opportunities, files, live notes and tasks fetched from the AgencyZoom API.",
+        "description": "Returns lead data from the database plus quotes, opportunities, files, live notes and tasks fetched from the AgencyZoom API. Notes support pagination and size controls. For large leads, use notes_summary_only=true first, then drill into date ranges with notes_since + max_notes.",
         "parameters": [
           {
             "name": "lead_id",
@@ -201,6 +201,53 @@
             "schema": {
               "type": "boolean",
               "default": true
+            }
+          },
+          {
+            "name": "max_notes",
+            "in": "query",
+            "required": false,
+            "description": "Limit number of notes returned. Notes are sorted most-recent-first. Omit or 0 for all.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "notes_offset",
+            "in": "query",
+            "required": false,
+            "description": "Skip first N notes for pagination (default 0)",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "name": "max_note_body_length",
+            "in": "query",
+            "required": false,
+            "description": "Truncate each note body to N characters. Omit or 0 for full text.",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "notes_since",
+            "in": "query",
+            "required": false,
+            "description": "Only return notes created after this date (YYYY-MM-DD)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "notes_summary_only",
+            "in": "query",
+            "required": false,
+            "description": "Return note metadata only (type, date, author, title) — no body text. Use to preview large timelines before drilling in.",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],

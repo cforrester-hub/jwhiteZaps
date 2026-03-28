@@ -57,22 +57,51 @@ async def get_producer_activity(
 
 
 @mcp.tool()
-async def get_lead_detail(lead_id: int, include_notes: bool = True, include_tasks: bool = True) -> str:
+async def get_lead_detail(
+    lead_id: int,
+    include_notes: bool = True,
+    include_tasks: bool = True,
+    max_notes: int = 0,
+    notes_offset: int = 0,
+    max_note_body_length: int = 0,
+    notes_since: str = "",
+    notes_summary_only: bool = False,
+) -> str:
     """Get detailed info for a specific lead including quotes, opportunities, files, and optionally live notes/tasks.
 
     Returns synced data: quotes (carrier, product, premium, bundled status),
     opportunities (carrier, product line, premium, status), and file references.
     Notes and tasks are fetched live from AZ API when requested.
 
+    Notes support pagination and size controls via notes_meta in the response.
+    Strategy for large leads: first call with notes_summary_only=true to see the
+    full timeline metadata, then drill into specific date ranges with notes_since
+    and max_notes for full bodies.
+
     Args:
         lead_id: The AgencyZoom lead ID
         include_notes: Fetch live notes from AZ API (default true)
         include_tasks: Fetch live tasks from AZ API (default true)
+        max_notes: Limit number of notes returned (0 = all). Notes are sorted most-recent-first.
+        notes_offset: Skip first N notes for pagination (default 0)
+        max_note_body_length: Truncate each note body to N chars (0 = full text)
+        notes_since: Only return notes after this date (YYYY-MM-DD)
+        notes_summary_only: Return note metadata only (type, date, author, title) — no body text
     """
-    return await _call_api(f"/lead/{lead_id}", {
+    params = {
         "include_notes": str(include_notes).lower(),
         "include_tasks": str(include_tasks).lower(),
-    })
+        "notes_summary_only": str(notes_summary_only).lower(),
+    }
+    if max_notes:
+        params["max_notes"] = str(max_notes)
+    if notes_offset:
+        params["notes_offset"] = str(notes_offset)
+    if max_note_body_length:
+        params["max_note_body_length"] = str(max_note_body_length)
+    if notes_since:
+        params["notes_since"] = notes_since
+    return await _call_api(f"/lead/{lead_id}", params)
 
 
 @mcp.tool()

@@ -214,7 +214,18 @@ Use for: "Tell me about lead [ID]" or when a lead shows zero notes in other quer
 - lead_id — REQUIRED (integer)
 - include_notes — default true (live fetch from AgencyZoom)
 - include_tasks — default true (live fetch from AgencyZoom)
-- Returns: quotes, opportunities, files, notes, tasks
+- max_notes — limit number of notes returned (0 = all). Notes sorted most-recent-first.
+- notes_offset — skip first N notes for pagination (default 0)
+- max_note_body_length — truncate each note body to N chars (0 = full text)
+- notes_since — only return notes after this date (YYYY-MM-DD)
+- notes_summary_only — true = note metadata only (type, date, author, title), no body text
+- Returns: quotes, opportunities, files, notes, tasks, notes_meta (total_notes, returned, offset, has_more)
+
+**Handling large leads:** When a lead has extensive note history (e.g., 50+ notes), the full payload may exceed response size limits. Strategy:
+1. First call: `notes_summary_only=true` to see the full timeline metadata and note count
+2. Then drill into specific date ranges: `notes_since=YYYY-MM-DD` + `max_notes=20` for full bodies
+3. Paginate if needed: `notes_offset=20` + `max_notes=20` for the next page
+4. Use `max_note_body_length=500` to get truncated previews of all notes at once
 
 ---
 

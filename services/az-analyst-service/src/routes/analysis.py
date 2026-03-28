@@ -398,8 +398,18 @@ async def lead_detail(
     lead_id: int,
     include_notes: bool = Query(True),
     include_tasks: bool = Query(True),
+    max_notes: Optional[int] = Query(None, description="Limit number of notes returned"),
+    notes_offset: int = Query(0, description="Skip first N notes (for pagination)"),
+    max_note_body_length: Optional[int] = Query(None, description="Truncate each note body to N chars"),
+    notes_since: Optional[str] = Query(None, description="Only notes after this date (YYYY-MM-DD)"),
+    notes_summary_only: bool = Query(False, description="Return note metadata only, no body text"),
 ):
-    """Get detailed info for a specific lead, with optional live notes/tasks."""
+    """Get detailed info for a specific lead, with optional live notes/tasks.
+
+    Notes support pagination and size controls to avoid oversized responses.
+    Use notes_summary_only=true to get metadata first, then drill into
+    specific date ranges with notes_since + max_notes for full bodies.
+    """
     async with async_session() as session:
         result = await session.execute(select(Lead).where(Lead.id == lead_id))
         lead = result.scalar_one_or_none()
@@ -436,7 +446,52 @@ async def lead_detail(
             jwt = await system_login()
             if include_notes:
                 try:
-                    response["notes"] = await fetch_lead_notes(jwt, lead_id)
+                    raw_notes = await fetch_lead_notes(jwt, lead_id)
+
+                    # Strip HTML from all note bodies
+                    for note in raw_notes:
+                        if "body" in note:
+                            note["body"] = _strip_html(note.get("body"))
+
+                    # Sort by date descending (most recent first)
+                    raw_notes.sort(
+                        key=lambda n: n.get("createDate") or "", reverse=True
+                    )
+
+                    # Filter by date if notes_since provided
+                    if notes_since:
+                        raw_notes = [
+                            n for n in raw_notes
+                            if (n.get("createDate") or "") >= notes_since
+                        ]
+
+                    total_notes = len(raw_notes)
+
+                    # Apply offset/limit
+                    paginated = raw_notes[notes_offset:]
+                    if max_notes:
+                        paginated = paginated[:max_notes]
+
+                    # Summary-only or body truncation
+                    if notes_summary_only:
+                        paginated = [
+                            {k: v for k, v in n.items() if k != "body"}
+                            for n in paginated
+                        ]
+                    elif max_note_body_length:
+                        for n in paginated:
+                            body = n.get("body", "")
+                            if len(body) > max_note_body_length:
+                                n["body"] = body[:max_note_body_length] + "...[truncated]"
+
+                    response["notes"] = paginated
+                    response["notes_meta"] = {
+                        "total_notes": total_notes,
+                        "returned": len(paginated),
+                        "offset": notes_offset,
+                        "truncated_bodies": bool(max_note_body_length) and not notes_summary_only,
+                        "has_more": notes_offset + len(paginated) < total_notes,
+                    }
                 except Exception as e:
                     logger.warning(f"Failed to fetch notes for lead {lead_id}: {e}")
                     response["notes"] = []

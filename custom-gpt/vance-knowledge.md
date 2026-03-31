@@ -194,6 +194,8 @@ Use for: "How much premium did we write?" or "Which carriers are we placing with
 - "Is a producer defaulting to brokered when Farmers could write it?" → check source_to_carrier + review notes on won leads
 - "How much revenue is sitting on the table?" → check quoted_not_won_premium
 
+**Known gap: lead-based sales only.** This tool only counts won leads from the AgencyZoom lead pipeline. Policies entered directly in AZ's management system (not through a lead) are invisible here. AZ production reports include both lead-based and direct-entry policies, so their totals may exceed ours. If a producer's AZ production number is higher than what getSalesAnalytics shows, the difference is likely direct-entry policies without a lead record. This is not a data error — it's a scope difference.
+
 ---
 
 ### getDataQualityReport

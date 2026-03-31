@@ -59,6 +59,21 @@
                 <!-- Categories and options populated by JS -->
             </div>
         </div>
+
+    <!-- Prompt overlay -->
+    <div class="prompt-overlay" id="prompt-overlay" onclick="if(event.target===this)closePromptOverlay()">
+        <div class="prompt-overlay-content">
+            <div class="prompt-overlay-header">
+                <h2>Analysis Prompts</h2>
+                <button class="prompt-overlay-close" onclick="closePromptOverlay()">&times;</button>
+            </div>
+            <div class="prompt-overlay-body">
+                <div class="prompt-overlay-grid" id="prompt-overlay-grid">
+                    <!-- Built by JS -->
+                </div>
+            </div>
+        </div>
+    </div>
     </div>
 
     <!-- HTMX content sections -->
@@ -247,24 +262,28 @@
                     id: 'coaching_analysis',
                     label: 'Coaching Analysis',
                     desc: 'Producer coaching opportunities',
+                    longDesc: 'Evaluates speed to contact, quote conversion, follow-up discipline, untouched leads, and pipeline hygiene for each producer. Returns specific coaching actions for tomorrow.',
                     template: "Perform a coaching analysis for the Jennifer White Insurance Agency.\n\nScope:\n  Period: {{dateScope}}\n  Producer: {{producerScope}}\n  Pipeline: {{pipelineScope}}\n\nUse the MCP tools to pull the relevant data for this scope. Analyze each producer\u2019s activity and identify coaching opportunities.\n\nFor each producer, evaluate:\n1. Speed to contact \u2014 are leads being contacted quickly enough?\n2. Quote conversion \u2014 are contacted leads being quoted?\n3. Follow-up discipline \u2014 are quoted leads being followed up on?\n4. Untouched leads \u2014 are there leads sitting with no activity?\n5. Pipeline hygiene \u2014 are leads in the correct stage/status?\n\nBe direct and specific. Name the producer, name the issue, and recommend specific actions for tomorrow.\n\nVisualization: If multiple producers are in scope, generate a grouped bar chart comparing coaching flag counts by producer (untouched, no follow-up, slow contact, overdue tasks)."
                 },
                 {
                     id: 'daily_producer_accountability',
                     label: 'Producer Accountability',
                     desc: 'Daily producer review with action items',
+                    longDesc: 'Per-producer review of leads worked, new leads received, speed to contact, quoting activity, follow-up on quoted leads, untouched leads, and pipeline hygiene. Outputs exact action items for the next workday.',
                     template: "Perform a daily producer accountability review for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to pull the relevant data for this scope.\n\nFor this producer or producer group, evaluate:\n1. Leads worked during the period\n2. New leads received\n3. Speed to first contact\n4. Quote activity\n5. Follow-up activity on quoted leads\n6. Untouched leads\n7. Pipeline hygiene issues\n8. Top 3 coaching priorities for tomorrow\n\nBe direct and specific. Name the issue, name the lead when relevant, and recommend exact actions for the next workday.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Separate in-period activity from lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'team_daily_standup',
                     label: 'Team Stand-up',
                     desc: 'Team summary with rankings',
+                    longDesc: 'Company-wide summary: leads worked, new leads assigned, contact and quote rates by producer, follow-up gaps, and untouched leads. Ranks producers by activity and quote discipline. Manager-ready format.',
                     template: "Create a team daily stand-up report for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to summarize:\n1. Leads worked by producer\n2. New leads assigned by producer\n3. Contact rate by producer\n4. Quote rate by producer\n5. Quoted leads needing follow-up\n6. Untouched new leads by producer\n7. Any major pipeline hygiene issues\n\nThen rank:\n- Best activity discipline\n- Best quote discipline\n- Biggest coaching concern\n\nBe concise and manager-ready. Focus on what I should address with the team tomorrow.\n\nVisualization: Generate a grouped bar chart comparing leads worked, quoted, and untouched by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'manager_tomorrow_plan',
                     label: 'Manager Tomorrow Plan',
                     desc: 'Actionable management agenda',
+                    longDesc: 'Builds a management agenda for tomorrow: which producers need coaching, which leads need rescue, compliance risks, dying quoted deals, and vendor issues. Outputs a coaching agenda, producer action list, recovery list, and end-of-day checklist.',
                     template: "Based on the agency's current pipeline, tell me exactly what management should do tomorrow.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to identify:\n1. Producers who need coaching tomorrow\n2. Leads that need immediate rescue\n3. Pipelines with compliance risk\n4. Quoted deals at risk of dying\n5. Vendor or source issues that need attention\n\nThen give me:\n- A coaching agenda\n- A producer-by-producer action list\n- A recovery list of leads to work first\n- A short end-of-day management checklist\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -276,18 +295,21 @@
                     id: 'internet_lead_handling_audit',
                     label: 'Internet Lead Audit',
                     desc: 'Speed-to-contact and handling review',
+                    longDesc: 'Audits internet lead handling: speed to first contact, touch attempts in first 48 hours, multi-channel usage (call/text/email), contact-to-quote conversion, and zero-activity leads. Separates lead quality problems from producer effort problems.',
                     template: "Perform an internet lead handling audit for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools and evaluate:\n1. Speed to first contact\n2. Number of touch attempts per lead in first 48 hours\n3. Multi-channel usage (call, text, email)\n4. Contact-to-quote conversion\n5. Leads with zero meaningful activity\n6. Producers who are working the leads well versus producers who are underworking them\n\nSeparate lead quality problems from producer effort problems.\nBe direct. Tell me which producer needs coaching, what behavior needs to change, and what good should have looked like.\n\nVisualization: Generate a bar chart comparing contact rate and quote rate by producer for internet leads. If multi-channel data is available, add a stacked bar showing attempt mix (call, text, email) by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'lead_source_quality',
                     label: 'Lead Source Quality',
                     desc: 'Source ROI and conversion analysis',
+                    longDesc: 'Evaluates each lead source on contact rate, quote rate, close rate, and contact-to-quote conversion. Identifies which sources to scale, watch, or cut, and separates lead quality issues from producer execution issues.',
                     template: "Analyze lead source quality for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to evaluate each lead source on:\n1. Leads entered\n2. Contact rate\n3. Quote rate\n4. Close rate\n5. Contact-to-quote conversion\n6. Quoted-to-won conversion\n7. Bundle rate where applicable\n\nThen answer:\n- Which sources are producing the best leads?\n- Which sources are creating volume but weak conversion?\n- Which sources appear to have a lead quality issue versus a producer execution issue?\n- Which sources should we scale, watch, or cut?\n\nMake the output decision-oriented, not just descriptive.\n\nVisualization: Generate a grouped bar chart comparing contact rate, quote rate, and close rate by lead source. If enough sources exist, add a horizontal bar ranking sources by ROI (close rate).\n\nImportant:\n- Separate lead quality issues from producer execution issues\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'lead_aging_backlog',
                     label: 'Lead Aging & Backlog',
                     desc: 'Stale leads and backlog review',
+                    longDesc: 'Reviews lead aging buckets (0-1, 2-3, 4-7, 8-14, 15+ days) by producer. Identifies stale NEW leads, overloaded producers, and whether backlog is a load problem or a follow-up discipline problem. Recommends reassignment and priority actions.',
                     template: "Perform a lead aging and backlog review for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to identify:\n1. New leads aging 0-1, 2-3, 4-7, 8-14, and 15+ days\n2. Backlog by producer\n3. Stale leads still sitting in NEW\n4. Pipelines where aging is worst\n5. Whether backlog appears to be a lead load problem or a follow-up discipline problem\n\nThen recommend:\n- Which producer needs help\n- Which backlog should be reassigned or cleaned up\n- What tomorrow's priority should be\n\nVisualization: Generate a stacked bar chart showing lead aging buckets (0-1, 2-3, 4-7, 8-14, 15+ days) by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -299,30 +321,35 @@
                     id: 'high_intent_quote_compliance',
                     label: 'Quote Compliance Audit',
                     desc: 'High-intent pipeline quote rates',
+                    longDesc: 'Audits quote compliance on Call/Walk-In and other high-intent pipelines. Shows quote rate by producer against the 90% threshold, lists unquoted leads that should have been quoted, and flags operational excuses from notes.',
                     template: "Audit quote compliance for high-intent pipelines at the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to determine:\n1. Total high-intent leads by producer\n2. How many were quoted\n3. Quote compliance rate by producer\n4. Unquoted leads that should have been quoted\n5. Any operational excuses documented in notes\n\nFlag any producer under the expected standard.\nBe blunt and operational. Tell me exactly where compliance is failing and which leads require immediate recovery.\n\nVisualization: Generate a bar chart showing quote compliance rate by producer with a horizontal line at the 90% threshold.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'post_quote_leakage',
                     label: 'Post-Quote Leakage',
                     desc: 'Quoted leads that did not close',
+                    longDesc: 'Finds quoted leads that did not close. Calculates leakage rate by producer, identifies recoverable deals, reads notes to categorize losses as controllable (weak follow-up) vs uncontrollable (no market). Recommends re-engagement targets and message angles.',
                     template: "Analyze post-quote leakage for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to identify:\n1. How many leads were effectively quoted\n2. How many did not close\n3. Leakage rate by producer\n4. Recoverable quoted leads\n5. Common loss reasons based on notes\n6. Cases where follow-up discipline appears weak\n\nSeparate controllable losses from uncontrollable losses.\nThen recommend:\n- Which leads should be worked first\n- Which producer habits need coaching\n- What message angle should be used on recoverable deals\n\nVisualization: Generate a stacked bar chart showing leakage by producer, split by controllable vs uncontrollable loss reasons.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'pipeline_hygiene',
                     label: 'Pipeline Hygiene',
                     desc: 'Stage/status discipline review',
+                    longDesc: 'Finds pipeline discipline issues: leads stuck in NEW too long, quoted leads in wrong stage/status, won leads without quotes, timeline anomalies, missing contact dates, and misleading task data. Separates producer issues from data integrity issues.',
                     template: "Run a pipeline hygiene and discipline review for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to find:\n1. Leads stuck in NEW too long\n2. Quoted leads in the wrong stage or status\n3. Won leads without quotes\n4. Timeline anomalies\n5. Missing contact dates where activity suggests contact occurred\n6. Missing or misleading task data\n\nPrioritize the issues by operational risk.\nTell me what is a true producer issue versus a data integrity issue versus an MCP or system issue.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'cross_sell_execution',
                     label: 'Cross-Sell Execution',
                     desc: 'Cross-sell opportunity conversion',
+                    longDesc: 'Analyzes cross-sell pipeline execution: contact rate, quote rate, close rate, follow-up cadence, and channel usage (phone vs email). Identifies who is best at cross-sell conversion and which habits should be standardized across the team.',
                     template: "Analyze cross-sell opportunity execution for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to evaluate:\n1. Leads entered\n2. Contact rate\n3. Quote rate\n4. Close rate\n5. Follow-up cadence\n6. Whether producers are calling before or instead of relying only on email\n\nThen tell me:\n- Who is best at cross-sell conversion\n- Who is underworking the book\n- Which habits should be standardized across the team\n- What should be coached immediately\n\nVisualization: Generate a grouped bar chart comparing contact rate, quote rate, and close rate by producer for cross-sell leads.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'reshop_rewrite',
                     label: 'ReShop/ReWrite Review',
                     desc: 'Retention and recapture performance',
+                    longDesc: 'Reviews ReShop/ReWrite pipeline: volume worked, quotes produced, follow-up cadence, conversion outcomes, and leads near decision point. Focuses on retention and recapture opportunities and which accounts to prioritize.',
                     template: "Review ReShop/ReWrite pipeline performance for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to analyze:\n1. Volume worked\n2. Quotes produced\n3. Follow-up cadence\n4. Conversion outcomes\n5. Leads near decision point that need immediate attention\n\nFocus on retention and recapture opportunities.\nTell me where money is sitting in the pipeline and which accounts should be worked first.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -334,18 +361,21 @@
                     id: 'producer_scorecard',
                     label: 'Producer Scorecard',
                     desc: 'KPI summary with team rank',
+                    longDesc: 'Full KPI scorecard for one producer: quote rate, close rate, contact rate, speed to quote, post-quote leakage, per-pipeline breakdown, and team rank for each metric. Identifies strengths, limiters, and top 3 coaching priorities.',
                     template: "Build a producer scorecard for the Jennifer White Insurance Agency.\n\nScope:\n- Producer: {{producerScope}}\n- Period: {{dateScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to summarize:\n1. Quote rate\n2. Close rate\n3. Contact rate\n4. Average speed to quote\n5. Post-quote leakage\n6. Performance by pipeline\n7. Team rank for each KPI\n\nThen give me:\n- What this producer is doing well\n- What is limiting production\n- The top 3 coaching priorities\n- A simple target plan for improvement\n\nVisualization: Generate a horizontal bar chart showing this producer's KPIs (quote rate, close rate, contact rate, leakage rate) alongside the team average for each.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'producer_behavior_comparison',
                     label: 'Behavior Comparison',
                     desc: 'Compare producer work patterns',
+                    longDesc: 'Compares producer behaviors side by side: speed to first contact, attempt volume in first 48 hours, channel mix (call/text/email), contact-to-quote and quote-to-close conversion. Identifies which behaviors correlate with better outcomes and recommends a standard playbook.',
                     template: "Compare producer behavior patterns at the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to compare:\n1. Speed to first contact\n2. Number of attempts in first 48 hours\n3. Use of call, text, and email\n4. Contact-to-quote conversion\n5. Quote-to-close conversion\n\nShow me which producer behaviors correlate with better outcomes.\nThen recommend the standard operating playbook the whole team should follow.\n\nVisualization: Generate a grouped bar chart comparing channel mix (call, text, email attempts) and conversion rates by producer. If speed-to-contact data is available, add a bar chart ranking producers by average hours to first contact.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'task_workload',
                     label: 'Task Workload',
                     desc: 'Open/overdue tasks and follow-up gaps',
+                    longDesc: 'Reviews open and overdue tasks by producer, quoted leads with pending follow-up, new leads without a next task, and signs of incomplete task data. Identifies who is overloaded, who is under-following, and which tasks need immediate attention.',
                     template: "Review task workload and follow-up discipline for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to identify:\n1. Open tasks by producer\n2. Overdue tasks by producer\n3. Quoted leads with pending follow-up tasks\n4. New leads without a next task\n5. Any signs that task data may be incomplete\n\nThen tell me:\n- Who is overloaded\n- Who is under-following\n- Which tasks need to be worked first today\n- What management action I should take\n\nVisualization: Generate a grouped bar chart showing open and overdue task counts by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -357,18 +387,21 @@
                     id: 'sales_performance',
                     label: 'Sales Performance',
                     desc: 'Revenue, carrier mix, and close analysis',
+                    longDesc: 'Full sales analysis: won leads, total premium, revenue by producer, revenue by carrier (Farmers vs brokered), revenue by product line, average premium per sale, bundle rate, and quoted-not-won recovery pipeline.',
                     template: "Analyze sales performance for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools (getSalesAnalytics and related tools) to evaluate:\n1. Won leads and total premium\n2. Revenue by producer\n3. Revenue by carrier (Farmers vs brokered)\n4. Revenue by product line\n5. Average premium per sale\n6. Bundle rate on won business\n7. Quoted-not-won pipeline (recovery opportunity)\n\nThen tell me:\n- Who is producing the most revenue?\n- What is our carrier mix (Farmers vs brokered)?\n- What products are driving the most premium?\n- Where is revenue sitting on the table (quoted but not closed)?\n\nVisualization: Generate a bar chart of revenue by producer. Add a pie or donut chart showing carrier mix (Farmers family vs brokered). If product data is available, add a bar chart of premium by product line.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'source_to_carrier',
                     label: 'Source-to-Carrier Analysis',
                     desc: 'Which sources produce which carrier placements',
+                    longDesc: 'Maps each lead source to its carrier placements: what percentage goes to Farmers vs brokered, which source+carrier combinations produce the highest premium, and whether producers are defaulting to brokered when Farmers could write it.',
                     template: "Analyze the source-to-carrier placement patterns for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to determine:\n1. For each lead source, which carriers are policies being placed with?\n2. What percentage of each source is going to Farmers vs brokered carriers?\n3. Are there sources that disproportionately go to brokered carriers?\n4. Are producers placing business with the right carriers or defaulting to brokered when Farmers could write it?\n5. Which source + carrier combinations produce the highest premium?\n\nThen tell me:\n- Which sources are most profitable?\n- Are we keeping enough business with Farmers?\n- Are there carrier placement patterns that suggest coaching is needed?\n- What should change to improve our carrier mix?\n\nVisualization: Generate a stacked bar chart showing Farmers vs brokered carrier placement percentage by lead source.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'carrier_placement_audit',
                     label: 'Carrier Placement Audit',
                     desc: 'Are policies landing with the right carrier?',
+                    longDesc: 'Audits won policies by carrier and producer. For each brokered placement, assesses whether it was necessary or if Farmers could have written the risk. Identifies patterns of defaulting to brokered business and whether carrier placement discipline needs coaching.',
                     template: "Audit carrier placement decisions for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to evaluate:\n1. Won policies by carrier\n2. Premium volume by carrier\n3. Which producers are placing business with which carriers\n4. Whether brokered placements were necessary or if Farmers could have written the risk\n5. Review notes on won leads to understand why specific carriers were chosen\n\nFor each brokered placement, assess:\n- Was it necessary (outside Farmers appetite)?\n- Could the producer have tried harder to keep it with Farmers?\n- Is there a pattern of defaulting to brokered business?\n\nBe direct about whether carrier placement discipline needs coaching.\n\nVisualization: Generate a donut chart showing overall carrier mix (Farmers vs Foremost vs brokered). If per-producer data is available, add a stacked bar of carrier placement by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -380,18 +413,21 @@
                     id: 'executive_summary',
                     label: 'Executive Summary',
                     desc: 'High-level agency overview',
+                    longDesc: 'High-level agency overview: lead volume, contact/quote/close rates, best and worst lead sources, best and worst producer trends, compliance risks, and recoverable revenue. Tells you what improved, what got worse, and the top 5 actions to improve production.',
                     template: "Create an executive summary for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to summarize:\n1. Lead volume\n2. Contact rate\n3. Quote rate\n4. Close rate\n5. Best and worst lead sources\n6. Best and worst producer trends\n7. Compliance risks\n8. Recoverable revenue opportunities\n\nThen tell me:\n- What improved\n- What got worse\n- Where management should focus next\n- The top 5 actions to improve production\n\nVisualization: Generate a funnel chart showing lead volume → contacted → quoted → won. Add a bar chart comparing quote rate and close rate by producer.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'recoverable_revenue',
                     label: 'Recoverable Revenue',
                     desc: 'Quoted leads that can be rescued',
+                    longDesc: 'Identifies quoted-but-not-won leads that are still recoverable. Ranks them by reactivation potential, categorizes loss reasons (weak follow-up vs price vs no market), and recommends which producer should own each follow-up with a suggested message angle.',
                     template: "Identify recoverable revenue opportunities for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producers: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nUse the MCP tools to find:\n1. Quoted but not won leads\n2. Leads with recent activity that are still recoverable\n3. Leads lost due to weak follow-up versus price versus no market\n4. The best reactivation targets\n\nGive me:\n- A ranked recovery list\n- The reason each lead is recoverable\n- Which producer should own the follow-up\n- The suggested next message angle\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 },
                 {
                     id: 'data_integrity_audit',
                     label: 'Data Integrity Audit',
                     desc: 'Validate MCP data quality',
+                    longDesc: 'Validates whether MCP activity metrics are truly period-scoped or contaminated by lifetime context. Checks call/email/text scoping, contact_date alignment, coaching flag conflicts with notes, task count completeness, and which metrics are safe to trust vs unsafe.',
                     template: "Run a data integrity audit on the MCP results for the Jennifer White Insurance Agency.\n\nScope:\n- Period: {{dateScope}}\n- Producer: {{producerScope}}\n- Pipeline: {{pipelineScope}}\n\nValidate whether the returned activity metrics are truly scoped to the requested period.\n\nSpecifically check:\n1. Whether total calls, emails, and texts appear to be lifetime totals instead of in-period totals\n2. Whether contact_date aligns with call activity\n3. Whether coaching flags conflict with notes\n4. Whether task counts appear incomplete due to API limitations\n5. Which metrics are safe to trust versus unsafe to trust\n\nDo not just summarize the data. Audit the quality of the data and tell me what appears to be an MCP issue versus a producer issue.\n\nImportant:\n- Focus on activity performed within the scoped period, not lifetime lead history\n- Flag any MCP data inconsistencies clearly"
                 }
             ]
@@ -409,32 +445,68 @@
         return { dateScope, producerScope, pipelineScope };
     }
 
-    function generatePrompt(templateId) {
-        const scope = resolveScope();
-        let template = null;
-        for (const cat of promptLibrary) {
-            for (const p of cat.prompts) {
-                if (p.id === templateId) { template = p.template; break; }
-            }
-            if (template) break;
-        }
-        if (!template) return;
+    // ===== Favorites =====
+    function getFavorites() {
+        try { return JSON.parse(localStorage.getItem('prompt_favorites') || '[]'); }
+        catch(e) { return []; }
+    }
+    function saveFavorites(favs) {
+        localStorage.setItem('prompt_favorites', JSON.stringify(favs));
+    }
+    function isFavorite(id) { return getFavorites().indexOf(id) !== -1; }
+    function toggleFavorite(id, event) {
+        if (event) { event.stopPropagation(); event.preventDefault(); }
+        var favs = getFavorites();
+        var idx = favs.indexOf(id);
+        if (idx === -1) { favs.push(id); } else { favs.splice(idx, 1); }
+        saveFavorites(favs);
+        buildPromptMenu();
+        buildOverlayGrid();
+    }
 
-        const text = template
+    function findPrompt(id) {
+        for (var c = 0; c < promptLibrary.length; c++) {
+            for (var p = 0; p < promptLibrary[c].prompts.length; p++) {
+                if (promptLibrary[c].prompts[p].id === id) return promptLibrary[c].prompts[p];
+            }
+        }
+        return null;
+    }
+
+    // ===== Generate + Copy =====
+    // Note: all content rendered below comes from the hardcoded promptLibrary
+    // constant defined in this template — no user input, no XSS risk.
+    function generatePrompt(templateId, source) {
+        var scope = resolveScope();
+        var prompt = findPrompt(templateId);
+        if (!prompt) return;
+
+        var text = prompt.template
             .replace(/\{\{dateScope\}\}/g, scope.dateScope)
             .replace(/\{\{producerScope\}\}/g, scope.producerScope)
             .replace(/\{\{pipelineScope\}\}/g, scope.pipelineScope);
 
         navigator.clipboard.writeText(text).then(function() {
-            const btn = document.querySelector('.btn-prompt-library');
-            const menu = document.getElementById('prompt-menu');
-            menu.classList.remove('open');
-            btn.textContent = 'Copied!';
-            btn.classList.add('copied');
-            setTimeout(function() {
-                btn.textContent = 'Analysis Prompts';
-                btn.classList.remove('copied');
-            }, 2000);
+            if (source === 'overlay') {
+                var card = document.getElementById('card-' + templateId);
+                if (card) {
+                    var fb = document.createElement('div');
+                    fb.className = 'prompt-card-copied';
+                    fb.textContent = 'Copied!';
+                    card.appendChild(fb);
+                    setTimeout(function() { closePromptOverlay(); }, 600);
+                }
+            } else {
+                var btn = document.querySelector('.btn-prompt-library');
+                var menu = document.getElementById('prompt-menu');
+                menu.classList.remove('open');
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.textContent = '\u2630 Analysis Prompts \u25BE';
+                    btn.classList.remove('copied');
+                }, 2000);
+            }
         }).catch(function() {
             alert('Copy failed. Please copy manually.');
         });
@@ -446,24 +518,84 @@
         menu.classList.toggle('open');
     }
 
-    // Build prompt menu on load
-    (function buildPromptMenu() {
+    // ===== Dropdown menu =====
+    function buildPromptMenu() {
         var menu = document.getElementById('prompt-menu');
         if (!menu) return;
-        var html = '';
-        promptLibrary.forEach(function(cat) {
-            html += '<div class="prompt-category">' + cat.category + '</div>';
-            cat.prompts.forEach(function(p) {
-                html += '<div class="prompt-option" onclick="generatePrompt(\'' + p.id + '\')">'
+        var favs = getFavorites();
+
+        // Build menu content from hardcoded promptLibrary (safe, no user input)
+        var parts = [];
+        parts.push('<div class="view-all-btn" onclick="openPromptOverlay()">View All Prompts \u203A</div>');
+
+        if (favs.length > 0) {
+            parts.push('<div class="prompt-category">Favorites</div>');
+            favs.forEach(function(fid) {
+                var p = findPrompt(fid);
+                if (!p) return;
+                parts.push('<div class="prompt-option" onclick="generatePrompt(\'' + p.id + '\')">'
+                    + '<span class="favorite-star active" onclick="toggleFavorite(\'' + p.id + '\', event)">\u2605</span>'
                     + p.label
-                    + '<div class="prompt-desc">' + p.desc + '</div>'
-                    + '</div>';
+                    + '<div class="prompt-desc">' + p.desc + '</div></div>');
+            });
+        }
+
+        promptLibrary.forEach(function(cat) {
+            parts.push('<div class="prompt-category">' + cat.category + '</div>');
+            cat.prompts.forEach(function(p) {
+                var starCls = isFavorite(p.id) ? 'favorite-star active' : 'favorite-star';
+                var starCh = isFavorite(p.id) ? '\u2605' : '\u2606';
+                parts.push('<div class="prompt-option" onclick="generatePrompt(\'' + p.id + '\')">'
+                    + '<span class="' + starCls + '" onclick="toggleFavorite(\'' + p.id + '\', event)">' + starCh + '</span>'
+                    + p.label
+                    + '<div class="prompt-desc">' + p.desc + '</div></div>');
             });
         });
-        menu.innerHTML = html;
-    })();
+        menu.textContent = '';
+        menu.insertAdjacentHTML('afterbegin', parts.join(''));
+    }
+    buildPromptMenu();
 
-    // Close prompt menu on outside click
+    // ===== Overlay =====
+    function buildOverlayGrid() {
+        var grid = document.getElementById('prompt-overlay-grid');
+        if (!grid) return;
+        // All content from hardcoded promptLibrary (safe, no user input)
+        var parts = [];
+        promptLibrary.forEach(function(cat) {
+            parts.push('<div class="prompt-overlay-category">' + cat.category + '</div>');
+            cat.prompts.forEach(function(p) {
+                var starCls = isFavorite(p.id) ? 'star active' : 'star';
+                var starCh = isFavorite(p.id) ? '\u2605' : '\u2606';
+                parts.push('<div class="prompt-card" id="card-' + p.id + '" onclick="generatePrompt(\'' + p.id + '\', \'overlay\')">'
+                    + '<div class="prompt-card-header">'
+                    + '<span class="prompt-card-label">' + p.label + '</span>'
+                    + '<button class="' + starCls + '" onclick="toggleFavorite(\'' + p.id + '\', event)">' + starCh + '</button>'
+                    + '</div>'
+                    + '<div class="prompt-card-short">' + p.desc + '</div>'
+                    + '<div class="prompt-card-desc">' + (p.longDesc || p.desc) + '</div>'
+                    + '</div>');
+            });
+        });
+        grid.textContent = '';
+        grid.insertAdjacentHTML('afterbegin', parts.join(''));
+    }
+
+    function openPromptOverlay() {
+        document.getElementById('prompt-menu').classList.remove('open');
+        buildOverlayGrid();
+        document.getElementById('prompt-overlay').classList.add('open');
+    }
+
+    function closePromptOverlay() {
+        document.getElementById('prompt-overlay').classList.remove('open');
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closePromptOverlay();
+    });
+
+    // Close dropdown on outside click
     document.addEventListener('click', function(e) {
         var menu = document.getElementById('prompt-menu');
         var lib = document.getElementById('prompt-library');

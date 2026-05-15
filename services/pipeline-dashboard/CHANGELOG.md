@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.1 — 2026-05-15
+- Fixed crash in coaching endpoint when note_type is an integer instead of a string
+
 ## v1.7.0 — 2026-05-15
 - SMS/email direction now uses AZ attr.outbound field (authoritative, replaces body heuristics)
 - SMS automation detection uses attr.triggerRuleId for high-confidence classification

@@ -1804,7 +1804,7 @@ def _classify_note(note) -> dict:
     Uses raw_json.attr.outbound for authoritative direction on EMAIL/TEXT,
     falling back to body heuristics when attr data is unavailable.
     """
-    note_type = (note.note_type or "").lower()
+    note_type = str(note.note_type or "").lower()
     body = (note.body or "").lower()
     attr = _get_note_attr(note)
 
@@ -2233,8 +2233,8 @@ async def _coaching_analysis_impl(
         # Task data completeness check
         has_task_note_evidence = (
             lifetime_type_counts.get("TASK", 0) > 0 or
-            any((n.note_type or "").lower() == "task" for n in lead_period_notes) or
-            any((n.note_type or "").lower() == "task" for n in lead_context_notes)
+            any(str(n.note_type or "").lower() == "task" for n in lead_period_notes) or
+            any(str(n.note_type or "").lower() == "task" for n in lead_context_notes)
         )
         if not lead_tasks:
             if has_task_note_evidence:

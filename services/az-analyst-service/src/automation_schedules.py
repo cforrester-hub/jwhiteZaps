@@ -374,7 +374,7 @@ def detect_unenrollment_periods(
     periods: list[tuple[datetime, datetime | None]] = []
 
     for note in sorted(all_notes, key=lambda n: n.create_date or ""):
-        ntype = (note.note_type or "").lower().strip()
+        ntype = str(note.note_type or "").lower().strip()
         note_dt = _parse_to_pacific(note.create_date)
         if not note_dt:
             continue
@@ -409,7 +409,7 @@ def _is_unenrolled_at(periods: list[tuple[datetime, datetime | None]], dt: datet
 
 def _note_channel(note_type: str | None) -> str | None:
     """Map AZ note_type to our Channel constant."""
-    nt = (note_type or "").lower().strip()
+    nt = str(note_type or "").lower().strip()
     if nt == "email":
         return Channel.EMAIL
     if nt == "text":
@@ -428,7 +428,7 @@ SMS_OPT_OUT_KEYWORDS = {"stop", "unsubscribe", "cancel", "end", "quit"}
 
 def _is_sms_opt_out(note) -> bool:
     """Check if an inbound TEXT note is a TCPA opt-out (e.g. 'STOP')."""
-    if (note.note_type or "").lower().strip() != "text":
+    if str(note.note_type or "").lower().strip() != "text":
         return False
     body = (note.body or "").strip()
     # Strip HTML tags
@@ -451,7 +451,7 @@ def classify_note_source(
 ) -> NoteSourceResult:
     """Classify a single note as automated, producer-driven, or unknown."""
 
-    note_type = (note.note_type or "").lower().strip()
+    note_type = str(note.note_type or "").lower().strip()
     note_dt = _parse_to_pacific(note.create_date)
 
     if not note_dt:
@@ -569,7 +569,7 @@ def _init_counts() -> dict:
 
 def _update_counts(counts: dict, note, result: NoteSourceResult, note_classification: dict):
     """Update counts based on note source classification and direction."""
-    nt = (note.note_type or "").lower().strip()
+    nt = str(note.note_type or "").lower().strip()
     direction = note_classification.get("direction")
 
     if result.source == "sms_opt_out":

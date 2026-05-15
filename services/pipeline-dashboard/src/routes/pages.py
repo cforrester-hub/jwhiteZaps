@@ -27,8 +27,9 @@ async def login_page(request: Request, error: str = None):
         error_message = "An error occurred. Please try again."
 
     return templates.TemplateResponse(
-        "login.html",
-        {"request": request, "error": error_message},
+        name="login.html",
+        context={"request": request, "error": error_message},
+        request=request,
     )
 
 
@@ -48,11 +49,12 @@ async def board_page(request: Request):
         pipelines = result.scalars().all()
 
     return templates.TemplateResponse(
-        "board.html",
-        {
+        name="board.html",
+        context={
             "request": request,
             "user": user,
             "pipelines": pipelines,
             "version": APP_VERSION,
         },
+        request=request,
     )

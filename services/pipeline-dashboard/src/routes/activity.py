@@ -73,7 +73,7 @@ async def activity_page(request: Request):
     """Main activity summary page."""
     user = await get_current_user(request)
     if user is None:
-        return templates.TemplateResponse("login.html", {"request": request, "error": ""})
+        return templates.TemplateResponse(name="login.html", context={"request": request, "error": ""}, request=request)
 
     # Fetch producer and pipeline lists for filter dropdowns
     from ..database import Employee, Pipeline, async_session
@@ -90,13 +90,13 @@ async def activity_page(request: Request):
         pip_result = await session.execute(select(Pipeline).order_by(Pipeline.name))
         pipelines = [{"id": p.id, "name": p.name} for p in pip_result.scalars().all()]
 
-    return templates.TemplateResponse("activity.html", {
+    return templates.TemplateResponse(name="activity.html", context={
         "request": request,
         "user": user,
         "producers": producers,
         "pipelines": pipelines,
         "version": APP_VERSION,
-    })
+    }, request=request)
 
 
 # ---------------------------------------------------------------------------
@@ -126,12 +126,12 @@ async def activity_summary(
         "pipeline_name": pipeline_name,
     })
 
-    return templates.TemplateResponse("partials/activity_summary.html", {
+    return templates.TemplateResponse(name="partials/activity_summary.html", context={
         "request": request,
         "data": data,
         "date_from": df,
         "date_to": dt,
-    })
+    }, request=request)
 
 
 @router.get("/pipeline/api/activity/new-leads", response_class=HTMLResponse)
@@ -158,12 +158,12 @@ async def activity_new_leads(
         "pipeline_name": pipeline_name,
     })
 
-    return templates.TemplateResponse("partials/activity_new_leads.html", {
+    return templates.TemplateResponse(name="partials/activity_new_leads.html", context={
         "request": request,
         "data": data,
         "date_from": df,
         "date_to": dt,
-    })
+    }, request=request)
 
 
 @router.get("/pipeline/api/activity/producers", response_class=HTMLResponse)
@@ -190,12 +190,12 @@ async def activity_producers(
         "pipeline_name": pipeline_name,
     })
 
-    return templates.TemplateResponse("partials/activity_producers.html", {
+    return templates.TemplateResponse(name="partials/activity_producers.html", context={
         "request": request,
         "data": data,
         "date_from": df,
         "date_to": dt,
-    })
+    }, request=request)
 
 
 @router.get("/pipeline/api/activity/coaching", response_class=HTMLResponse)
@@ -256,9 +256,9 @@ async def activity_coaching(
                 "summary": c.get("summary", {}),
             })
 
-    return templates.TemplateResponse("partials/activity_coaching.html", {
+    return templates.TemplateResponse(name="partials/activity_coaching.html", context={
         "request": request,
         "coaching_data": coaching_data,
         "date_from": df,
         "date_to": dt,
-    })
+    }, request=request)

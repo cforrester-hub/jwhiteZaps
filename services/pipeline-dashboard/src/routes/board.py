@@ -394,8 +394,8 @@ async def get_all_boards(
     stats = _compute_stats(all_leads, pipelines=pipelines, stages=all_stages)
 
     return templates.TemplateResponse(
-        "partials/kanban_all.html",
-        {
+        name="partials/kanban_all.html",
+        context={
             "request": request,
             "pipelines": pipelines,
             "stages_by_pipeline": stages_by_pipeline,
@@ -408,6 +408,7 @@ async def get_all_boards(
             "outcome_expired": len(outcome_leads.get("expired", [])),
             **stats,
         },
+        request=request,
     )
 
 
@@ -460,8 +461,8 @@ async def get_board(
     stats = _compute_stats(all_leads)
 
     return templates.TemplateResponse(
-        "partials/kanban.html",
-        {
+        name="partials/kanban.html",
+        context={
             "request": request,
             "stages": stages,
             "leads_by_stage": leads_by_stage,
@@ -469,6 +470,7 @@ async def get_board(
             "view": view,
             **stats,
         },
+        request=request,
     )
 
 
@@ -505,8 +507,9 @@ async def sync_status(request: Request):
             syncing = False
 
     return templates.TemplateResponse(
-        "partials/sync_status.html",
-        {"request": request, "sync_text": sync_text, "syncing": syncing},
+        name="partials/sync_status.html",
+        context={"request": request, "sync_text": sync_text, "syncing": syncing},
+        request=request,
     )
 
 

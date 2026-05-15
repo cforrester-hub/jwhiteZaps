@@ -633,9 +633,9 @@ async def get_tasks(
 
     # Filter by status if needed
     if status == "open":
-        tasks = [t for t in tasks if not t.get("completed", False) and t.get("status", "").lower() != "completed"]
+        tasks = [t for t in tasks if not t.get("completed", False) and str(t.get("status", "")).lower() != "completed"]
     elif status == "completed":
-        tasks = [t for t in tasks if t.get("completed", True) or t.get("status", "").lower() == "completed"]
+        tasks = [t for t in tasks if t.get("completed", True) or str(t.get("status", "")).lower() == "completed"]
 
     return {
         "producer": {
@@ -2188,7 +2188,7 @@ async def _coaching_analysis_impl(
         hours_to_quote = _hours_between(lead.enter_stage_date, lead.quote_date)
 
         # Open tasks
-        open_tasks = [t for t in lead_tasks if t.status and t.status.lower() not in ("completed", "done")]
+        open_tasks = [t for t in lead_tasks if t.status and str(t.status).lower() not in ("completed", "done")]
         overdue_tasks = []
         today = _today_pacific()
         for t in open_tasks:

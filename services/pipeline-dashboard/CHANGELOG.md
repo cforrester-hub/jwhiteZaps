@@ -1,6 +1,7 @@
 # Pipeline Dashboard Changelog
 
-## v1.7.2 — 2026-05-15
+## v1.7.3 — 2026-05-15
+- Fixed tasks endpoint crash when task status is an integer
 - Fixed source_lookup ordering bug — automation classification now runs before note timeline build
 - Fixed crash when note_type is an integer instead of a string
 

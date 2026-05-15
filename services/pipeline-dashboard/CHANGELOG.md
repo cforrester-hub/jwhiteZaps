@@ -1,5 +1,11 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.5 — 2026-05-15
+- Updated 6 analysis prompts with automation filtering instructions (use producer_counts, not raw counts)
+- Added unanswered_inbound as highest-priority coaching flag in prompts
+- Added Info Needed stage + resetting 8h clock to high-intent prompts
+- Added internet lead funnel benchmarks (stage-transition evaluation) to internet prompts
+
 ## v1.7.4 — 2026-05-15
 - Documented Info Needed stage for NPL Call/Walk-In pipeline (no automation, 8h clock resets per touchpoint)
 - Updated Vance knowledge: explicit automation_analysis usage guidance, Info Needed stage coaching rules

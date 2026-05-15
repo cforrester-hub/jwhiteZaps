@@ -23,6 +23,8 @@ PIPELINE_CHANNEL_MAP = {
     "Personal QNC": "internal",
     "Personal Leads Not Quoted/Aged": "internal",
     "Training Pipeline - New Personal Leads": "training",
+    "Protege Home": "internet",
+    "Protege Auto": "internet",
 }
 
 # Pipeline name -> intent_type
@@ -44,6 +46,8 @@ PIPELINE_INTENT_MAP = {
     "Personal QNC": "quality_check",
     "Personal Leads Not Quoted/Aged": "stale",
     "Training Pipeline - New Personal Leads": "training",
+    "Protege Home": "cold_purchased",
+    "Protege Auto": "cold_purchased",
 }
 
 # Lead source name -> source_group

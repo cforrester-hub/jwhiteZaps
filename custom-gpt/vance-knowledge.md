@@ -128,18 +128,21 @@ Each lead now returns classified activity, not just raw counts:
 
 **Coaching analysis approach by pipeline type:**
 
-For **internet leads** (NPL Internet, NPL FFQ):
+For **internet leads** (NPL Internet, NPL FFQ, Protege Home, Protege Auto):
 - These are purchased leads — low contact rates are often a lead quality issue, not a producer issue
 - Focus coaching on EFFORT: did the producer attempt contact? How many attempts? Which channels (call, text, email)?
 - Reconstruct the contact sequence from notes: look at note types (EMAIL, TEXT, comment=call) and timestamps
 - Good effort = multiple attempts across channels within 48 hours. Poor effort = zero or one attempt then abandoned.
 - A producer who makes 5 call attempts, sends 2 texts, and 1 email but never reaches the lead is doing their job
+- **Use the NPL Internet automation schedule (below) to filter automated messages from producer activity.** Protege Home shares the same automation schedule as NPL Internet.
 
 For **high-intent leads** (NPL Call/Walk In, Incoming AOR):
 - These leads called or walked in — they are ALREADY CONTACTED by definition. Do NOT report them as "not contacted" even if contact_date is null.
 - The relevant metric is speed-to-QUOTE, not speed-to-contact. How fast did the producer quote them after they reached out?
+- **The agency's promise is same-day quote turnaround (within 8 hours).** Track Contacted entry → quote_date aggressively. Missing this is a critical coaching flag.
 - Unquoted Call/Walk In leads are process failures unless there's a valid reason (duplicate, not qualified)
 - A null contact_date on a Call/Walk-In lead is a data hygiene issue, not a coaching issue
+- **Use the NPL Call/Walk-In automation schedule (below) to filter automated messages from producer activity.** This pipeline has ZERO SMS — no TCPA consent for call-in/walk-in leads.
 
 For **book/cross-sell leads** (Cross-Sell, ReShop/ReWrite, BOB):
 - Existing customers — relationship-based approach
@@ -280,6 +283,294 @@ When auditing activity for a specific date range, follow these rules to avoid mi
 7. **When notes and flags conflict, notes win.** The note stream is the raw record. Coaching flags are heuristics derived from it. If a flag says "no follow-up" but notes show outreach, trust the notes.
 
 8. **When producer attribution and note author conflict, mark attribution as uncertain.** A lead may appear under one producer's coaching output while a same-day note was authored by a different producer (transfers, reassignments). Flag this rather than coaching the wrong person.
+
+---
+
+## PIPELINE AUTOMATION REFERENCE
+
+This section defines which pipeline events are automated (system-generated) vs. producer-driven. **Use these schedules to filter noise from coaching analysis.** Without this, automated SMS/emails look identical to producer-typed messages in AZ data.
+
+### How to use this reference
+
+1. When reviewing a lead's notes/tasks from getCoachingAnalysis or getLeadDetail, identify which pipeline the lead is in.
+2. Cross-reference each note's **timestamp + channel** against the automation schedule below.
+3. If a note matches a scheduled automated touchpoint (same business day in stage + channel + approximate time), classify it as **automated — not producer activity**.
+4. If a note does NOT match any scheduled automation, classify it as **producer-driven activity**.
+5. If **auto-unenrollment** has fired (customer replied to an automated message), ALL subsequent activity on that lead is producer-driven regardless of timing.
+
+### Three categories of pipeline events
+
+| Category | What it is | Count as producer activity? |
+|---|---|---|
+| **AUTOMATED MESSAGE** | System sends SMS or email on a schedule. Producer doesn't touch it. | **NO** |
+| **PRODUCER TASK** | System creates a task. Producer must complete it. Task creation = automated. Task **completion** = producer activity. | **YES** (the completion) |
+| **MANUAL PRODUCER ACTION** | Producer-initiated work outside any system task (direct calls, replies handled, stage changes, ad-hoc notes). | **YES** — highest signal |
+
+### Auto-unenrollment (critical evaluation pivot)
+
+When a customer replies to ANY automated message, AZ unenrolls them from automation. From that timestamp forward, **every message on the lead is producer-driven** — no more automated touchpoints fire. The MCP should:
+- Detect the pivot (customer reply followed by no further scheduled automations firing)
+- Treat all subsequent activity as producer-driven
+- **Flag any 24-48 hour gap after auto-unenrollment with no producer response as a CRITICAL coaching issue** — the customer engaged and the producer didn't follow up
+
+---
+
+### NPL INTERNET AUTOMATION SCHEDULE
+
+**Applies to:** 1 NPL Internet, Protege Home
+
+**Pipeline type:** Internet leads (EverQuote). Cold purchased leads. 7 stages.
+**Key fact:** Heavy SMS + email automation in Stage 1 (New) and late Stage 3 (Quoted Days 30+). All other stages are producer-managed.
+
+#### Stage 1: New (MIXED — heavy automation + 4 producer call tasks)
+
+Duration: Up to 30 business days (21 active + 9 quiet buffer). Shot clock → Smart Cycle.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | 9 AM | SMS | AUTOMATED | NO |
+| 1 | 9 AM | EMAIL | AUTOMATED | NO |
+| 1 | Immediate | TASK (Call) | PRODUCER TASK | YES — Day 1 consolidated: 3 call attempts (10 AM, 1 PM, 4 PM) |
+| 1 | 3 PM | SMS | AUTOMATED | NO |
+| 2 | 9 AM | SMS | AUTOMATED | NO |
+| 2 | 2 PM | TASK (Call) | PRODUCER TASK | YES — 4th call attempt |
+| 3 | 10 AM | EMAIL | AUTOMATED | NO |
+| 4 | 9 AM | TASK (Call) | PRODUCER TASK | YES — 5th call attempt |
+| 6 | 10 AM | SMS | AUTOMATED | NO |
+| 8 | 10 AM | EMAIL | AUTOMATED | NO |
+| 11 | 10 AM | TASK (Call) | PRODUCER TASK | YES — 6th call attempt |
+| 15 | 10 AM | SMS | AUTOMATED | NO |
+| 22 | 10 AM | EMAIL | AUTOMATED | NO |
+| 30 | — | SHOT CLOCK | SYSTEM | NO — auto-moves to Smart Cycle |
+
+**Expected producer activity:** 4 call task completions + any manual notes + stage change to Contacted if lead engages.
+
+#### Stage 2: Contacted (PRODUCER-MANAGED — no automated customer messages)
+
+Duration: Should be <1 day ideal. 21-day shot clock → Smart Cycle.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | TASK (Internal) | PRODUCER TASK | YES — "Lead Tracker" (stays open for life of lead) |
+| 18 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — shot clock heads up |
+| 21 | — | SHOT CLOCK | SYSTEM | NO |
+
+**ALL customer communication in Contacted is producer-driven.** Any outbound message = producer activity.
+
+#### Stage 3: Quoted (MIXED — producer Days 1-29, automated Days 30-43)
+
+Duration: 45-day shot clock → Smart Cycle.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1-29 | — | — | PRODUCER-MANAGED | YES — no automated messages in this window |
+| 30 | 10 AM | SMS | AUTOMATED | NO |
+| 32 | 10 AM | EMAIL | AUTOMATED | NO |
+| 36 | 10 AM | SMS | AUTOMATED | NO |
+| 40 | 10 AM | EMAIL | AUTOMATED | NO |
+| 42 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — shot clock heads up |
+| 43 | 10 AM | SMS | AUTOMATED | NO |
+| 45 | — | SHOT CLOCK | SYSTEM | NO |
+
+**Days 1-29 is the highest-value producer window.** All communication is producer-initiated. Days 30+ automation re-engages; producer activity here = extra effort (positive signal).
+
+#### Stage 4: FSD This Folio (PRODUCER-MANAGED)
+
+35-day shot clock rolls BACK to Quoted.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 30 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — shot clock heads up |
+| 35 | — | SHOT CLOCK | SYSTEM | NO |
+
+#### Stage 5: FSD Next Folio (PRODUCER-MANAGED)
+
+35-day shot clock rolls FORWARD to FSD This Folio.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 30 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — shot clock heads up |
+| 35 | — | SHOT CLOCK | SYSTEM | NO |
+
+#### Stage 6: Waiting on Carrier (PRODUCER-MANAGED)
+
+21-day shot clock → Escalation task.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 3 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — follow up with carrier |
+| 8 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — carrier status check |
+| 15 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — escalation check |
+| 18 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — shot clock heads up |
+| 21 | — | SHOT CLOCK | SYSTEM | NO |
+
+#### Stage 7: Sold — system handoff. Manual move to Sold = producer activity. No further work in pipeline.
+
+#### Pipeline-level safety net: Day 81 — internal producer review task (independent of stage).
+
+#### NPL Internet — expected producer activity density
+
+| Stage | Expected level | Key signal |
+|---|---|---|
+| New | Medium | 4 call tasks + handle replies |
+| Contacted | **High** | Everything is producer-driven |
+| Quoted (Days 1-29) | **High** | Quote follow-up, negotiations |
+| Quoted (Days 30+) | Low-Medium | Automation covers; producer activity = bonus effort |
+| FSD This Folio | High | Time-sensitive Folio close |
+| FSD Next Folio | Low-Medium | Nurture mode |
+| Waiting on Carrier | High | Customer anxious; producer chases carrier |
+
+#### NPL Internet — critical inaction flags
+
+| Inaction | Coaching weight |
+|---|---|
+| Call task created but never completed | **Critical** |
+| Customer replied (auto-unenrollment) but no producer activity in 24-48h | **Critical** |
+| Lead in Contacted >3 days with no notes | **High** |
+| Lead in Quoted Days 1-29 with no producer activity | **High** |
+| Lead in FSD This Folio with no activity for >5 business days | **High** |
+| Lead in Waiting on Carrier past Day 8 with no carrier follow-up note | **High** |
+
+---
+
+### NPL CALL/WALK-IN AUTOMATION SCHEDULE
+
+**Applies to:** 1 NPL Call/Walk In
+
+**Pipeline type:** Inbound calls and walk-ins to agency offices (SLO, Morro Bay, Atascadero). High-intent leads. 7 stages.
+**Key facts:**
+- **ZERO SMS in this entire pipeline** — no TCPA consent for call-in/walk-in leads. Any SMS = producer-typed (rare).
+- Lead enters at Contacted (not New) — the conversation already happened.
+- **Same-day quote turnaround (8 hours) is the agency's promise.** Speed-to-quote is the #1 coaching signal.
+- Has a unique **Home Searching** stage (long-term hold, auto-unenrollment OFF).
+- **Physical mail task** in FSD Next Folio (Day 15) — producer must actually send a postcard.
+
+#### Stage 1: Contacted (PRODUCER-MANAGED — no automated customer messages)
+
+Duration: Should be <1 day. 21-day shot clock → Smart Cycle.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | TASK (Internal) | PRODUCER TASK | YES — tracking task + same-day quote turnaround reminder |
+| 21 | — | SHOT CLOCK | SYSTEM | NO |
+
+**ALL customer communication is producer-driven.** Quote should be done within 8 hours of stage entry. More than 1 business day in Contacted without notes = coaching flag.
+
+#### Stage 2: Quoted (MIXED — 3 automated emails + 2 producer call tasks)
+
+Duration: Up to 15 days. 45-day shot clock → Smart Cycle.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 2 | 10 AM | TASK (Call) | PRODUCER TASK | YES — quote review call |
+| 3 | 10 AM | EMAIL | AUTOMATED | NO |
+| 8 | 10 AM | TASK (Call) | PRODUCER TASK | YES — follow-up call |
+| 8 | 2 PM | EMAIL | AUTOMATED | NO |
+| 15 | 10 AM | EMAIL | AUTOMATED | NO |
+| 45 | — | SHOT CLOCK | SYSTEM | NO |
+
+**Day 2 quote-review call is the highest-value touch.** Missing it = critical coaching flag.
+
+#### Stage 3: FSD This Folio (MIXED — 3 automated emails + 3 producer call tasks)
+
+Duration: Up to 26 days. 35-day shot clock rolls BACK to Quoted.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | EMAIL | AUTOMATED | NO |
+| 8 | 10 AM | TASK (Call) | PRODUCER TASK | YES — mid-period check-in |
+| 8 | 2 PM | EMAIL | AUTOMATED | NO |
+| 15 | 10 AM | TASK (Call) | PRODUCER TASK | YES — pre-close check-in |
+| 21 | 10 AM | EMAIL | AUTOMATED | NO |
+| 26 | 10 AM | TASK (Call) | PRODUCER TASK | YES — final Folio check-in |
+| 35 | — | SHOT CLOCK | SYSTEM | NO — rolls back to Quoted |
+
+#### Stage 4: FSD Next Folio (MIXED — 3 emails + 2 call tasks + 1 physical mail task)
+
+Duration: Up to 29 days. 35-day shot clock rolls FORWARD to FSD This Folio.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | EMAIL | AUTOMATED | NO |
+| 11 | 10 AM | EMAIL | AUTOMATED | NO |
+| 15 | 10 AM | TASK (Call) | PRODUCER TASK | YES — mid-wait check-in |
+| 15 | — | MAIL (physical) | PRODUCER TASK | YES — postcard/handwritten note (producer must send) |
+| 26 | 10 AM | EMAIL | AUTOMATED | NO |
+| 29 | 10 AM | TASK (Call) | PRODUCER TASK | YES — transition call |
+| 35 | — | SHOT CLOCK | SYSTEM | NO |
+
+**Physical mail task (Day 15) is often overlooked.** Worth flagging when missed.
+
+#### Stage 5: Waiting on Carrier (MIXED — 3 automated emails + 3 producer call tasks)
+
+Duration: Up to 15 days. 21-day shot clock → Escalation task.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | EMAIL | AUTOMATED | NO |
+| 4 | 10 AM | TASK (Call) | PRODUCER TASK | YES — carrier follow-up (internal call) |
+| 6 | 10 AM | EMAIL | AUTOMATED | NO |
+| 8 | 10 AM | TASK (Call) | PRODUCER TASK | YES — carrier + customer update |
+| 11 | 10 AM | EMAIL | AUTOMATED | NO |
+| 15 | 10 AM | TASK (Call) | PRODUCER TASK | YES — escalation check |
+| 21 | — | SHOT CLOCK | SYSTEM | NO |
+
+**Day 8 "update the customer" call is critical** — customer doesn't hear from us during the carrier wait if this is missed.
+
+#### Stage 6: Home Searching (LOW-AUTOMATION HOLD — auto-unenrollment OFF)
+
+Duration: Up to 60 days. Long-term hold by design. Auto-unenrollment is **OFF** — automation continues even if customer replies.
+
+| Day | Time | Channel | Type | Producer activity? |
+|---|---|---|---|---|
+| 1 | Immediate | EMAIL | AUTOMATED | NO |
+| 30 | 10 AM | EMAIL | AUTOMATED | NO |
+| 60 | 10 AM | TASK (Internal) | PRODUCER TASK | YES — producer review / close-out |
+
+**Low activity is expected here.** Don't flag inaction unless past Day 60. Any producer activity = positive initiative signal.
+
+#### Stage 7: Sold — system handoff. Manual move to Sold = producer activity.
+
+#### NPL Call/Walk-In — expected producer activity density
+
+| Stage | Expected level | Key signal |
+|---|---|---|
+| Contacted | **Critical** | Same-day quote turnaround (<8 hours) |
+| Quoted | **High** | 15-day close window; 2 call tasks |
+| FSD This Folio | **High** | Folio-sensitive; 3 call tasks |
+| FSD Next Folio | Medium | Nurture; physical mail + 2 call tasks |
+| Waiting on Carrier | **High** | Customer anxious; 3 carrier follow-up calls |
+| Home Searching | Low | Long-term hold by design |
+
+#### NPL Call/Walk-In — critical inaction flags
+
+| Inaction | Coaching weight |
+|---|---|
+| **Same-day quote missed in Contacted** (quote_date > 1 business day after entry) | **Critical** — agency's signature promise |
+| Call task created but never completed | **Critical** |
+| Customer replied (auto-unenrollment) but no producer activity in 24-48h | **Critical** |
+| Lead in Contacted >1 business day with no quote_date | **High** |
+| Day 2 quote-review call in Quoted missed | **High** |
+| Lead in Quoted past Day 8 with no producer activity | **High** |
+| Lead in FSD This Folio with no activity for >5 business days | **High** |
+| Lead in Waiting on Carrier with no carrier follow-up note | **High** |
+| Physical mail task not completed (FSD Next Folio Day 15) | Medium |
+
+---
+
+### PIPELINE AUTOMATION — QUICK LOOKUP
+
+For rapid reference when reviewing coaching data:
+
+| Pipeline | Automated channels | Stages with automation | Stages fully producer-managed |
+|---|---|---|---|
+| NPL Internet / Protege Home | SMS + Email | New, Quoted (Days 30+) | Contacted, Quoted (Days 1-29), FSD This Folio, FSD Next Folio, Waiting on Carrier |
+| NPL Call/Walk-In | Email only (ZERO SMS) | Quoted, FSD This Folio, FSD Next Folio, Waiting on Carrier, Home Searching | Contacted |
+
+| Pipeline | #1 coaching signal | Auto-unenrollment |
+|---|---|---|
+| NPL Internet / Protege Home | Missed call tasks in New stage | ON for stages 1-6 |
+| NPL Call/Walk-In | Same-day quote missed in Contacted | ON for stages 1-5, **OFF for Home Searching** |
 
 ---
 
@@ -456,10 +747,10 @@ When reviewing a quote, work through this checklist:
 → Work through the coverage gap checklist → flag missing items → provide client-facing talking points for each.
 
 **"What did Gabriela work on yesterday?"**
-→ Call getProducerActivity with producer="Gabriela" and yesterday's date → summarize activity → flag coaching observations if any.
+→ Call getProducerActivity with producer="Gabriela" and yesterday's date → summarize activity → flag coaching observations if any. **Cross-reference the pipeline automation schedule to exclude automated messages from the activity count.**
 
 **"Is the team quoting their Call/Walk In leads?"**
-→ Call getPipelineCompliance with pipeline_name="NPL Call" and current month date range → report passing/warning/failing by producer.
+→ Call getPipelineCompliance with pipeline_name="NPL Call" and current month date range → report passing/warning/failing by producer. **Remember: same-day quote turnaround is the promise for this pipeline.**
 
 **"Who's our top closer this month?"**
 → Call getTeamPerformance with days=30 → rank by close rate → generate a horizontal bar chart of close rates by producer → present with context on backlog and lead aging.
@@ -469,3 +760,9 @@ When reviewing a quote, work through this checklist:
 
 **"How did the team do this week?"**
 → Call getFunnelPerformance with group_by=producer → generate a grouped bar chart comparing quote rate and close rate per producer → highlight top and bottom performers.
+
+**"Audit Gabriela's internet leads for coaching."**
+→ Call getCoachingAnalysis with producer="Gabriela", pipeline_name="Internet" → **use the NPL Internet automation schedule to identify which notes are automated vs. producer-typed** → surface missed call tasks, leads with no producer activity in producer-managed stages, and any auto-unenrollment events without timely follow-up.
+
+**"What should I focus on in my 1:1 with a producer who works Call/Walk-In leads?"**
+→ Call getPipelineCompliance for NPL Call/Walk-In → check same-day quote rate (Contacted → quote_date within 1 business day) → call getCoachingAnalysis filtered to "NPL Call" → **use the Call/Walk-In automation schedule to filter automated emails** → surface: missed same-day quotes (critical), missed Day 2 quote-review calls (high), and any leads in Waiting on Carrier without carrier follow-up notes (high).

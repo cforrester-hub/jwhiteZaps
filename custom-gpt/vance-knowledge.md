@@ -129,12 +129,13 @@ Each lead now returns classified activity, not just raw counts:
 **Coaching analysis approach by pipeline type:**
 
 For **internet leads** (NPL Internet, NPL FFQ, Protege Home, Protege Auto):
-- These are purchased leads — low contact rates are often a lead quality issue, not a producer issue
-- Focus coaching on EFFORT: did the producer attempt contact? How many attempts? Which channels (call, text, email)?
-- Reconstruct the contact sequence from notes: look at note types (EMAIL, TEXT, comment=call) and timestamps
-- Good effort = multiple attempts across channels within 48 hours. Poor effort = zero or one attempt then abandoned.
-- A producer who makes 5 call attempts, sends 2 texts, and 1 email but never reaches the lead is doing their job
+- These are purchased leads — industry close rate (New → Sold) is only 3-5%. Most falloff is in New → Contacted (lead quality), not producer failure.
+- **Evaluate each stage transition independently, not end-to-end conversion:**
+  - **New → Contacted:** Coach on EFFORT, not results. Did the producer complete all scheduled call tasks, follow the cadence, use multiple channels within 48 hours? A producer who makes 5 call attempts, sends 2 texts, and 1 email but never reaches the lead is doing their job. Low contact rate = lead quality, not coaching issue.
+  - **Contacted → Quoted:** Coach on SKILL. Should be very high (80-90%+). Once talking to a real person who needs insurance, nearly all should get quoted. Low ratio = conversation quality problem (not gathering info, not building urgency, not scheduling the quote review). This is the most coachable gap.
+  - **Quoted → Sold:** Should be fairly high. This is the best **apples-to-apples producer comparison** — same starting point, same products, same carriers. Differences surface follow-up discipline, objection handling, and closing ability. Use Quoted → Sold for producer-to-producer ranking.
 - **Use the NPL Internet automation schedule (below) to filter automated messages from producer activity.** Protege Home shares the same automation schedule as NPL Internet.
+- The coaching endpoint now tags each note with `source` (automated/producer/unknown) and `automation_analysis` per lead. Use `producer_counts` instead of raw `classified_counts` to evaluate real producer effort.
 
 For **high-intent leads** (NPL Call/Walk In, Incoming AOR):
 - These leads called or walked in — they are ALREADY CONTACTED by definition. Do NOT report them as "not contacted" even if contact_date is null.
@@ -149,9 +150,12 @@ For **book/cross-sell leads** (Cross-Sell, ReShop/ReWrite, BOB):
 - Focus coaching on whether they're reaching out at all and if the conversation is personalized
 - Lower urgency than internet or call-in, but should still see consistent outreach
 
-**Contact-to-quote conversion expectations:**
-- Internet leads: getting them to answer is the hard part. Once a producer makes contact, the contacted-to-quoted ratio should be high. A producer who contacts many leads but quotes few has a conversation quality issue — they're reaching people but not converting to quotes. That's coachable.
-- Call/Walk In: the customer initiated contact. The "clock" starts at lead creation. Every Call/Walk In lead should be quoted unless there's a documented valid reason (duplicate, not qualified, spam). A low created-to-quoted ratio is a serious process failure.
+**Stage-transition coaching benchmarks:**
+- **Internet New → Contacted:** 3-5% end-to-end close rate means most leads will never answer. Don't punish producers for low contact rates. Coach the effort cadence.
+- **Internet Contacted → Quoted:** Should be 80-90%+. This is the highest-signal coaching metric. A producer reaching people but not quoting them has a conversation quality problem — coachable.
+- **Internet Quoted → Sold:** Best producer-to-producer comparison metric. Same starting point, same carrier options. Differences = follow-up discipline and closing ability.
+- **Call/Walk In → Quoted:** The customer initiated contact. Same-day quote turnaround is the promise. Every Call/Walk In lead should be quoted unless there's a documented valid reason (duplicate, not qualified, spam). A low ratio is a serious process failure.
+- **Inbound no response:** The coaching endpoint now flags `inbound_no_response` when a customer contacts the agency (call, email, text) but no producer outbound follows within 24 hours. This is the highest-priority coaching flag — the lead engaged and nobody followed up.
 
 **Lost deal analysis — read the notes:**
 When a quoted lead is lost or expired, analyze the note content to determine WHY. Categorize each loss:

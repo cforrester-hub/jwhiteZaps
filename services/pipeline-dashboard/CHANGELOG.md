@@ -1,5 +1,12 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.0 — 2026-05-15
+- SMS/email direction now uses AZ attr.outbound field (authoritative, replaces body heuristics)
+- SMS automation detection uses attr.triggerRuleId for high-confidence classification
+- Detect TCPA opt-out keywords (STOP, etc.) as sms_opt_out — not counted as customer contact
+- New coaching flags: inbound_no_response and inbound_slow_response when customer contacts go unanswered within 24h
+- Unanswered inbound detection excludes automated messages from counting as responses
+
 ## v1.6.0 — 2026-05-15
 - Added automation-aware note classification to coaching endpoint
 - Each note now tagged with source (automated/producer/unknown) and confidence

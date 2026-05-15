@@ -2298,6 +2298,18 @@ async def _coaching_analysis_impl(
         # Build per-note source lookup
         source_lookup = {c["note_id"]: c for c in automation_result["note_classifications"]}
 
+        # Unanswered inbound coaching flags
+        unanswered_inbound = automation_result.get("unanswered_inbound", [])
+        for ui in unanswered_inbound:
+            if ui["status"] == "no_response":
+                lead_flags.append("inbound_no_response")
+                break
+        for ui in unanswered_inbound:
+            if ui["status"] == "slow_response":
+                if "inbound_no_response" not in lead_flags:
+                    lead_flags.append("inbound_slow_response")
+                break
+
         # Update automation aggregate counters
         auto_counts = automation_result["counts"]
         total_automated_filtered += auto_counts["automated_outbound_emails"] + auto_counts["automated_outbound_texts"]
@@ -2375,6 +2387,7 @@ async def _coaching_analysis_impl(
                 },
                 "sms_opt_outs": auto_counts["sms_opt_outs"],
                 "unknown_source_count": auto_counts["unknown_source_count"],
+                "unanswered_inbound": unanswered_inbound,
             },
         })
 

@@ -590,6 +590,89 @@ def _update_counts(counts: dict, note, result: NoteSourceResult, note_classifica
         counts["unknown_source_count"] += 1
 
 
+def detect_unanswered_inbound(
+    period_notes: list,
+    source_classifications: list[dict],
+    note_classifications: list[dict],
+    response_window_hours: int = 24,
+) -> list[dict]:
+    """Find inbound customer contacts with no producer outbound response within the window.
+
+    Scans period notes for inbound contacts (calls, emails, texts — excluding
+    SMS opt-outs and automated messages) then checks if a producer-sourced
+    outbound note follows within response_window_hours.
+
+    Returns list of unanswered inbound events with details.
+    """
+    INBOUND_CHANNELS = {"email", "text", "call"}
+    OUTBOUND_PRODUCER_CHANNELS = {"email", "text", "call"}
+
+    unanswered = []
+
+    for i, note in enumerate(period_notes):
+        src = source_classifications[i] if i < len(source_classifications) else {}
+        nc = note_classifications[i] if i < len(note_classifications) else {}
+
+        # Only look at inbound customer notes that are producer-sourced (not automated, not opt-out)
+        if src.get("source") not in ("producer", "unknown_source"):
+            continue
+        if nc.get("direction") != "inbound":
+            continue
+        if nc.get("type") not in INBOUND_CHANNELS:
+            continue
+
+        inbound_dt = _parse_to_pacific(note.create_date)
+        if not inbound_dt:
+            continue
+
+        deadline = inbound_dt + timedelta(hours=response_window_hours)
+
+        # Scan subsequent notes for a producer outbound response
+        responded = False
+        response_delay_hours = None
+        for j in range(i + 1, len(period_notes)):
+            later_note = period_notes[j]
+            later_src = source_classifications[j] if j < len(source_classifications) else {}
+            later_nc = note_classifications[j] if j < len(note_classifications) else {}
+
+            later_dt = _parse_to_pacific(later_note.create_date)
+            if not later_dt:
+                continue
+
+            # Only count producer-sourced outbound as a response
+            if later_src.get("source") != "producer":
+                continue
+            if later_nc.get("direction") == "inbound":
+                continue
+            if later_nc.get("type") not in OUTBOUND_PRODUCER_CHANNELS:
+                continue
+
+            # Found a producer outbound response
+            responded = True
+            response_delay_hours = round((later_dt - inbound_dt).total_seconds() / 3600, 1)
+            break
+
+        if not responded:
+            unanswered.append({
+                "note_id": getattr(note, "id", None),
+                "inbound_type": nc.get("type"),
+                "inbound_date": inbound_dt.isoformat(),
+                "response_window_hours": response_window_hours,
+                "status": "no_response",
+            })
+        elif response_delay_hours and response_delay_hours > response_window_hours:
+            unanswered.append({
+                "note_id": getattr(note, "id", None),
+                "inbound_type": nc.get("type"),
+                "inbound_date": inbound_dt.isoformat(),
+                "response_window_hours": response_window_hours,
+                "response_delay_hours": response_delay_hours,
+                "status": "slow_response",
+            })
+
+    return unanswered
+
+
 def classify_lead_notes(
     lead_workflow_name: str | None,
     lead_pipeline_id: str | None,
@@ -666,10 +749,17 @@ def classify_lead_notes(
 
     first_unenroll = unenroll_periods[0][0] if unenroll_periods else None
 
+    # Detect unanswered inbound contacts
+    unanswered = detect_unanswered_inbound(
+        period_notes, classifications,
+        [classify_note_func(n) if classify_note_func else {} for n in period_notes],
+    )
+
     return {
         "pipeline_schedule_available": True,
         "unenrollment_detected": bool(unenroll_periods),
         "unenrollment_timestamp": first_unenroll.isoformat() if first_unenroll else None,
         "note_classifications": classifications,
         "counts": counts,
+        "unanswered_inbound": unanswered,
     }

@@ -2248,10 +2248,60 @@ async def _coaching_analysis_impl(
         if hours_to_contact and hours_to_contact > 24:
             lead_flags.append("slow_first_contact")
 
+        pipeline_name = lead.workflow_name or pipelines_map.get(lead.pipeline_id)
+        stage_name = lead.workflow_stage_name or stages_map.get(lead.stage_id)
+
+        # Automation-aware source classification (must run before note timeline)
+        lead_auto_context = auto_context_by_lead.get(lead.id, [])
+        all_notes_for_automation = sorted(
+            lead_auto_context + lead_period_notes + lead_context_notes,
+            key=lambda n: n.create_date or "",
+        )
+        seen_note_ids = set()
+        unique_auto_notes = []
+        for n in all_notes_for_automation:
+            if n.id not in seen_note_ids:
+                seen_note_ids.add(n.id)
+                unique_auto_notes.append(n)
+
+        automation_result = classify_lead_automation(
+            lead_workflow_name=lead.workflow_name,
+            lead_pipeline_id=lead.pipeline_id,
+            lead_create_date=lead.create_date,
+            lead_enter_stage_date=lead.enter_stage_date,
+            current_stage_name=stage_name,
+            all_notes=unique_auto_notes,
+            period_notes=lead_period_notes,
+            classify_note_func=_classify_note,
+            pipelines_map=pipelines_map,
+        )
+
+        source_lookup = {c["note_id"]: c for c in automation_result["note_classifications"]}
+
+        # Unanswered inbound coaching flags
+        unanswered_inbound = automation_result.get("unanswered_inbound", [])
+        for ui in unanswered_inbound:
+            if ui["status"] == "no_response":
+                lead_flags.append("inbound_no_response")
+                break
+        for ui in unanswered_inbound:
+            if ui["status"] == "slow_response":
+                if "inbound_no_response" not in lead_flags:
+                    lead_flags.append("inbound_slow_response")
+                break
+
+        auto_counts = automation_result["counts"]
+        total_automated_filtered += auto_counts["automated_outbound_emails"] + auto_counts["automated_outbound_texts"]
+        total_producer_confirmed += (
+            auto_counts["producer_outbound_emails"] + auto_counts["producer_outbound_texts"] +
+            auto_counts["producer_outbound_calls"] + auto_counts["producer_inbound_emails"] +
+            auto_counts["producer_inbound_texts"] + auto_counts["producer_inbound_calls"] +
+            auto_counts["producer_task_updates"]
+        )
+
         # Build note timeline: period notes first, then recent pre-period context
-        # Context notes are already desc order; reverse for chronological
         timeline_notes = sorted(lead_context_notes, key=lambda n: n.create_date or "") + lead_period_notes
-        timeline_notes = timeline_notes[-max_notes_per_lead:]  # keep most recent N
+        timeline_notes = timeline_notes[-max_notes_per_lead:]
 
         note_timeline = []
         for n in timeline_notes:
@@ -2279,60 +2329,6 @@ async def _coaching_analysis_impl(
             }
             for t in lead_tasks
         ]
-
-        pipeline_name = lead.workflow_name or pipelines_map.get(lead.pipeline_id)
-        stage_name = lead.workflow_stage_name or stages_map.get(lead.stage_id)
-
-        # Automation-aware source classification
-        lead_auto_context = auto_context_by_lead.get(lead.id, [])
-        all_notes_for_automation = sorted(
-            lead_auto_context + lead_period_notes + lead_context_notes,
-            key=lambda n: n.create_date or "",
-        )
-        # Deduplicate by note id
-        seen_note_ids = set()
-        unique_auto_notes = []
-        for n in all_notes_for_automation:
-            if n.id not in seen_note_ids:
-                seen_note_ids.add(n.id)
-                unique_auto_notes.append(n)
-
-        automation_result = classify_lead_automation(
-            lead_workflow_name=lead.workflow_name,
-            lead_pipeline_id=lead.pipeline_id,
-            lead_create_date=lead.create_date,
-            lead_enter_stage_date=lead.enter_stage_date,
-            current_stage_name=stage_name,
-            all_notes=unique_auto_notes,
-            period_notes=lead_period_notes,
-            classify_note_func=_classify_note,
-            pipelines_map=pipelines_map,
-        )
-
-        # Build per-note source lookup
-        source_lookup = {c["note_id"]: c for c in automation_result["note_classifications"]}
-
-        # Unanswered inbound coaching flags
-        unanswered_inbound = automation_result.get("unanswered_inbound", [])
-        for ui in unanswered_inbound:
-            if ui["status"] == "no_response":
-                lead_flags.append("inbound_no_response")
-                break
-        for ui in unanswered_inbound:
-            if ui["status"] == "slow_response":
-                if "inbound_no_response" not in lead_flags:
-                    lead_flags.append("inbound_slow_response")
-                break
-
-        # Update automation aggregate counters
-        auto_counts = automation_result["counts"]
-        total_automated_filtered += auto_counts["automated_outbound_emails"] + auto_counts["automated_outbound_texts"]
-        total_producer_confirmed += (
-            auto_counts["producer_outbound_emails"] + auto_counts["producer_outbound_texts"] +
-            auto_counts["producer_outbound_calls"] + auto_counts["producer_inbound_emails"] +
-            auto_counts["producer_inbound_texts"] + auto_counts["producer_inbound_calls"] +
-            auto_counts["producer_task_updates"]
-        )
 
         lead_analyses.append({
             "lead_id": lead.id,

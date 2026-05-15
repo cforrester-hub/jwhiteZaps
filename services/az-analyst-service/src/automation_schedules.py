@@ -479,6 +479,17 @@ def classify_note_source(
     if channel == Channel.SMS and _is_sms_opt_out(note):
         return NoteSourceResult("sms_opt_out", "high", "TCPA opt-out keyword — lead unsubscribed from SMS, not a contact")
 
+    # Check raw_json.attr for authoritative automation signal (triggerRuleId on SMS)
+    attr = {}
+    rj = getattr(note, "raw_json", None)
+    if isinstance(rj, dict):
+        a = rj.get("attr")
+        if isinstance(a, dict):
+            attr = a
+
+    if channel == Channel.SMS and attr.get("triggerRuleId") is not None:
+        return NoteSourceResult("automated", "high", f"automation rule {attr['triggerRuleId']}")
+
     # Calls are always producer-driven (automation only sends SMS/email)
     if channel == "call":
         return NoteSourceResult("producer", "high", "calls are always producer-initiated")

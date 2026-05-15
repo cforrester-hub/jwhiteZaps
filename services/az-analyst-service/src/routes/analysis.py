@@ -1790,33 +1790,47 @@ async def producer_scorecard(
 # Coaching Analysis
 # ---------------------------------------------------------------------------
 
+def _get_note_attr(note) -> dict:
+    """Extract attr dict from note raw_json, with safe fallback."""
+    rj = getattr(note, "raw_json", None)
+    if isinstance(rj, dict):
+        return rj.get("attr") or {}
+    return {}
+
+
 def _classify_note(note) -> dict:
-    """Classify a note into category (customer/internal/milestone), type, and direction."""
+    """Classify a note into category (customer/internal/milestone), type, and direction.
+
+    Uses raw_json.attr.outbound for authoritative direction on EMAIL/TEXT,
+    falling back to body heuristics when attr data is unavailable.
+    """
     note_type = (note.note_type or "").lower()
     body = (note.body or "").lower()
+    attr = _get_note_attr(note)
 
     if note_type == "email":
-        direction = "inbound" if ("received" in body or "replied" in body) else "outbound"
+        # attr.outbound: 1/true = outbound, 0/false = inbound
+        if "outbound" in attr:
+            direction = "outbound" if attr["outbound"] in (True, 1, "1", "true") else "inbound"
+        else:
+            direction = "inbound" if ("received" in body or "replied" in body) else "outbound"
         return {"category": "customer", "type": "email", "direction": direction}
 
     if note_type == "text":
-        # Customer replies typically contain specific response text, not opt-out language
-        # Default to outbound for producer-sent texts
-        direction = "outbound"
-        if "reply stop" in body or "unsubscribe" in body or "you have successfully been" in body:
-            direction = "inbound"
-        # Check for common inbound patterns
-        elif len(body) < 200 and note.title is None:
-            # Short texts without titles are often customer replies
-            direction = "inbound"
+        # attr.outbound: True/False boolean for SMS direction
+        if "outbound" in attr:
+            direction = "outbound" if attr["outbound"] is True else "inbound"
+        else:
+            direction = "outbound"
+            if "reply stop" in body or "unsubscribe" in body or "you have successfully been" in body:
+                direction = "inbound"
         return {"category": "customer", "type": "text", "direction": direction}
 
     if note_type in ("comment", "general"):
         direction = None
-        body_check = body
-        if "outgoing call" in body_check or "outbound" in body_check or "\U0001f4e4" in (note.body or ""):
+        if "outgoing call" in body or "outbound" in body or "\U0001f4e4" in (note.body or ""):
             direction = "outbound"
-        elif "incoming call" in body_check or "inbound" in body_check or "\U0001f4e5" in (note.body or ""):
+        elif "incoming call" in body or "inbound" in body or "\U0001f4e5" in (note.body or ""):
             direction = "inbound"
         return {"category": "customer", "type": "call", "direction": direction}
 

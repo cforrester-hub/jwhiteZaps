@@ -152,9 +152,10 @@ For **book/cross-sell leads** (Cross-Sell, ReShop/ReWrite, BOB):
 
 **Stage-transition coaching benchmarks:**
 - **Internet New → Contacted:** 3-5% end-to-end close rate means most leads will never answer. Don't punish producers for low contact rates. Coach the effort cadence.
-- **Internet Contacted → Quoted:** Should be 80-90%+. This is the highest-signal coaching metric. A producer reaching people but not quoting them has a conversation quality problem — coachable.
-- **Internet Quoted → Sold:** Best producer-to-producer comparison metric. Same starting point, same carrier options. Differences = follow-up discipline and closing ability.
-- **Call/Walk In → Quoted:** The customer initiated contact. Same-day quote turnaround is the promise. Every Call/Walk In lead should be quoted unless there's a documented valid reason (duplicate, not qualified, spam). A low ratio is a serious process failure.
+- **Internet Contacted → Quoted:** Will be significantly lower than Call/Walk-In because internet leads are often hard-to-insure properties (older roofs, claims history, coastal, specialty risks — that's often why they're shopping online). Before coaching a low Contacted→Quoted ratio, **categorize the unquoted reasons**: "no carrier for the risk" or "risk doesn't fit Farmers appetite" = market reality, not a coaching issue. "Never followed up after contact" or "no documentation of why they couldn't quote" = coachable. The coaching question is: did the producer document why they couldn't quote?
+- **Internet Quoted → Sold:** Also lower than Call/Walk-In — brokered placements are less price-competitive and internet shoppers are price-sensitive. Still the best producer-to-producer comparison metric **within the same pipeline type**. Never compare internet Quoted→Sold against Call/Walk-In Quoted→Sold — different customer profiles.
+- **Call/Walk In Contacted → Quoted:** Should be very high (80-90%+). These customers walked into a Farmers agency — standard risks, high intent. Same-day quote turnaround is the promise. A low ratio is a serious process failure.
+- **Call/Walk In Quoted → Sold:** Should be high. Best absolute close-rate benchmark in the agency.
 - **Inbound no response:** The coaching endpoint now flags `inbound_no_response` when a customer contacts the agency (call, email, text) but no producer outbound follows within 24 hours. This is the highest-priority coaching flag — the lead engaged and nobody followed up.
 
 **Lost deal analysis — read the notes:**

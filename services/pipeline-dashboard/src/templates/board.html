@@ -31,11 +31,23 @@
                   hx-trigger="load"
                   hx-swap="innerHTML">
             </span>
+            <button class="btn-version" onclick="openChangelog()">v{{ version }}</button>
             <form action="/pipeline/api/logout" method="post" style="display:inline;">
                 <button type="submit" class="btn-logout">Logout</button>
             </form>
         </div>
     </nav>
+
+    <!-- Changelog modal -->
+    <div id="changelog-modal" class="changelog-overlay" style="display:none;" onclick="if(event.target===this)closeChangelog()">
+        <div class="changelog-modal">
+            <div class="changelog-header">
+                <span>Changelog</span>
+                <button class="changelog-close" onclick="closeChangelog()">&times;</button>
+            </div>
+            <div id="changelog-body" class="changelog-body">Loading...</div>
+        </div>
+    </div>
 
     <!-- Collapsible filter panel -->
     <div id="filter-panel" class="filter-panel open">
@@ -116,6 +128,17 @@
 </div>
 
 <script>
+    function openChangelog() {
+        const modal = document.getElementById('changelog-modal');
+        const body = document.getElementById('changelog-body');
+        modal.style.display = 'flex';
+        fetch('/pipeline/api/changelog')
+            .then(r => r.text())
+            .then(md => { body.textContent = md; })
+            .catch(() => { body.textContent = 'Failed to load changelog.'; });
+    }
+    function closeChangelog() { document.getElementById('changelog-modal').style.display = 'none'; }
+
     let currentUserProducerName = '';  // Resolved from /api/me after load
 
     const filterState = {

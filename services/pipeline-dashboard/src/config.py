@@ -1,8 +1,12 @@
 """Configuration settings for the pipeline dashboard service."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
+
+APP_VERSION = "1.5.0"
+CHANGELOG_PATH = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
 
 
 class Settings(BaseSettings):

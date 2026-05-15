@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from starlette.templating import Jinja2Templates
 
 from ..auth import get_current_user
-from ..config import get_settings
+from ..config import APP_VERSION, get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -95,6 +95,7 @@ async def activity_page(request: Request):
         "user": user,
         "producers": producers,
         "pipelines": pipelines,
+        "version": APP_VERSION,
     })
 
 

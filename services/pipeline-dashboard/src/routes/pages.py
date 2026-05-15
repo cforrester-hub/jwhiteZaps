@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from ..auth import get_current_user
+from ..config import APP_VERSION
 from ..database import Pipeline, async_session
 
 logger = logging.getLogger(__name__)
@@ -52,5 +53,6 @@ async def board_page(request: Request):
             "request": request,
             "user": user,
             "pipelines": pipelines,
+            "version": APP_VERSION,
         },
     )

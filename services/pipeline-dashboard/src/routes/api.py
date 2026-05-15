@@ -4,8 +4,9 @@ import logging
 import time
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 
+from ..config import APP_VERSION, CHANGELOG_PATH
 from ..auth import (
     COOKIE_NAME,
     clear_session_cookie,
@@ -27,7 +28,19 @@ SYNC_COOLDOWN_SECONDS = 300  # 5 minutes
 
 @router.get("/pipeline/api/health")
 async def health():
-    return {"status": "healthy", "service": "pipeline-dashboard"}
+    return {"status": "healthy", "service": "pipeline-dashboard", "version": APP_VERSION}
+
+
+@router.get("/pipeline/api/version")
+async def version():
+    return {"version": APP_VERSION}
+
+
+@router.get("/pipeline/api/changelog", response_class=PlainTextResponse)
+async def changelog():
+    if CHANGELOG_PATH.exists():
+        return CHANGELOG_PATH.read_text(encoding="utf-8")
+    return "No changelog available."
 
 
 @router.post("/pipeline/api/login")

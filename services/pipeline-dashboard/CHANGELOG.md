@@ -1,5 +1,12 @@
 # Pipeline Dashboard Changelog
 
+## v1.6.0 — 2026-05-15
+- Added automation-aware note classification to coaching endpoint
+- Each note now tagged with source (automated/producer/unknown) and confidence
+- New automation_analysis block per lead with split automated vs producer counts
+- Unenrollment detection using AZ auto_unenroll_automation events
+- Covers NPL Internet, Protege Home, and NPL Call/Walk-In pipelines
+
 ## v1.5.0 — 2026-05-15
 - Added Protege Home and Protege Auto pipeline classifications
 - Added pipeline activity evaluation specs (NPL Internet, NPL Call/Walk-In)

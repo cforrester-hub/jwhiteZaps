@@ -19,6 +19,7 @@ from ..az_client import (
 )
 from ..config import get_settings
 from ..database import Employee, Lead, LeadFile, LeadNote, LeadOpportunity, LeadQuote, LeadTask, Pipeline, Stage, async_session
+from ..automation_schedules import classify_lead_notes as classify_lead_automation
 from ..normalization import classify_pipeline, classify_source, get_compliance_status
 
 logger = logging.getLogger(__name__)
@@ -1993,6 +1994,17 @@ async def _coaching_analysis_impl(
         )
         all_tasks = tasks_result.scalars().all()
 
+        # 6) MOVE_STAGE + unenroll/enroll notes for automation classification
+        auto_note_types = ["move_stage", "auto_unenroll_automation", "unenroll_automation",
+                           "auto_enroll_automation", "enroll_automation"]
+        auto_context_result = await session.execute(
+            select(LeadNote).where(
+                LeadNote.lead_id.in_(lead_ids),
+                func.lower(LeadNote.note_type).in_(auto_note_types),
+            ).order_by(LeadNote.create_date.asc())
+        )
+        auto_context_notes = auto_context_result.scalars().all()
+
         # Load name maps
         pipelines_map, stages_map = await _load_name_maps(session)
 
@@ -2019,12 +2031,19 @@ async def _coaching_analysis_impl(
     for t in all_tasks:
         tasks_by_lead.setdefault(t.lead_id, []).append(t)
 
+    # Group automation-context notes by lead (MOVE_STAGE + unenroll/enroll)
+    auto_context_by_lead = {}
+    for n in auto_context_notes:
+        auto_context_by_lead.setdefault(n.lead_id, []).append(n)
+
     # Analyze each lead
     lead_analyses = []
     coaching_flags = []
 
     # Aggregate counters
     total_customer_contacts = 0
+    total_automated_filtered = 0
+    total_producer_confirmed = 0
     total_internal_events = 0
     total_milestones = 0
     total_tasks_count = 0
@@ -2229,6 +2248,11 @@ async def _coaching_analysis_impl(
             }
             if include_note_content:
                 entry["body"] = _strip_html(n.body)
+            src_info = source_lookup.get(n.id)
+            if src_info:
+                entry["source"] = src_info["source"]
+                entry["source_confidence"] = src_info["confidence"]
+                entry["source_reason"] = src_info["reason"]
             note_timeline.append(entry)
 
         # Build task list
@@ -2244,6 +2268,45 @@ async def _coaching_analysis_impl(
 
         pipeline_name = lead.workflow_name or pipelines_map.get(lead.pipeline_id)
         stage_name = lead.workflow_stage_name or stages_map.get(lead.stage_id)
+
+        # Automation-aware source classification
+        lead_auto_context = auto_context_by_lead.get(lead.id, [])
+        all_notes_for_automation = sorted(
+            lead_auto_context + lead_period_notes + lead_context_notes,
+            key=lambda n: n.create_date or "",
+        )
+        # Deduplicate by note id
+        seen_note_ids = set()
+        unique_auto_notes = []
+        for n in all_notes_for_automation:
+            if n.id not in seen_note_ids:
+                seen_note_ids.add(n.id)
+                unique_auto_notes.append(n)
+
+        automation_result = classify_lead_automation(
+            lead_workflow_name=lead.workflow_name,
+            lead_pipeline_id=lead.pipeline_id,
+            lead_create_date=lead.create_date,
+            lead_enter_stage_date=lead.enter_stage_date,
+            current_stage_name=stage_name,
+            all_notes=unique_auto_notes,
+            period_notes=lead_period_notes,
+            classify_note_func=_classify_note,
+            pipelines_map=pipelines_map,
+        )
+
+        # Build per-note source lookup
+        source_lookup = {c["note_id"]: c for c in automation_result["note_classifications"]}
+
+        # Update automation aggregate counters
+        auto_counts = automation_result["counts"]
+        total_automated_filtered += auto_counts["automated_outbound_emails"] + auto_counts["automated_outbound_texts"]
+        total_producer_confirmed += (
+            auto_counts["producer_outbound_emails"] + auto_counts["producer_outbound_texts"] +
+            auto_counts["producer_outbound_calls"] + auto_counts["producer_inbound_emails"] +
+            auto_counts["producer_inbound_texts"] + auto_counts["producer_inbound_calls"] +
+            auto_counts["producer_task_updates"]
+        )
 
         lead_analyses.append({
             "lead_id": lead.id,
@@ -2293,6 +2356,25 @@ async def _coaching_analysis_impl(
             "coaching_flags": lead_flags,
             "notes": note_timeline,
             "tasks": task_list,
+            "automation_analysis": {
+                "pipeline_schedule_available": automation_result["pipeline_schedule_available"],
+                "unenrollment_detected": automation_result["unenrollment_detected"],
+                "unenrollment_timestamp": automation_result.get("unenrollment_timestamp"),
+                "automated_counts": {
+                    "outbound_emails": auto_counts["automated_outbound_emails"],
+                    "outbound_texts": auto_counts["automated_outbound_texts"],
+                },
+                "producer_counts": {
+                    "outbound_emails": auto_counts["producer_outbound_emails"],
+                    "outbound_texts": auto_counts["producer_outbound_texts"],
+                    "outbound_calls": auto_counts["producer_outbound_calls"],
+                    "inbound_emails": auto_counts["producer_inbound_emails"],
+                    "inbound_texts": auto_counts["producer_inbound_texts"],
+                    "inbound_calls": auto_counts["producer_inbound_calls"],
+                    "task_updates": auto_counts["producer_task_updates"],
+                },
+                "unknown_source_count": auto_counts["unknown_source_count"],
+            },
         })
 
         if lead_flags:
@@ -2326,6 +2408,8 @@ async def _coaching_analysis_impl(
             "total_internal_events": total_internal_events,
             "total_milestones": total_milestones,
             "total_tasks": total_tasks_count,
+            "total_automated_filtered": total_automated_filtered,
+            "total_producer_confirmed": total_producer_confirmed,
         },
         "coaching_flag_summary": flag_summary,
         "coaching_flags": coaching_flags if not summary_only else [],

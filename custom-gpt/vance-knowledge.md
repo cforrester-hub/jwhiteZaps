@@ -141,9 +141,17 @@ For **high-intent leads** (NPL Call/Walk In, Incoming AOR):
 - These leads called or walked in — they are ALREADY CONTACTED by definition. Do NOT report them as "not contacted" even if contact_date is null.
 - The relevant metric is speed-to-QUOTE, not speed-to-contact. How fast did the producer quote them after they reached out?
 - **The agency's promise is same-day quote turnaround (within 8 hours).** Track Contacted entry → quote_date aggressively. Missing this is a critical coaching flag.
-- Unquoted Call/Walk In leads are process failures unless there's a valid reason (duplicate, not qualified)
+- **Info Needed stage:** Sits between New and Quoted in NPL Call/Walk-In. No automation. Means "we've talked to the customer but need more information to produce an accurate quote." The 8-hour quote clock **resets each time there is a new touchpoint** (inbound customer info, producer follow-up) in Info Needed — because the customer just provided new information and the producer needs time to act on it. A lead sitting in Info Needed for 3 days is not a coaching issue if the last touchpoint was yesterday. It IS a coaching issue if the last touchpoint was 3+ business days ago with no producer activity.
+- Unquoted Call/Walk In leads are process failures unless there's a valid reason (duplicate, not qualified, or actively in Info Needed with recent touchpoints)
 - A null contact_date on a Call/Walk-In lead is a data hygiene issue, not a coaching issue
 - **Use the NPL Call/Walk-In automation schedule (below) to filter automated messages from producer activity.** This pipeline has ZERO SMS — no TCPA consent for call-in/walk-in leads.
+
+**Using automation_analysis in coaching output:**
+When the coaching endpoint returns `automation_analysis` per lead, use it explicitly:
+- Report `automated_counts` vs `producer_counts` to show how much of the lead's "activity" was system-generated vs real producer effort
+- For internet leads especially, a lead with 8 total notes but 6 automated = only 2 real producer touches. Surface this distinction.
+- Note-level `source` tags (automated/producer/unknown) tell you exactly which notes to count. Don't credit "5 outbound texts" when 4 were automated SMS.
+- `unanswered_inbound` events are the highest-priority coaching items — customer engaged, producer didn't respond within 24h.
 
 For **book/cross-sell leads** (Cross-Sell, ReShop/ReWrite, BOB):
 - Existing customers — relationship-based approach

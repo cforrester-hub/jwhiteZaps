@@ -68,7 +68,7 @@ Auto-unenrollment is ON for stages 1-5 (OFF for Home Searching - it's a long-ter
 ## STAGE 1: CONTACTED (producer-managed)
 
 **Duration:** Should be brief (less than 1 day ideal - producer shooting for same-day quote turnaround within 8 hours).
-**Goal:** Producer just had the conversation. Now build the quote and move to Quoted.
+**Goal:** Producer just had the conversation. Now build the quote and move to Quoted (or Info Needed if missing information).
 **Stage type:** **PRODUCER-MANAGED** - no automated customer-facing messaging. One internal tracking task.
 
 ### Touchpoints
@@ -82,6 +82,22 @@ Auto-unenrollment is ON for stages 1-5 (OFF for Home Searching - it's a long-ter
 - **Same-day quote completion** = on-promise execution
 - **More than 1 business day in Contacted without notes** = drop-off, flag for coaching
 - **Manual stage change to Quoted with quote_date populated** = quote was generated
+- **Manual stage change to Info Needed** = producer needs more information from the customer before quoting
+
+---
+
+## STAGE 1.5: INFO NEEDED (producer-managed, no automation)
+
+**Duration:** Variable. No shot clock — lead stays here until producer gets the information or dispositions it.
+**Goal:** Gather the missing underwriting details (dec pages, roof age, claims history, etc.) so the producer can build an accurate quote.
+**Stage type:** **PRODUCER-MANAGED** - no automated customer-facing messaging. No automation at all.
+
+**Key rule: the 8-hour quote clock RESETS on each new touchpoint.** When the customer provides new information (sends dec pages, replies to an email, returns a call), the producer has 8 business hours from that touchpoint to act on it. A lead sitting in Info Needed for 5 days is NOT a coaching issue if the last customer touchpoint was yesterday — the clock just restarted. It IS a coaching issue if the last touchpoint was 3+ business days ago with no producer follow-up.
+
+**Producer activity to expect:** Outbound requests for missing information (calls, emails asking for specific docs), inbound customer replies with the requested info, and producer follow-up acting on that info. Watch for:
+- **Last touchpoint >3 business days ago with no producer activity** = lead is going stale, flag for coaching
+- **Customer provided info (inbound touchpoint) but no producer outbound within 8 business hours** = critical coaching flag — same as inbound_no_response
+- **Lead sitting in Info Needed with no notes at all** = process failure, should have been documented when moved here
 
 ---
 
@@ -252,6 +268,8 @@ Auto-unenrollment is ON for stages 1-5 (OFF for Home Searching - it's a long-ter
 | Call task created but never completed | Tasks endpoint shows open task past scheduled day | **Critical** - direct missed action |
 | Customer replied (auto-unenrollment fired) but no producer activity in 24-48 hours | Reply event + no subsequent producer note | **Critical** |
 | Lead sitting in Contacted >1 business day with no quote_date | Stage + missing quote_date | **High** - quote should be done same day |
+| Lead in Info Needed with last touchpoint >3 business days ago | Stage + activity gap since last inbound/outbound | **High** - info request is going stale |
+| Customer provided info in Info Needed but no producer response in 8 business hours | Inbound touchpoint + no producer outbound within 8h | **Critical** - clock restarted and producer missed it |
 | Lead sitting in Quoted past Day 8 with no producer activity | Stage + activity gap | **High** - the close window is now |
 | Day 2 call task in Quoted missed | Specific task not completed | **High** - this is the quote-review call |
 | Lead sitting in FSD This Folio with no producer activity for >5 business days | Stage + activity gap | **High** - Folio is time-sensitive |
@@ -266,6 +284,7 @@ Auto-unenrollment is ON for stages 1-5 (OFF for Home Searching - it's a long-ter
 | Stage | Expected producer activity level | Why |
 |---|---|---|
 | Contacted | **Critical** (very high in short window) | Same-day quote turnaround is the promise. Stage should be <1 day. |
+| Info Needed | **High** (8h clock resets per touchpoint) | Waiting on customer info. Producer should be chasing missing details. Flag if last touchpoint >3 business days ago. |
 | Quoted | **High** | 15-day close window. Producer must be active throughout. |
 | FSD This Folio | **High** | Folio time-sensitive close. Producer drives the deal. |
 | FSD Next Folio | Medium | Nurture mode; lighter touch expected but not zero. Physical mail must happen. |

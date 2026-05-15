@@ -1,5 +1,10 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.4 — 2026-05-15
+- Documented Info Needed stage for NPL Call/Walk-In pipeline (no automation, 8h clock resets per touchpoint)
+- Updated Vance knowledge: explicit automation_analysis usage guidance, Info Needed stage coaching rules
+- Added inaction flags for Info Needed stage (stale >3 days, customer info without 8h response)
+
 ## v1.7.3 — 2026-05-15
 - Fixed tasks endpoint crash when task status is an integer
 - Fixed source_lookup ordering bug — automation classification now runs before note timeline build

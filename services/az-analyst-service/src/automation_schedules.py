@@ -421,9 +421,24 @@ def _note_channel(note_type: str | None) -> str | None:
     return None
 
 
+# TCPA opt-out keywords — inbound SMS containing only these words are
+# carrier-level unsubscribes, not customer conversations.
+SMS_OPT_OUT_KEYWORDS = {"stop", "unsubscribe", "cancel", "end", "quit"}
+
+
+def _is_sms_opt_out(note) -> bool:
+    """Check if an inbound TEXT note is a TCPA opt-out (e.g. 'STOP')."""
+    if (note.note_type or "").lower().strip() != "text":
+        return False
+    body = (note.body or "").strip()
+    # Strip HTML tags
+    clean = re.sub(r"<[^>]+>", "", body).strip().lower()
+    return clean in SMS_OPT_OUT_KEYWORDS
+
+
 @dataclass
 class NoteSourceResult:
-    source: str          # "automated" | "producer" | "unknown_source"
+    source: str          # "automated" | "producer" | "sms_opt_out" | "unknown_source"
     confidence: str      # "high" | "medium" | "low"
     reason: str
 
@@ -459,6 +474,10 @@ def classify_note_source(
     channel = _note_channel(note_type)
     if not channel:
         return NoteSourceResult("unknown_source", "low", f"unrecognized note type: {note_type}")
+
+    # SMS opt-out (e.g. "STOP") — not a conversation, not producer activity
+    if channel == Channel.SMS and _is_sms_opt_out(note):
+        return NoteSourceResult("sms_opt_out", "high", "TCPA opt-out keyword — lead unsubscribed from SMS, not a contact")
 
     # Calls are always producer-driven (automation only sends SMS/email)
     if channel == "call":
@@ -532,6 +551,7 @@ def _init_counts() -> dict:
         "producer_inbound_texts": 0,
         "producer_inbound_calls": 0,
         "producer_task_updates": 0,
+        "sms_opt_outs": 0,
         "unknown_source_count": 0,
     }
 
@@ -541,7 +561,9 @@ def _update_counts(counts: dict, note, result: NoteSourceResult, note_classifica
     nt = (note.note_type or "").lower().strip()
     direction = note_classification.get("direction")
 
-    if result.source == "automated":
+    if result.source == "sms_opt_out":
+        counts["sms_opt_outs"] += 1
+    elif result.source == "automated":
         if nt == "email":
             counts["automated_outbound_emails"] += 1
         elif nt == "text":

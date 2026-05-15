@@ -2373,6 +2373,7 @@ async def _coaching_analysis_impl(
                     "inbound_calls": auto_counts["producer_inbound_calls"],
                     "task_updates": auto_counts["producer_task_updates"],
                 },
+                "sms_opt_outs": auto_counts["sms_opt_outs"],
                 "unknown_source_count": auto_counts["unknown_source_count"],
             },
         })

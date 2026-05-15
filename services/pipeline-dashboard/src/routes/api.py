@@ -3,8 +3,10 @@
 import logging
 import time
 
+import re
+
 from fastapi import APIRouter, BackgroundTasks, Form, Request, Response
-from fastapi.responses import PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from ..config import APP_VERSION, CHANGELOG_PATH
 from ..auth import (
@@ -36,11 +38,26 @@ async def version():
     return {"version": APP_VERSION}
 
 
-@router.get("/pipeline/api/changelog", response_class=PlainTextResponse)
+@router.get("/pipeline/api/changelog", response_class=HTMLResponse)
 async def changelog():
-    if CHANGELOG_PATH.exists():
-        return CHANGELOG_PATH.read_text(encoding="utf-8")
-    return "No changelog available."
+    if not CHANGELOG_PATH.exists():
+        return HTMLResponse("<p>No changelog available.</p>")
+    raw = CHANGELOG_PATH.read_text(encoding="utf-8")
+    lines = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("# "):
+            lines.append(f"<h2>{stripped[2:]}</h2>")
+        elif stripped.startswith("## "):
+            lines.append(f"<h3>{stripped[3:]}</h3>")
+        elif stripped.startswith("- "):
+            text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", stripped[2:])
+            lines.append(f"<li>{text}</li>")
+        else:
+            lines.append(f"<p>{stripped}</p>")
+    return HTMLResponse("\n".join(lines))
 
 
 @router.post("/pipeline/api/login")

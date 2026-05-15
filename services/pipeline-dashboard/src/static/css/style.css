@@ -276,10 +276,32 @@ body {
     overflow-y: auto;
     color: #ccc;
     font-size: 13px;
-    line-height: 1.7;
-    white-space: pre-wrap;
+    line-height: 1.6;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+.changelog-body h2 {
+    font-size: 15px;
+    color: #fff;
+    margin: 0 0 4px 0;
+    padding-top: 16px;
+    border-top: 1px solid #2a2a4e;
+}
+.changelog-body h2:first-child { border-top: none; padding-top: 0; }
+.changelog-body h3 {
+    font-size: 14px;
+    color: #7c83ff;
+    margin: 16px 0 8px 0;
+    font-weight: 600;
+}
+.changelog-body li {
+    margin: 4px 0;
+    padding-left: 4px;
+    list-style: disc;
+    margin-left: 20px;
+    color: #bbb;
+}
+.changelog-body li strong { color: #fff; }
+.changelog-body p { margin: 4px 0; color: #888; font-style: italic; }
 
 /* Loading indicator */
 .htmx-indicator { display: none; }

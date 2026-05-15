@@ -145,8 +145,8 @@
         modal.style.display = 'flex';
         fetch('/pipeline/api/changelog')
             .then(r => r.text())
-            .then(md => { body.textContent = md; })
-            .catch(() => { body.textContent = 'Failed to load changelog.'; });
+            .then(html => { body.innerHTML = html; })
+            .catch(() => { body.innerHTML = '<p>Failed to load changelog.</p>'; });
     }
     function closeChangelog() { document.getElementById('changelog-modal').style.display = 'none'; }
 

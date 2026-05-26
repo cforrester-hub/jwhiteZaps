@@ -1,0 +1,54 @@
+name: Daily Activity Report
+
+on:
+  # Run Monday–Friday at 8:30 AM Pacific (= 16:30 UTC, or 15:30 UTC during PDT)
+  # Using 16:30 UTC to cover both PST (UTC-8) and PDT (UTC-7)
+  schedule:
+    - cron: "30 16 * * 1-5"
+
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      report_date:
+        description: "Report date (YYYY-MM-DD, leave blank for today Pacific)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run — print HTML instead of emailing (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  send-report:
+    name: Generate and Email Daily Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy report script to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "scripts/daily-report.py"
+          target: "~/app"
+
+      - name: Run report on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 3m
+          script: |
+            cd ~/app
+            ANALYST_API_KEY="${{ secrets.ANALYST_API_KEY }}" \
+            GMAIL_APP_PASSWORD="${{ secrets.GMAIL_APP_PASSWORD }}" \
+            GMAIL_FROM="${{ secrets.GMAIL_FROM || 'chad@jenniferwhiteagency.com' }}" \
+            REPORT_TO="${{ secrets.REPORT_TO || 'chad@jenniferwhiteagency.com' }}" \
+            REPORT_DATE="${{ github.event.inputs.report_date }}" \
+            DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}" \
+            python3 scripts/daily-report.py

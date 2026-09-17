@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.7 — 2026-09-17
+- CI: pinned appleboy scp/ssh GitHub Actions to full commit SHAs in deploy and daily-report workflows (supply-chain hardening)
+
 ## v1.7.6 — 2026-09-17
 - workflow-service: unmatched voicemail tasks now assigned to Maria Prince (114222) instead of previous fallback CSR
 

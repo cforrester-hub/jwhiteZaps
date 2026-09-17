@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 # Fallback customer ID for voicemails with no match
 FALLBACK_CUSTOMER_ID = 34401683
-# Fallback CSR ID (from customer 34401683's policy)
-FALLBACK_CSR_ID = 110493
+# Fallback CSR ID (Maria Prince)
+FALLBACK_CSR_ID = 114222
 
 
 def build_task_title(caller_name: str, caller_number: str) -> str:

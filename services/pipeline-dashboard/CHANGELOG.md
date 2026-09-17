@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.6 — 2026-09-17
+- workflow-service: unmatched voicemail tasks now assigned to Maria Prince (114222) instead of previous fallback CSR
+
 ## v1.7.5 — 2026-05-15
 - Updated 6 analysis prompts with automation filtering instructions (use producer_counts, not raw counts)
 - Added unanswered_inbound as highest-priority coaching flag in prompts

@@ -179,8 +179,8 @@ The deploy job verifies itself — a green run means the change is live:
 # After pushing: wait for the run, non-zero exit if it failed
 gh run watch $(gh run list --commit $(git rev-parse HEAD) --json databaseId --jq '.[0].databaseId') --exit-status
 
-# Per-container proof (one "DEPLOY VERIFY OK: <image> @ <sha>" line per service)
-gh run view <run-id> --log | grep "DEPLOY VERIFY"
+# Per-container proof (one "DEPLOY VERIFY OK: <image> @ <sha>" line per service; -a because gh sees the log as binary)
+gh run view <run-id> --log | grep -a "out: DEPLOY VERIFY"
 ```
 - Public health endpoints (liveness only, no version): `/api/{workflows,ringcentral,storage,agencyzoom,dashboard,deputy,transcription,analysis}/health`, `/pipeline/api/health` (includes APP_VERSION)
 

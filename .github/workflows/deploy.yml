@@ -15,6 +15,12 @@ on:
   pull_request:
     branches: [main]
 
+# Serialize runs per branch so a newer push can't overwrite :latest mid-deploy
+# (the deploy step verifies containers match this run's commit)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
@@ -176,6 +182,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:latest
+          # Stamp the commit on the image; the deploy step verifies it
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache
           cache-to: type=registry,ref=${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:buildcache,mode=max
 
@@ -243,6 +251,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 20m
           script: |
+            set -e
             cd ~/app
 
             # Ensure Loki Docker logging plugin is installed
@@ -254,8 +263,21 @@ jobs:
             # Pull latest images WHILE services are still running
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull --quiet
 
-            # Recreate all containers with latest images
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate --remove-orphans --quiet-pull
+            # Recreate all containers with latest images; --wait fails the deploy
+            # if any container doesn't reach running/healthy
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate --remove-orphans --quiet-pull --wait --wait-timeout 300
+
+            # Verify every app container runs the image built from this commit
+            for c in $(docker compose -f docker-compose.yml -f docker-compose.prod.yml ps -q); do
+              image=$(docker inspect -f '{{.Config.Image}}' "$c")
+              case "$image" in ghcr.io/*) ;; *) continue ;; esac
+              rev=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$c")
+              if [ "$rev" != "${{ github.sha }}" ]; then
+                echo "DEPLOY VERIFY FAILED: $image is at ${rev:-unlabeled}, expected ${{ github.sha }}"
+                exit 1
+              fi
+              echo "DEPLOY VERIFY OK: $image @ $rev"
+            done
 
             # Cleanup old images
             docker image prune -f

@@ -118,9 +118,10 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 ## API Endpoints
 
 ### Workflow Service
-- GET /api/workflow/workflows - List workflows
-- POST /api/workflow/workflows/{name}/run - Trigger workflow
-- DELETE /api/workflow/processed/{workflow}/{id} - Reprocess item
+- GET /api/workflows/health - Health check
+- GET /api/workflows/list - List workflows
+- POST /api/workflows/run/{name} - Trigger workflow
+- DELETE /api/workflows/processed/{workflow}/{id} - Reprocess item
 
 ### RingCentral Service
 - GET /api/ringcentral/calls - Fetch call logs
@@ -165,7 +166,23 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 ## Development Workflow
 - Commit directly to main, push, CI/CD deploys automatically
 - GitHub Actions: test → build Docker images → push GHCR → SSH deploy to DO droplet
-- Deploy pulls images while running, then `docker compose up -d --force-recreate --remove-orphans` to swap containers in-place
+- Deploy pulls images while running, then `docker compose up -d --force-recreate --remove-orphans --wait` to swap containers in-place
+- Runs are serialized per branch (`concurrency` in deploy.yml) so rapid pushes deploy one at a time
+
+### Verifying a Deploy
+The deploy job verifies itself — a green run means the change is live:
+- Every image is built with label `org.opencontainers.image.revision=<commit SHA>`
+- `up --wait` fails the job if any container doesn't reach running/healthy within 300s
+- The deploy script then checks each ghcr.io container's revision label equals the run's commit; mismatch → `DEPLOY VERIFY FAILED`, job goes red
+
+```bash
+# After pushing: wait for the run, non-zero exit if it failed
+gh run watch $(gh run list --commit $(git rev-parse HEAD) --json databaseId --jq '.[0].databaseId') --exit-status
+
+# Per-container proof (one "DEPLOY VERIFY OK: <image> @ <sha>" line per service)
+gh run view <run-id> --log | grep "DEPLOY VERIFY"
+```
+- Public health endpoints (liveness only, no version): `/api/{workflows,ringcentral,storage,agencyzoom,dashboard,deputy,transcription,analysis}/health`, `/pipeline/api/health` (includes APP_VERSION)
 
 ## User Context
 - Insurance agency automation project

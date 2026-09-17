@@ -1,5 +1,10 @@
 # Pipeline Dashboard Changelog
 
+## v1.7.8 — 2026-09-17
+- CI: deploy now self-verifies — images stamped with commit SHA, deploy waits for all containers to be healthy and fails if any container is not running the pushed commit
+- CI: runs serialized per branch so rapid pushes deploy one at a time
+- Docs: corrected workflow-service API paths (/api/workflows/...)
+
 ## v1.7.7 — 2026-09-17
 - CI: pinned appleboy scp/ssh GitHub Actions to full commit SHAs in deploy and daily-report workflows (supply-chain hardening)
 

@@ -51,6 +51,6 @@ src/
 - workflow_runs: Execution history
 
 ## API Endpoints
-- POST /api/workflow/workflows/{name}/run - Trigger manually
-- GET /api/workflow/processed - View processed items
-- DELETE /api/workflow/processed/{workflow}/{id} - Allow reprocessing
+- POST /api/workflows/run/{name} - Trigger manually
+- GET /api/workflows/processed/{workflow} - View processed items
+- DELETE /api/workflows/processed/{workflow}/{id} - Allow reprocessing

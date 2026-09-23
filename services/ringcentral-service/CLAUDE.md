@@ -50,6 +50,7 @@ services/ringcentral-service/
 Contains basic call info plus:
 - `recording_id` - Primary recording ID (first found)
 - `recordings` - List of ALL recording segments (for transferred calls)
+- `queue_name` / `answered_by` - Inbound only, from `_routing_info()`: last leg with legType `Accept` + result `Accepted` = queue; legs with result `Call connected` (excluding the caller's `SipToPstn*` legs) = agents who answered. Top-level `to.name` is usually the IVR ("Main Tree"), not the queue.
 
 ### RecordingInfo
 ```python

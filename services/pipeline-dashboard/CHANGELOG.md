@@ -1,5 +1,10 @@
 # Pipeline Dashboard Changelog
 
+## v1.8.0 — 2026-09-23
+- ringcentral-service: inbound calls now report `queue_name` (the queue that took the call, e.g. "CSR Overflow") and `answered_by` (agent(s) who connected, in order for transfers), parsed from call legs; desk-phone answers resolved via extension lookup
+- ringcentral-service: recording segments on inbound calls are now labeled with the answering agent instead of blank
+- workflow-service: incoming call notes show the queue in "To" (instead of "Main Tree") and a new "Answered by" line
+
 ## v1.7.9 — 2026-09-17
 - Docs: fixed deploy-verification grep command in CLAUDE.md
 

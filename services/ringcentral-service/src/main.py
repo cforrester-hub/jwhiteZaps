@@ -48,6 +48,57 @@ class ConnectionTestResponse(BaseModel):
     account_name: str
 
 
+# Extension id -> name, lazily loaded. Desk-phone legs carry only an extension
+# number, so the answering agent's name has to come from this lookup.
+_extension_names: dict[str, str] = {}
+
+
+async def _get_extension_names(client, legs: list) -> dict[str, str]:
+    """Return the extension name map, refreshing once if a connected leg's extension is unknown."""
+    needed = {
+        str((leg.get("extension") or {}).get("id"))
+        for leg in legs
+        if leg.get("result") == "Call connected" and (leg.get("extension") or {}).get("id")
+    }
+    if needed - _extension_names.keys():
+        try:
+            for ext in await client.get_extensions():
+                if ext.get("id") and ext.get("name"):
+                    _extension_names[str(ext["id"])] = ext["name"]
+        except Exception as e:
+            logger.warning(f"Could not load extension names: {e}")
+    return _extension_names
+
+
+def _routing_info(legs: list, ext_names: dict[str, str]) -> tuple[Optional[str], list[str], dict[str, str]]:
+    """
+    Work out who actually handled an inbound call from its Detailed-view legs.
+
+    - Queue: the last leg a queue/menu accepted ("Main Tree" -> "CSR Overflow" -> ...)
+    - Answered by: every leg that ended "Call connected", in order (more than one = transfer)
+    - Recording names: recording id -> the agent on the connected leg carrying it
+    """
+    queue_name = None
+    answered_by: list[str] = []
+    recording_names: dict[str, str] = {}
+    for leg in legs:
+        to = leg.get("to") or {}
+        if leg.get("legType") == "Accept" and leg.get("result") == "Accepted" and to.get("name"):
+            queue_name = to["name"]
+        # SipToPstn* legs are a caller's own outbound side (e.g. an internal transfer), not an answer
+        elif leg.get("result") == "Call connected" and not (leg.get("legType") or "").startswith("SipToPstn"):
+            ext_id = str((leg.get("extension") or {}).get("id") or "")
+            name = ext_names.get(ext_id) or to.get("name")
+            if not name:
+                continue
+            if not answered_by or answered_by[-1] != name:
+                answered_by.append(name)
+            rec_id = (leg.get("recording") or {}).get("id")
+            if rec_id:
+                recording_names[rec_id] = name
+    return queue_name, answered_by, recording_names
+
+
 class RecordingInfo(BaseModel):
     """Info about a single recording segment (one per call leg)."""
     recording_id: str
@@ -72,6 +123,8 @@ class CallSummary(BaseModel):
     has_recording: bool
     recording_id: Optional[str] = None  # Primary recording (first one found)
     recordings: list[RecordingInfo] = []  # All recordings from all legs
+    queue_name: Optional[str] = None  # Last queue/menu that accepted the call (inbound)
+    answered_by: list[str] = []  # Agents who connected, in order (inbound)
 
 
 class CallLogResponse(BaseModel):
@@ -236,6 +289,13 @@ async def get_call_log(
                         )
                     )
 
+            queue_name, answered_by = None, []
+            if record.get("direction") == "Inbound":
+                ext_names = await _get_extension_names(client, legs)
+                queue_name, answered_by, recording_names = _routing_info(legs, ext_names)
+                for rec in all_recordings:
+                    rec.extension_name = recording_names.get(rec.recording_id, rec.extension_name)
+
             calls.append(
                 CallSummary(
                     id=record.get("id", ""),
@@ -253,6 +313,8 @@ async def get_call_log(
                     has_recording=len(all_recordings) > 0,
                     recording_id=all_recordings[0].recording_id if all_recordings else None,
                     recordings=all_recordings,
+                    queue_name=queue_name,
+                    answered_by=answered_by,
                 )
             )
 
@@ -360,6 +422,13 @@ async def get_call_details(
                 )
                 leg_recordings_data.append(recording_data)
 
+        queue_name, answered_by = None, []
+        if call_data.get("direction") == "Inbound":
+            ext_names = await _get_extension_names(client, legs)
+            queue_name, answered_by, recording_names = _routing_info(legs, ext_names)
+            for rec in all_recording_infos:
+                rec.extension_name = recording_names.get(rec.recording_id, rec.extension_name)
+
         call_summary = CallSummary(
             id=call_data.get("id", ""),
             session_id=call_data.get("sessionId", ""),
@@ -376,6 +445,8 @@ async def get_call_details(
             has_recording=len(all_recording_infos) > 0,
             recording_id=all_recording_infos[0].recording_id if all_recording_infos else None,
             recordings=all_recording_infos,
+            queue_name=queue_name,
+            answered_by=answered_by,
         )
 
         response = CallDetailResponse(call=call_summary)

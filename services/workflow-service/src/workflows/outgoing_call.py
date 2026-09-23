@@ -186,14 +186,20 @@ def build_note_content(
 
     # Format from/to with extension name if available
     from_display = f"{from_number} ({from_name})" if from_name else from_number
-    to_display = f"{to_number} ({to_name})" if to_name else to_number
+    # Inbound: show the queue that took the call rather than the phone menu ("Main Tree")
+    to_label = call.get("queue_name") or to_name
+    to_display = f"{to_number} ({to_label})" if to_label else to_number
+    answered_by = " → ".join(call.get("answered_by") or [])
 
     # Build HTML note with colored header bar and direction-specific colors
     html = f'''<div style="background:{header_bg};color:white;padding:8px 12px;font-weight:bold;font-size:14px;border-radius:4px 4px 0 0;">{header_icon} {header_label}</div>'''
     html += f'''<div style="padding:4px 12px;background:#f8f8f8;border-bottom:1px solid #ddd;font-size:13px;">📞 {direction} - {other_party} - {result}</div>'''
 
     # Build the HTML table - full width, no gaps
-    html += f'''<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:{call_info_bg};padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_display}</div><div>👤 <b>To:</b> {to_display}</div><div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
+    html += f'''<table style="width:100%;border-collapse:collapse;margin:0;padding:0;border-spacing:0;"><tr><td style="width:60%;vertical-align:top;background:{call_info_bg};padding:10px;box-sizing:border-box;"><strong>CALL INFORMATION</strong><div>📅 <b>Date & Time:</b> {date_time}</div><div>👤 <b>From:</b> {from_display}</div><div>👤 <b>To:</b> {to_display}</div>'''
+    if answered_by:
+        html += f'''<div>🎧 <b>Answered by:</b> {answered_by}</div>'''
+    html += f'''<div>⏱️ <b>Duration:</b> {duration}</div><div>📋 <b>Result:</b> {result}</div>'''
 
     # Add AI summary if available
     if ai_summary:

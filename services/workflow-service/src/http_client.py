@@ -45,12 +45,13 @@ class ServiceClient:
         response.raise_for_status()
         return response.json()
 
-    async def post(self, path: str, json: Optional[dict] = None) -> dict:
-        """Make a POST request to the service."""
+    async def post(self, path: str, json: Optional[dict] = None, timeout: Optional[float] = None) -> dict:
+        """Make a POST request to the service. timeout overrides the shared client's 30s default."""
         client = await get_client()
         url = f"{self.base_url}{path}"
         logger.debug(f"POST {url}")
-        response = await client.post(url, json=json)
+        kwargs = {"timeout": timeout} if timeout else {}
+        response = await client.post(url, json=json, **kwargs)
         response.raise_for_status()
         return response.json()
 
@@ -271,7 +272,8 @@ class TranscriptionClient(ServiceClient):
         }
         if context:
             payload["context"] = context
-        return await self.post("/api/transcription/process", json=payload)
+        # Whisper + summary on an hour-long call takes minutes, not seconds
+        return await self.post("/api/transcription/process", json=payload, timeout=900.0)
 
     async def health_check(self) -> bool:
         """Check if Transcription service is healthy."""

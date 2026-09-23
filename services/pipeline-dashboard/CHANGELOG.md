@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.8.2 — 2026-09-23
+- workflow-service: transcription requests now allow 15 minutes (was the shared 30s client timeout), so longer calls get an AI summary instead of silently timing out
+
 ## v1.8.1 — 2026-09-23
 - ringcentral-service: on transferred inbound calls, `queue_name` now keeps the original queue (e.g. "CSR Overflow") instead of the transfer target's name
 

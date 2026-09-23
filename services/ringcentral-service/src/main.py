@@ -74,7 +74,7 @@ def _routing_info(legs: list, ext_names: dict[str, str]) -> tuple[Optional[str],
     """
     Work out who actually handled an inbound call from its Detailed-view legs.
 
-    - Queue: the last leg a queue/menu accepted ("Main Tree" -> "CSR Overflow" -> ...)
+    - Queue: the last leg a queue/menu accepted before anyone answered ("Main Tree" -> "CSR Overflow" -> ...)
     - Answered by: every leg that ended "Call connected", in order (more than one = transfer)
     - Recording names: recording id -> the agent on the connected leg carrying it
     """
@@ -84,7 +84,9 @@ def _routing_info(legs: list, ext_names: dict[str, str]) -> tuple[Optional[str],
     for leg in legs:
         to = leg.get("to") or {}
         if leg.get("legType") == "Accept" and leg.get("result") == "Accepted" and to.get("name"):
-            queue_name = to["name"]
+            # Accept legs after the first answer are transfer targets, not queues
+            if not answered_by:
+                queue_name = to["name"]
         # SipToPstn* legs are a caller's own outbound side (e.g. an internal transfer), not an answer
         elif leg.get("result") == "Call connected" and not (leg.get("legType") or "").startswith("SipToPstn"):
             ext_id = str((leg.get("extension") or {}).get("id") or "")

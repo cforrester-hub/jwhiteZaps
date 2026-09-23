@@ -55,7 +55,7 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
 
     # Prompt provides context to help Whisper with domain-specific content
     prompt = (
-        "Insurance agency voicemail. Caller may spell their name letter by letter. "
+        "Insurance agency phone call or voicemail. Caller may spell their name letter by letter. "
         "Common terms: policy number, claim, renewal, quote, coverage, deductible."
     )
 
@@ -91,22 +91,38 @@ async def summarize_transcript(
     """
     client = get_openai_client()
 
-    system_prompt = """You are an assistant that summarizes phone call transcripts for an insurance agency.
-Your job is to extract the key information from the call and present it concisely.
+    # Scale the summary to the call: a 35-minute quote call needs more than 2-3 sentences
+    words = len(transcript.split())
+    if words < 150:
+        length = "1-2 sentences"
+    elif words < 1500:
+        length = "3-5 sentences"
+    else:
+        length = "a thorough paragraph (6-10 sentences) covering each topic discussed"
+
+    system_prompt = f"""You summarize phone call transcripts for a Farmers Insurance agency.
+The summary is saved as a note on the customer's record, so staff reading it later should understand
+what happened without listening to the recording.
 
 Provide:
-1. A brief summary (2-3 sentences) of what the call was about
-2. Any action items or follow-ups mentioned (if any)
+1. A summary of the call in {length}, written as prose (no bullet points).
+2. Action items or follow-ups that were committed to or requested, saying who will do each one
+   (staff member or customer) when that is clear.
 
-Format your response as:
+Include concrete specifics that were mentioned: people's names, policy types, properties or addresses,
+vehicles, carriers, premiums or amounts, and dates (effective dates, deadlines, callbacks).
+Do not invent details that are not in the transcript.
+
+If the transcript is split into parts, the call was transferred between staff members. Summarize the
+whole call and note who handled which part.
+
+Format your response exactly as:
 SUMMARY: [your summary here]
 
 ACTION ITEMS:
 - [action item 1]
 - [action item 2]
-(or "None mentioned" if no action items)
-
-Keep it professional and concise. Focus on insurance-related topics like policy questions, claims, quotes, renewals, etc."""
+(or "- None" if there are no action items)"""
 
     user_prompt = f"""Please summarize this phone call transcript:
 
@@ -122,7 +138,7 @@ TRANSCRIPT:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=500,
+        max_tokens=1000,
         temperature=0.3,  # Lower temperature for more consistent output
     )
 
@@ -158,27 +174,32 @@ TRANSCRIPT:
 
 
 async def transcribe_and_summarize(
-    audio_url: str,
+    segments: list[tuple[str, Optional[str]]],
     context: Optional[str] = None,
     filename: str = "audio.mp3",
 ) -> dict:
     """
-    Full pipeline: download audio, transcribe, and summarize.
+    Full pipeline: download and transcribe every segment, then summarize them as one call.
 
     Args:
-        audio_url: URL to download the audio from
+        segments: (audio_url, label) pairs in call order. Transferred calls have one
+            recording per leg; the label is who handled that part (e.g. "Maria Prince").
         context: Optional context about the call
         filename: Filename hint for audio format
 
     Returns:
         dict with transcript, summary, and action_items
     """
-    # Download the audio
-    audio_data = await download_audio(audio_url)
-    logger.info(f"Downloaded {len(audio_data)} bytes of audio")
-
-    # Transcribe
-    transcript = await transcribe_audio(audio_data, filename)
+    parts = []
+    for i, (url, label) in enumerate(segments, 1):
+        audio_data = await download_audio(url)
+        logger.info(f"Downloaded segment {i}/{len(segments)}: {len(audio_data)} bytes")
+        text = await transcribe_audio(audio_data, filename)
+        if len(segments) > 1:
+            header = f"--- Part {i} ({label}) ---" if label else f"--- Part {i} ---"
+            text = f"{header}\n{text}"
+        parts.append(text)
+    transcript = "\n\n".join(parts)
 
     # Skip summarization if transcript is too short
     if len(transcript.strip()) < 50:

@@ -76,9 +76,16 @@ class SummarizeResponse(BaseModel):
     action_items: list[str]
 
 
-class TranscribeAndSummarizeRequest(BaseModel):
-    """Request for full transcription + summarization pipeline."""
+class Segment(BaseModel):
+    """One recording segment of a call (transferred calls have one per leg)."""
     audio_url: str
+    label: Optional[str] = None  # Who handled this part, e.g. "Maria Prince"
+
+
+class TranscribeAndSummarizeRequest(BaseModel):
+    """Request for full transcription + summarization pipeline. Send audio_url or segments."""
+    audio_url: Optional[str] = None
+    segments: list[Segment] = []
     filename: str = "audio.mp3"
     context: Optional[str] = None
 
@@ -167,14 +174,20 @@ async def transcribe_and_summarize_endpoint(request: TranscribeAndSummarizeReque
 
     This is the main endpoint for processing call recordings.
 
-    - **audio_url**: URL to download the audio file from
+    - **audio_url**: URL to download the audio file from (single recording)
+    - **segments**: All recording segments in call order, for transferred calls
     - **filename**: Filename hint for audio format
     - **context**: Optional context about the call
     """
+    segments = [(s.audio_url, s.label) for s in request.segments]
+    if not segments and request.audio_url:
+        segments = [(request.audio_url, None)]
+    if not segments:
+        raise HTTPException(status_code=422, detail="audio_url or segments required")
     try:
-        logger.info("Processing audio: transcribe + summarize")
+        logger.info(f"Processing audio: transcribe {len(segments)} segment(s) + summarize")
         result = await transcribe_and_summarize(
-            audio_url=request.audio_url,
+            segments=segments,
             context=request.context,
             filename=request.filename,
         )

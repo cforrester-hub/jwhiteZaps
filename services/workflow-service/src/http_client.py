@@ -251,25 +251,28 @@ class TranscriptionClient(ServiceClient):
 
     async def transcribe_and_summarize(
         self,
-        audio_url: str,
+        audio_url: str = None,
         context: str = None,
         filename: str = "audio.mp3",
+        segments: Optional[list[dict]] = None,
     ) -> dict:
         """
         Transcribe audio and generate summary.
 
         Args:
-            audio_url: URL to download the audio from
+            audio_url: URL to download the audio from (single recording)
             context: Optional context about the call (e.g., "Inbound call from John Doe")
             filename: Filename hint for audio format
+            segments: [{"audio_url", "label"}] for every recording of a transferred call, in order
 
         Returns:
             dict with 'transcript', 'summary', and 'action_items'
         """
-        payload = {
-            "audio_url": audio_url,
-            "filename": filename,
-        }
+        payload = {"filename": filename}
+        if segments:
+            payload["segments"] = segments
+        else:
+            payload["audio_url"] = audio_url
         if context:
             payload["context"] = context
         # Whisper + summary on an hour-long call takes minutes, not seconds

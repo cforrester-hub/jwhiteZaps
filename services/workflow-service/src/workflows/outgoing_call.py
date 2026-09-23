@@ -243,6 +243,44 @@ def build_note_content(
     return html
 
 
+async def summarize_recordings(
+    all_recordings: list, recording_infos: list, context: str, call_id: str
+) -> tuple[Optional[str], list]:
+    """
+    Transcribe every recording segment and summarize them as one call.
+
+    Transferred calls have one recording per leg; summarizing only the first one
+    missed everything after the transfer.
+
+    Args:
+        all_recordings: Recording dicts with content_url, from get_call_details
+        recording_infos: The call's "recordings" list (same order), for extension names
+        context: Context for the summarizer (e.g. "Inbound call from ...")
+        call_id: Used as the filename hint
+
+    Returns:
+        (summary, action_items)
+    """
+    segments = []
+    for i, rec in enumerate(all_recordings):
+        if rec and rec.get("content_url"):
+            label = recording_infos[i].get("extension_name") if i < len(recording_infos) else None
+            segments.append({"audio_url": rec["content_url"], "label": label})
+    if not segments:
+        return None, []
+
+    logger.info(f"RingSense not available, transcribing {len(segments)} segment(s)")
+    result = await transcription.transcribe_and_summarize(
+        segments=segments,
+        context=context,
+        filename=f"{call_id}.mp3",
+    )
+    summary = result.get("summary")
+    action_items = result.get("action_items", [])
+    logger.info(f"Transcription complete: {len(summary or '')} char summary, {len(action_items)} action items")
+    return summary, action_items
+
+
 async def process_single_call(call: dict, mark_as_processed_callback=None) -> dict:
     """
     Process a single outgoing call.
@@ -359,29 +397,14 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
             if ai_insights and ai_insights.get("available"):
                 ai_summary = ai_insights.get("summary")
 
-            # If no RingSense summary, use transcription service on first recording
+            # If no RingSense summary, transcribe every segment (transferred calls have several)
             if not ai_summary and all_recordings:
-                first_rec = all_recordings[0]
-                first_content_url = first_rec.get("content_url") if first_rec else None
-
-                if first_content_url:
-                    logger.info("RingSense not available, using transcription service")
-                    try:
-                        # Build context for better summarization
-                        context = f"Outbound call to {to_number}"
-                        if len(all_recordings) > 1:
-                            context += f" (call had {len(all_recordings)} segments due to transfer)"
-
-                        transcription_result = await transcription.transcribe_and_summarize(
-                            audio_url=first_content_url,
-                            context=context,
-                            filename=f"{call_id}.mp3",
-                        )
-                        ai_summary = transcription_result.get("summary")
-                        action_items = transcription_result.get("action_items", [])
-                        logger.info(f"Transcription complete: {len(ai_summary or '')} char summary, {len(action_items)} action items")
-                    except Exception as e:
-                        logger.warning(f"Transcription service failed, continuing without summary: {e}")
+                try:
+                    ai_summary, action_items = await summarize_recordings(
+                        all_recordings, call.get("recordings", []), f"Outbound call to {to_number}", call_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Transcription service failed, continuing without summary: {e}")
 
         except Exception as e:
             logger.error(f"Failed to get call details: {e}")

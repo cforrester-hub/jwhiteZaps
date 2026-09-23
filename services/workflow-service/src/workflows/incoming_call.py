@@ -23,6 +23,7 @@ from .outgoing_call import (
     is_call_too_recent,
     is_internal_call,
     CALL_PROCESSING_DELAY_MINUTES,
+    summarize_recordings,
 )
 from ..http_client import ringcentral, agencyzoom, storage, transcription
 
@@ -145,29 +146,14 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
             if ai_insights and ai_insights.get("available"):
                 ai_summary = ai_insights.get("summary")
 
-            # If no RingSense summary, use transcription service on first recording
+            # If no RingSense summary, transcribe every segment (transferred calls have several)
             if not ai_summary and all_recordings:
-                first_rec = all_recordings[0]
-                first_content_url = first_rec.get("content_url") if first_rec else None
-
-                if first_content_url:
-                    logger.info("RingSense not available, using transcription service")
-                    try:
-                        # Build context for better summarization
-                        context = f"Inbound call from {from_number}"
-                        if len(all_recordings) > 1:
-                            context += f" (call had {len(all_recordings)} segments due to transfer)"
-
-                        transcription_result = await transcription.transcribe_and_summarize(
-                            audio_url=first_content_url,
-                            context=context,
-                            filename=f"{call_id}.mp3",
-                        )
-                        ai_summary = transcription_result.get("summary")
-                        action_items = transcription_result.get("action_items", [])
-                        logger.info(f"Transcription complete: {len(ai_summary or '')} char summary, {len(action_items)} action items")
-                    except Exception as e:
-                        logger.warning(f"Transcription service failed, continuing without summary: {e}")
+                try:
+                    ai_summary, action_items = await summarize_recordings(
+                        all_recordings, call_recording_infos, f"Inbound call from {from_number}", call_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Transcription service failed, continuing without summary: {e}")
 
         except Exception as e:
             logger.error(f"Failed to get call details: {e}")

@@ -1,5 +1,9 @@
 # Pipeline Dashboard Changelog
 
+## v1.9.0 — 2026-09-23
+- workflow-service + transcription-service: transferred calls now transcribe every recording segment and summarize them as one call (previously only the first segment, often just the greeting, was summarized). Segments are labeled with who handled each part
+- transcription-service: summary length scales with the call (1-2 sentences for short calls up to a full paragraph for long ones) and includes concrete specifics (names, properties, vehicles, carriers, premiums, dates); action items say who owns each one
+
 ## v1.8.2 — 2026-09-23
 - workflow-service: transcription requests now allow 15 minutes (was the shared 30s client timeout), so longer calls get an AI summary instead of silently timing out
 

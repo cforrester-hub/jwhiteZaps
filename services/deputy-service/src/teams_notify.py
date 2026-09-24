@@ -6,6 +6,7 @@ when a webhook request is received"), because Microsoft doesn't let an app post 
 group chat without signing in as a user. Disabled when TEAMS_WEBHOOK_URL is unset.
 """
 
+import html
 import logging
 from typing import Optional
 
@@ -24,10 +25,17 @@ LABELS = {
     TimesheetAction.BREAK_START: ("Break Started", "Attention"),
     TimesheetAction.BREAK_END: ("Break Ended", "Good"),
 }
+HTML_COLORS = {"Good": "green", "Attention": "red"}
 
 
 def build_message(name: str, action: TimesheetAction) -> Optional[dict]:
-    """Workflows webhook payload with one Adaptive Card, or None for actions we don't announce."""
+    """
+    Workflows webhook payload, or None for actions we don't announce.
+
+    Carries two forms so the flow can use either step: "html" for "Post message in a chat or
+    channel" (a normal chat bubble with colored text, like the zap's posts) and "attachments"
+    (an Adaptive Card) for "Post card in a chat or channel".
+    """
     if action not in LABELS:
         return None
     label, color = LABELS[action]
@@ -47,6 +55,7 @@ def build_message(name: str, action: TimesheetAction) -> Optional[dict]:
     return {
         "type": "message",
         "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "contentUrl": None, "content": card}],
+        "html": f'{html.escape(first_name)} ---&gt; <span style="color:{HTML_COLORS[color]}">{label}</span>',
     }
 
 

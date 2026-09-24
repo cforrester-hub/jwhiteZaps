@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.14.1 — 2026-09-24
+- deputy-service: the Teams payload also carries the message as HTML (`Ilse ---&gt; <span style="color:red">Break Started</span>`), so the flow can use "Post message in a chat or channel" as Flow bot: a normal chat bubble with colored text like the zap's posts, and no template footer. The Adaptive Card is still included
+
 ## v1.14.0 — 2026-09-24
 - deputy-service: posts clock in/out and break events to the Entire Team Teams chat ("Ilse ---> Break Started", green/red like the Zapier zap) through a Teams Workflows webhook. Off until `TEAMS_WEBHOOK_URL` is set; a Teams failure never blocks the RingCentral update. This was the zap's last job
 

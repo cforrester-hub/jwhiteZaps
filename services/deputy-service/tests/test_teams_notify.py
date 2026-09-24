@@ -23,6 +23,11 @@ def test_message_matches_zap_wording_and_colors():
     assert _inlines(teams_notify.build_message("Maria Prince", TimesheetAction.CLOCK_IN))[1]["color"] == "Good"
     assert _inlines(teams_notify.build_message("Eric Becerra", TimesheetAction.BREAK_END))[1]["text"] == "Break Ended"
     assert _inlines(teams_notify.build_message("Wendy Yinguez", TimesheetAction.CLOCK_OUT))[1]["color"] == "Attention"
+    # "html" is for a "Post message" flow step: plain chat bubble with colored text, like the zap
+    html = teams_notify.build_message("Ilse Segura Delgado", TimesheetAction.BREAK_START)["html"]
+    assert html == 'Ilse ---&gt; <span style="color:red">Break Started</span>'
+    assert 'color:green">Clocked In<' in teams_notify.build_message("Maria Prince", TimesheetAction.CLOCK_IN)["html"]
+    assert teams_notify.build_message("<b>x</b>", TimesheetAction.CLOCK_IN)["html"].startswith("&lt;b&gt;x&lt;/b&gt; ---&gt;")
     unannounced = [a for a in TimesheetAction if a not in teams_notify.LABELS]
     assert all(teams_notify.build_message("X", a) is None for a in unannounced)
 

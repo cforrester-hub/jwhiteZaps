@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.14.0 — 2026-09-24
+- deputy-service: posts clock in/out and break events to the Entire Team Teams chat ("Ilse ---> Break Started", green/red like the Zapier zap) through a Teams Workflows webhook. Off until `TEAMS_WEBHOOK_URL` is set; a Teams failure never blocks the RingCentral update. This was the zap's last job
+
 ## v1.13.0 — 2026-09-24
 - deputy-service: clock in/out now actually changes RingCentral queue status. It had been sending the short extension number (e.g. 105), which RingCentral rejects with 404, so every update failed and the Zapier zap was doing the real work
 - deputy-service: new employees and stale IDs resolve themselves: Redis learned mapping, then shared/user_mappings.json, then a live lookup (Deputy employee email/name to RingCentral user), cached in Redis; a 404 on a stored ID re-resolves and retries once. Ambiguous matches are logged, never guessed

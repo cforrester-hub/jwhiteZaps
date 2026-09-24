@@ -22,6 +22,7 @@ from .timesheet_parser import (
     parse_timesheet_webhook,
 )
 
+from .teams_notify import post_clock_event
 from .user_resolver import resolve_target
 
 settings = get_settings()
@@ -161,6 +162,7 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
 
     - Checks if the timesheet is for today (skips past timecards)
     - Resolves the employee's RingCentral extension ID (Redis, user_mappings.json, or live lookup)
+    - Posts the event to the team's Teams chat
     - Calls RingCentral to update DND status based on clock status
     """
     logger.info(
@@ -179,6 +181,9 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
         return
 
     target = await resolve_target(str(event.employee_id))
+
+    # Team chat post doesn't depend on RingCentral, so it goes out even if the lookup fails
+    await post_clock_event(target.name if target else f"Employee #{event.employee_id}", event.action)
 
     if not target:
         logger.warning(

@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # Webhooks must send "Authorization: Bearer <secret>" (Deputy webhook Headers field). Empty = all rejected.
     deputy_webhook_secret: str = ""
 
+    # Teams Workflows webhook for the team chat ("Ilse ---> Clocked In"). Empty = no Teams posts.
+    teams_webhook_url: str = ""
+
     # Redis Configuration (for dedupe locking)
     redis_url: str = "redis://redis:6379/0"
 

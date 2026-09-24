@@ -26,14 +26,14 @@ Microservice Zapier Replacement - A containerized stack to replace Zapier automa
 | storage-service | DigitalOcean Spaces uploads |
 | transcription-service | OpenAI Whisper + GPT summarization |
 | workflow-service | Workflow orchestration + cron scheduler |
-| deputy-service | Deputy webhooks to RingCentral DND |
+| deputy-service | Deputy webhooks to RingCentral DND + Teams team-chat clock posts |
 | dashboard-service | Employee status dashboard |
 | pipeline-dashboard | AgencyZoom pipeline Kanban board (HTMX + Jinja2) |
 | az-analyst-service | LLM-powered AgencyZoom data analysis (REST API + MCP) |
 
 ## Service Dependencies
 - workflow-service → ringcentral, storage, agencyzoom, transcription
-- deputy-service → redis, ringcentral-service, Deputy API (employee lookup)
+- deputy-service → redis, ringcentral-service, Deputy API (employee lookup), Teams Workflows webhook (TEAMS_WEBHOOK_URL; posts "Ilse ---> Clocked In" to Entire Team chat; unset = off)
 - Deputy → RingCentral mapping: Redis learned entries → shared/user_mappings.json (`ringcentral_member_id` = RC extension ID) → live lookup by email/full name (cached in Redis; logs the JSON line to commit). Never use `ringcentral_extension_id` (short number) for API calls
 - dashboard-service → deputy-service (startup recovery)
 - pipeline-dashboard → PostgreSQL, AgencyZoom API (direct, not via agencyzoom-service)

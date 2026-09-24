@@ -112,6 +112,12 @@ jobs:
           pytest tests/ -v || echo "No tests yet - skipping"
         continue-on-error: true  # Remove once tests are written
 
+      # No continue-on-error: a failure here blocks build and deploy
+      - name: Run deputy-service tests
+        run: |
+          pip install -r services/deputy-service/requirements.txt pytest
+          pytest services/deputy-service/tests -v
+
   # ===========================================================================
   # BUILD (parallel matrix strategy with Docker layer caching)
   # ===========================================================================

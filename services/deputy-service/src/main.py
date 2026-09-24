@@ -1,11 +1,12 @@
 """Deputy service - handles webhooks from Deputy for timesheet events."""
 
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from datetime import date, timezone
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .config import get_settings
@@ -270,7 +271,18 @@ async def readiness_check():
         )
 
 
-@app.post("/api/deputy/webhook/timesheet")
+def require_webhook_secret(authorization: str = Header("")) -> None:
+    """Reject requests without "Authorization: Bearer <DEPUTY_WEBHOOK_SECRET>" (set in the Deputy webhook's Headers field)."""
+    secret = settings.deputy_webhook_secret
+    if not secret or not secrets.compare_digest(authorization.encode(), f"Bearer {secret}".encode()):
+        logger.warning(
+            f"Rejected Deputy webhook (secret configured: {bool(secret)}, "
+            f"Authorization header sent: {bool(authorization)})"
+        )
+        raise HTTPException(status_code=401, detail="Invalid or missing webhook secret")
+
+
+@app.post("/api/deputy/webhook/timesheet", dependencies=[Depends(require_webhook_secret)])
 async def handle_timesheet_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
@@ -343,7 +355,7 @@ async def handle_timesheet_webhook(
     }
 
 
-@app.post("/api/deputy/webhook/test")
+@app.post("/api/deputy/webhook/test", dependencies=[Depends(require_webhook_secret)])
 async def test_webhook(request: Request):
     """
     Test endpoint to see how a payload would be parsed.

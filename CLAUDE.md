@@ -134,7 +134,7 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /api/ringcentral/calls/{id}/raw - Debug raw response
 
 ### Deputy Service
-- POST /api/deputy/webhook/timesheet - Deputy webhook receiver
+- POST /api/deputy/webhook/timesheet - Deputy webhook receiver (Authorization: Bearer DEPUTY_WEBHOOK_SECRET, set in the Deputy webhook's Headers field; rejects all if unset)
 - GET /api/deputy/employees/clock-status - Current clock statuses
 
 ### Dashboard Service

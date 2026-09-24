@@ -1,5 +1,9 @@
 # Pipeline Dashboard Changelog
 
+## v1.12.0 — 2026-09-24
+- deputy-service: `POST /api/deputy/webhook/timesheet` and `/api/deputy/webhook/test` now require the header `Authorization: Bearer` followed by the new `DEPUTY_WEBHOOK_SECRET` env var, set in each Deputy webhook's Headers field. Anything else gets a 401, and so does every request while the variable is unset. Before this, anyone could forge a clock event and change an employee's RingCentral DND
+- CI: the test job runs the deputy-service tests; a failure blocks build and deploy
+
 ## v1.11.4 — 2026-09-24
 - dashboard-service: removed the status page's Run Now buttons. Since v1.11.2 they returned 404 (a browser can't send the admin key), and re-opening them would give anonymous visitors a workflow trigger again. Workflows still run every 5 minutes; a manual run is `POST /api/workflows/run/{name}` with `X-API-Key`
 

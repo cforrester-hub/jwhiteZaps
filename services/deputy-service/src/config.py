@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Deputy API Configuration
     deputy_base_url: str = ""  # e.g., https://yourcompany.na.deputy.com
     deputy_access_token: str = ""  # Permanent token or OAuth token
+    # Webhooks must send "Authorization: Bearer <secret>" (Deputy webhook Headers field). Empty = all rejected.
+    deputy_webhook_secret: str = ""
 
     # Redis Configuration (for dedupe locking)
     redis_url: str = "redis://redis:6379/0"

@@ -11,6 +11,8 @@
 # - Removes the local PostgreSQL container (use managed DB instead)
 # - Configures services to use external DATABASE_URL
 # - Configures centralized logging via Loki
+# - Traefik: internal services expose /health publicly; every other path needs
+#   X-API-Key = WORKFLOW_ADMIN_API_KEY (Docker DNS calls between services skip Traefik)
 # =============================================================================
 
 # Common logging configuration for all services
@@ -38,6 +40,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       LOKI_URL: http://loki:3100
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    labels:
+      - "traefik.http.routers.test-service.rule=Host(`${DOMAIN}`) && (Path(`/api/test/health`) || (PathPrefix(`/api/test`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
     logging: *default-logging
 
   # Update ringcentral-service for production - use pre-built image
@@ -54,7 +58,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.ringcentral-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/ringcentral`)"
+      - "traefik.http.routers.ringcentral-service.rule=Host(`${DOMAIN}`) && (Path(`/api/ringcentral/health`) || (PathPrefix(`/api/ringcentral`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
       - "traefik.http.routers.ringcentral-service.entrypoints=websecure"
       - "traefik.http.routers.ringcentral-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.ringcentral-service.loadbalancer.server.port=8000"
@@ -76,7 +80,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.workflow-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/workflows`)"
+      - "traefik.http.routers.workflow-service.rule=Host(`${DOMAIN}`) && (Path(`/api/workflows/health`) || (PathPrefix(`/api/workflows`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
       - "traefik.http.routers.workflow-service.entrypoints=websecure"
       - "traefik.http.routers.workflow-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.workflow-service.loadbalancer.server.port=8000"
@@ -101,7 +105,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.storage-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/storage`)"
+      - "traefik.http.routers.storage-service.rule=Host(`${DOMAIN}`) && (Path(`/api/storage/health`) || (PathPrefix(`/api/storage`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
       - "traefik.http.routers.storage-service.entrypoints=websecure"
       - "traefik.http.routers.storage-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.storage-service.loadbalancer.server.port=8000"
@@ -120,7 +124,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.agencyzoom-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/agencyzoom`)"
+      - "traefik.http.routers.agencyzoom-service.rule=Host(`${DOMAIN}`) && (Path(`/api/agencyzoom/health`) || (PathPrefix(`/api/agencyzoom`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
       - "traefik.http.routers.agencyzoom-service.entrypoints=websecure"
       - "traefik.http.routers.agencyzoom-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.agencyzoom-service.loadbalancer.server.port=8000"
@@ -142,7 +146,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dashboard-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/dashboard`)"
+      - "traefik.http.routers.dashboard-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/dashboard`) && !PathPrefix(`/api/dashboard/internal`)"
       - "traefik.http.routers.dashboard-service.entrypoints=websecure"
       - "traefik.http.routers.dashboard-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.dashboard-service.loadbalancer.server.port=8000"
@@ -166,7 +170,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.deputy-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/deputy`)"
+      - "traefik.http.routers.deputy-service.rule=Host(`${DOMAIN}`) && (Path(`/api/deputy/health`) || PathPrefix(`/api/deputy/webhook/timesheet`))"
       - "traefik.http.routers.deputy-service.entrypoints=websecure"
       - "traefik.http.routers.deputy-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.deputy-service.loadbalancer.server.port=8000"
@@ -248,7 +252,7 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.transcription-service.rule=Host(`${DOMAIN}`) && PathPrefix(`/api/transcription`)"
+      - "traefik.http.routers.transcription-service.rule=Host(`${DOMAIN}`) && (Path(`/api/transcription/health`) || (PathPrefix(`/api/transcription`) && Headers(`X-API-Key`, `${WORKFLOW_ADMIN_API_KEY:?required}`)))"
       - "traefik.http.routers.transcription-service.entrypoints=websecure"
       - "traefik.http.routers.transcription-service.tls.certresolver=letsencrypt"
       - "traefik.http.services.transcription-service.loadbalancer.server.port=8000"

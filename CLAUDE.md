@@ -188,6 +188,7 @@ gh run watch $(gh run list --commit $(git rev-parse HEAD) --json databaseId --jq
 gh run view <run-id> --log | grep -a "out: DEPLOY VERIFY"
 ```
 - Public health endpoints (liveness only, no version): `/api/{workflows,ringcentral,storage,agencyzoom,dashboard,deputy,transcription,analysis}/health`, `/pipeline/api/health` (includes APP_VERSION)
+- Every other path on ringcentral, agencyzoom, storage, transcription, workflows, and test needs `X-API-Key: <WORKFLOW_ADMIN_API_KEY>`; without it Traefik returns 404. Deputy exposes only `/webhook/timesheet`, and `/api/dashboard/internal/*` isn't routed. Services still call each other over Docker DNS, which skips Traefik.
 
 ## User Context
 - Insurance agency automation project

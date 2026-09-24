@@ -30,11 +30,6 @@ services:
     ports:
       - "6379:6379"
 
-  # Loki - expose port for local access
-  loki:
-    ports:
-      - "3100:3100"
-
   # Grafana - use HTTP routing for localhost
   grafana:
     ports:

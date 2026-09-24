@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.11.2 — 2026-09-23
+- Security: Traefik no longer passes anonymous requests to ringcentral, agencyzoom, storage, transcription, workflow, or test services. `/health` stays public; every other path needs `X-API-Key` matching `WORKFLOW_ADMIN_API_KEY` (404 without it), and the deploy fails if that variable is unset. deputy-service exposes only `/health` and the timesheet webhook, `/api/dashboard/internal/*` is no longer routed, and Loki's port 3100 binds to localhost only. The dashboard's Run Now buttons stop working; the 5-minute cron is unchanged
+
 ## v1.11.1 â€” 2026-09-23
 - Docs: droplet compose commands in CLAUDE.md now pass both compose files (`-f docker-compose.yml -f docker-compose.prod.yml`), matching the deploy; the old plain `docker compose` command ignored production settings
 

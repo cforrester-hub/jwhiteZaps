@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.11.0 — 2026-09-23
+- workflow-service: new `POST /api/workflows/reprocess/{incoming_call|outgoing_call}/{call_id}` re-runs a single call regardless of age (the cron workflows only look back 4 hours) and creates a new note. Requires `X-API-Key` matching the new `WORKFLOW_ADMIN_API_KEY` env var; disabled when unset
+
 ## v1.10.0 — 2026-09-23
 - transcription-service: card numbers, security codes, bank routing/account numbers, and SSNs are scrubbed from every transcript before it is summarized or returned (voicemail notes include the transcript). Summaries are scrubbed again on the way out, and the prompt forbids including them
 - transcription-service + workflow-service: call notes gain a KEY DETAILS section (quote figures with carrier/coverages/deductibles/premium/term/effective date, vehicles, properties, changes, payment arrangements, pending items) between AI SUMMARY and ACTION ITEMS; the summary itself stays short prose

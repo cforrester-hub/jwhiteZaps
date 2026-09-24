@@ -70,6 +70,7 @@ services:
       AGENCYZOOM_SERVICE_URL: http://agencyzoom-service:8000
       TRANSCRIPTION_SERVICE_URL: http://transcription-service:8000
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WORKFLOW_ADMIN_API_KEY: ${WORKFLOW_ADMIN_API_KEY:-}
     networks:
       - internal
       - web

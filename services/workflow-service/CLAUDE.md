@@ -54,3 +54,4 @@ src/
 - POST /api/workflows/run/{name} - Trigger manually
 - GET /api/workflows/processed/{workflow} - View processed items
 - DELETE /api/workflows/processed/{workflow}/{id} - Allow reprocessing
+- POST /api/workflows/reprocess/{workflow}/{call_id} - Re-run one call (any age) → new note; X-API-Key must match WORKFLOW_ADMIN_API_KEY

@@ -122,6 +122,7 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /api/workflows/list - List workflows
 - POST /api/workflows/run/{name} - Trigger workflow
 - DELETE /api/workflows/processed/{workflow}/{id} - Reprocess item
+- POST /api/workflows/reprocess/{incoming_call|outgoing_call}/{call_id} - Re-run one call regardless of age, creates a new note (X-API-Key = WORKFLOW_ADMIN_API_KEY; disabled if unset)
 
 ### RingCentral Service
 - GET /api/ringcentral/calls - Fetch call logs

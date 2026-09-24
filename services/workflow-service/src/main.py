@@ -7,11 +7,12 @@ This service handles:
 - Manual workflow execution (via API)
 """
 
+import secrets
 import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -313,3 +314,35 @@ async def clear_single_processed_item(workflow_name: str, item_id: str):
 
     logger.info(f"Cleared processed item {item_id} for workflow: {workflow_name}")
     return {"status": "cleared", "workflow_name": workflow_name, "item_id": item_id}
+
+
+@app.post("/api/workflows/reprocess/{workflow_name}/{call_id}")
+async def reprocess_call(workflow_name: str, call_id: str, x_api_key: Optional[str] = Header(None)):
+    """
+    Run one call through its workflow again, regardless of age, and create a new note.
+
+    The cron workflows only look back 4 hours; this handles older calls (e.g. after a
+    customer's phone number is fixed in AgencyZoom). Existing notes are not removed.
+    Requires the X-API-Key header to match WORKFLOW_ADMIN_API_KEY.
+    """
+    from .http_client import ringcentral
+    from .workflows import mark_processed
+
+    admin_key = get_settings().workflow_admin_api_key
+    if not admin_key or not secrets.compare_digest(x_api_key or "", admin_key):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+    processors = {
+        "incoming_call": incoming_call.process_single_call,
+        "outgoing_call": outgoing_call.process_single_call,
+    }
+    if workflow_name not in processors:
+        raise HTTPException(status_code=404, detail=f"Reprocess not supported for: {workflow_name}")
+
+    details = await ringcentral.get_call_details(call_id, include_recording=False, include_ai_insights=False)
+    result = await processors[workflow_name](details["call"])
+    if result.get("status") == "success":
+        # Keep the cron run from picking it up again if it is still inside the 4-hour window
+        await mark_processed(call_id, workflow_name, success=True, details=f"reprocessed notes={result.get('notes_created')}")
+    logger.info(f"Reprocessed {workflow_name} call {call_id}: {result}")
+    return result

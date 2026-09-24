@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # X-API-Key for admin endpoints that create notes (reprocess). Empty = those endpoints are disabled.
+    workflow_admin_api_key: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

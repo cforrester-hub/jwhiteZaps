@@ -135,6 +135,7 @@ def build_note_content(
     recording_urls: Optional[list] = None,
     ai_summary: Optional[str] = None,
     action_items: Optional[list] = None,
+    key_details: Optional[list] = None,
 ) -> str:
     """
     Build the note content for AgencyZoom using HTML format.
@@ -149,6 +150,7 @@ def build_note_content(
         recording_urls: List of (url, extension_name) tuples for all recording segments
         ai_summary: AI-generated summary of the call
         action_items: List of action items extracted from the call
+        key_details: List of concrete facts (quotes, vehicles, changes) from the call
     """
     call = call_data.get("call", {})
 
@@ -205,6 +207,13 @@ def build_note_content(
     if ai_summary:
         html += f'''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>📝 AI SUMMARY</strong><div>{ai_summary}</div></div>'''
 
+    # Add key details (quote figures, vehicles, changes) if available
+    if key_details:
+        html += '''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>📋 KEY DETAILS</strong><ul style="margin:5px 0;padding-left:20px;">'''
+        for item in key_details:
+            html += f'''<li>{item}</li>'''
+        html += '''</ul></div>'''
+
     # Add action items if available
     if action_items:
         html += '''<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ddd;"><strong>✅ ACTION ITEMS</strong><ul style="margin:5px 0;padding-left:20px;">'''
@@ -245,7 +254,7 @@ def build_note_content(
 
 async def summarize_recordings(
     all_recordings: list, recording_infos: list, context: str, call_id: str
-) -> tuple[Optional[str], list]:
+) -> tuple[Optional[str], list, list]:
     """
     Transcribe every recording segment and summarize them as one call.
 
@@ -259,7 +268,7 @@ async def summarize_recordings(
         call_id: Used as the filename hint
 
     Returns:
-        (summary, action_items)
+        (summary, key_details, action_items)
     """
     segments = []
     for i, rec in enumerate(all_recordings):
@@ -267,7 +276,7 @@ async def summarize_recordings(
             label = recording_infos[i].get("extension_name") if i < len(recording_infos) else None
             segments.append({"audio_url": rec["content_url"], "label": label})
     if not segments:
-        return None, []
+        return None, [], []
 
     logger.info(f"RingSense not available, transcribing {len(segments)} segment(s)")
     result = await transcription.transcribe_and_summarize(
@@ -276,9 +285,13 @@ async def summarize_recordings(
         filename=f"{call_id}.mp3",
     )
     summary = result.get("summary")
+    key_details = result.get("key_details", [])
     action_items = result.get("action_items", [])
-    logger.info(f"Transcription complete: {len(summary or '')} char summary, {len(action_items)} action items")
-    return summary, action_items
+    logger.info(
+        f"Transcription complete: {len(summary or '')} char summary, "
+        f"{len(key_details)} key details, {len(action_items)} action items"
+    )
+    return summary, key_details, action_items
 
 
 async def process_single_call(call: dict, mark_as_processed_callback=None) -> dict:
@@ -324,6 +337,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
     # Get call details including all recordings and AI insights
     recording_urls = []  # List of (url, extension_name) tuples for all segments
     ai_summary = None
+    key_details = []
     action_items = []
 
     # Check if call has any recordings (could be multiple for transferred calls)
@@ -400,7 +414,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
             # If no RingSense summary, transcribe every segment (transferred calls have several)
             if not ai_summary and all_recordings:
                 try:
-                    ai_summary, action_items = await summarize_recordings(
+                    ai_summary, key_details, action_items = await summarize_recordings(
                         all_recordings, call.get("recordings", []), f"Outbound call to {to_number}", call_id
                     )
                 except Exception as e:
@@ -416,6 +430,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
         recording_urls=recording_urls,
         ai_summary=ai_summary,
         action_items=action_items,
+        key_details=key_details,
     )
 
     # Create notes in AgencyZoom

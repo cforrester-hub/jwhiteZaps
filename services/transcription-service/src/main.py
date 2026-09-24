@@ -73,6 +73,7 @@ class SummarizeRequest(BaseModel):
 class SummarizeResponse(BaseModel):
     """Response from summarization."""
     summary: str
+    key_details: list[str] = []
     action_items: list[str]
 
 
@@ -94,6 +95,7 @@ class TranscribeAndSummarizeResponse(BaseModel):
     """Response from full pipeline."""
     transcript: str
     summary: str
+    key_details: list[str] = []
     action_items: list[str]
 
 
@@ -160,6 +162,7 @@ async def summarize(request: SummarizeRequest):
         result = await summarize_transcript(request.transcript, request.context)
         return SummarizeResponse(
             summary=result["summary"],
+            key_details=result["key_details"],
             action_items=result["action_items"],
         )
     except Exception as e:
@@ -194,6 +197,7 @@ async def transcribe_and_summarize_endpoint(request: TranscribeAndSummarizeReque
         return TranscribeAndSummarizeResponse(
             transcript=result["transcript"],
             summary=result["summary"],
+            key_details=result["key_details"],
             action_items=result["action_items"],
         )
     except Exception as e:

@@ -73,6 +73,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
     # Get call details including all recordings and AI insights
     recording_urls = []  # List of (url, extension_name) tuples for all segments
     ai_summary = None
+    key_details = []
     action_items = []
 
     # Check if call has any recordings (could be multiple for transferred calls)
@@ -149,7 +150,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
             # If no RingSense summary, transcribe every segment (transferred calls have several)
             if not ai_summary and all_recordings:
                 try:
-                    ai_summary, action_items = await summarize_recordings(
+                    ai_summary, key_details, action_items = await summarize_recordings(
                         all_recordings, call_recording_infos, f"Inbound call from {from_number}", call_id
                     )
                 except Exception as e:
@@ -165,6 +166,7 @@ async def process_single_call(call: dict, mark_as_processed_callback=None) -> di
         recording_urls=recording_urls,
         ai_summary=ai_summary,
         action_items=action_items,
+        key_details=key_details,
     )
 
     # Create notes in AgencyZoom

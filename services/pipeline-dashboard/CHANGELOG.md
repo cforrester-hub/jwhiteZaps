@@ -1,5 +1,9 @@
 # Pipeline Dashboard Changelog
 
+## v1.10.0 — 2026-09-23
+- transcription-service: card numbers, security codes, bank routing/account numbers, and SSNs are scrubbed from every transcript before it is summarized or returned (voicemail notes include the transcript). Summaries are scrubbed again on the way out, and the prompt forbids including them
+- transcription-service + workflow-service: call notes gain a KEY DETAILS section (quote figures with carrier/coverages/deductibles/premium/term/effective date, vehicles, properties, changes, payment arrangements, pending items) between AI SUMMARY and ACTION ITEMS; the summary itself stays short prose
+
 ## v1.9.0 — 2026-09-23
 - workflow-service + transcription-service: transferred calls now transcribe every recording segment and summarize them as one call (previously only the first segment, often just the greeting, was summarized). Segments are labeled with who handled each part
 - transcription-service: summary length scales with the call (1-2 sentences for short calls up to a full paragraph for long ones) and includes concrete specifics (names, properties, vehicles, carriers, premiums, dates); action items say who owns each one

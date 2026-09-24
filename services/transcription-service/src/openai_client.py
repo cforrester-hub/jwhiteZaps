@@ -9,6 +9,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from .config import get_settings
+from .scrub import scrub_sensitive
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -69,7 +70,8 @@ async def transcribe_audio(audio_data: bytes, filename: str = "audio.mp3") -> st
                 prompt=prompt,
             )
         logger.info(f"Transcription complete: {len(transcript)} characters")
-        return transcript
+        # Card/bank/SSN numbers read aloud must not reach the summarizer or notes
+        return scrub_sensitive(transcript)
     finally:
         # Clean up temp file
         Path(tmp_path).unlink(missing_ok=True)
@@ -87,42 +89,59 @@ async def summarize_transcript(
         context: Optional context about the call (direction, caller info, etc.)
 
     Returns:
-        dict with 'summary' and 'action_items' keys
+        dict with 'summary', 'key_details', and 'action_items' keys
     """
     client = get_openai_client()
+    transcript = scrub_sensitive(transcript)  # also covers /summarize callers with their own transcripts
 
-    # Scale the summary to the call: a 35-minute quote call needs more than 2-3 sentences
+    # Scale the summary to the call; the facts go in KEY DETAILS so the prose stays readable
     words = len(transcript.split())
     if words < 150:
         length = "1-2 sentences"
     elif words < 1500:
-        length = "3-5 sentences"
+        length = "2-4 sentences"
     else:
-        length = "a thorough paragraph (6-10 sentences) covering each topic discussed"
+        length = "4-7 sentences"
 
     system_prompt = f"""You summarize phone call transcripts for a Farmers Insurance agency.
-The summary is saved as a note on the customer's record, so staff reading it later should understand
-what happened without listening to the recording.
+The result is saved as a note on the customer's record, so a staff member reading it later should
+understand what happened, and be able to act on it, without listening to the recording.
 
-Provide:
-1. A summary of the call in {length}, written as prose (no bullet points).
-2. Action items or follow-ups that were committed to or requested, saying who will do each one
-   (staff member or customer) when that is clear.
+Write three sections:
 
-Include concrete specifics that were mentioned: people's names, policy types, properties or addresses,
-vehicles, carriers, premiums or amounts, and dates (effective dates, deadlines, callbacks).
-Do not invent details that are not in the transcript.
+SUMMARY: {length} of prose (no bullet points): why the person called, what was discussed or done,
+and how the call ended. Name the staff member(s) and the customer when known. If the transcript is
+split into parts, the call was transferred; say who handled which part.
 
-If the transcript is split into parts, the call was transferred between staff members. Summarize the
-whole call and note who handled which part.
+KEY DETAILS: bullet points of the concrete facts someone would need to follow up, re-quote, or answer
+a question later. One fact per bullet, most important first. Include whichever of these came up:
+- Quotes: carrier, policy type, coverages and limits, deductibles, premium with its term (6-month or
+  annual), fees, discounts applied or discussed, effective date
+- Changes made or requested: vehicles or drivers added/removed, mileage, addresses, lienholders or
+  mortgagees, named insureds
+- Property details: address, year built, square footage, roof, rebuild/dwelling amount
+- Vehicles: year, make, model, annual mileage
+- Current or competing carrier, current premium, and why the customer is shopping
+- Payment arrangements: method, autopay, amount paid or due (never the card or account number)
+- Anything still missing or pending from the customer
+Write "- None" if the call had no such details (common for short calls).
+
+ACTION ITEMS: bullet points of follow-ups that were committed to or requested, each saying who will
+do it (staff member or customer) and by when, if stated. Write "- None" if there are none.
+
+Rules:
+- Only include facts stated in the transcript. If a figure changed during the call, give the final one.
+- Never include payment card numbers, security codes, bank account or routing numbers, or Social
+  Security numbers, even if they appear in the transcript.
 
 Format your response exactly as:
-SUMMARY: [your summary here]
+SUMMARY: ...
+
+KEY DETAILS:
+- ...
 
 ACTION ITEMS:
-- [action item 1]
-- [action item 2]
-(or "- None" if there are no action items)"""
+- ..."""
 
     user_prompt = f"""Please summarize this phone call transcript:
 
@@ -138,40 +157,41 @@ TRANSCRIPT:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        max_tokens=1000,
+        max_tokens=1500,
         temperature=0.3,  # Lower temperature for more consistent output
     )
 
     result_text = response.choices[0].message.content
     logger.info("Summarization complete")
 
-    # Parse the response into summary and action items
+    # Parse the response into its three sections
     summary = ""
-    action_items = []
-
-    lines = result_text.strip().split("\n")
+    lists = {"key_details": [], "action_items": []}
     current_section = None
 
-    for line in lines:
-        line = line.strip()
-        if line.upper().startswith("SUMMARY:"):
+    for line in result_text.strip().split("\n"):
+        line = line.strip().replace("**", "")
+        upper = line.upper()
+        if upper.startswith("SUMMARY:"):
             current_section = "summary"
             summary = line[8:].strip()
-        elif line.upper().startswith("ACTION ITEMS:"):
+        elif upper.startswith("KEY DETAILS:"):
+            current_section = "key_details"
+        elif upper.startswith("ACTION ITEMS:"):
             current_section = "action_items"
         elif current_section == "summary" and line and not line.startswith("-"):
             summary += " " + line
-        elif current_section == "action_items" and line.startswith("-"):
+        elif current_section in lists and line.startswith("-"):
             item = line[1:].strip()
-            if item.lower() != "none mentioned" and item.lower() != "none":
-                action_items.append(item)
+            if item.lower().rstrip(".") not in ("none", "none mentioned"):
+                lists[current_section].append(item)
 
     return {
-        "summary": summary.strip(),
-        "action_items": action_items,
+        "summary": scrub_sensitive(summary.strip()),
+        "key_details": [scrub_sensitive(i) for i in lists["key_details"]],
+        "action_items": [scrub_sensitive(i) for i in lists["action_items"]],
         "raw_response": result_text,
     }
-
 
 async def transcribe_and_summarize(
     segments: list[tuple[str, Optional[str]]],
@@ -207,6 +227,7 @@ async def transcribe_and_summarize(
         return {
             "transcript": transcript,
             "summary": "Call too short for summary.",
+            "key_details": [],
             "action_items": [],
         }
 
@@ -216,5 +237,6 @@ async def transcribe_and_summarize(
     return {
         "transcript": transcript,
         "summary": summary_result["summary"],
+        "key_details": summary_result["key_details"],
         "action_items": summary_result["action_items"],
     }

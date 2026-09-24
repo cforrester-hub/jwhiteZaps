@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.11.4 — 2026-09-24
+- dashboard-service: removed the status page's Run Now buttons. Since v1.11.2 they returned 404 (a browser can't send the admin key), and re-opening them would give anonymous visitors a workflow trigger again. Workflows still run every 5 minutes; a manual run is `POST /api/workflows/run/{name}` with `X-API-Key`
+
 ## v1.11.3 — 2026-09-23
 - Fix: `/pipeline/api/changelog` returned 500 because the v1.11.2 entry had a Windows-1252 dash byte; the file is valid UTF-8 again
 

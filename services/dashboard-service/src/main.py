@@ -358,14 +358,11 @@ def generate_dashboard_html(data: DashboardData) -> str:
             <td class="cron">{cron}</td>
             <td class="next-run">{next_run}</td>
             <td><span class="status-badge {status_class}">{status_text}</span></td>
-            <td>
-                <button class="run-btn" onclick="runWorkflow('{wf.name}')">Run Now</button>
-            </td>
         </tr>
         '''
         workflow_rows.append(row)
 
-    workflow_rows_html = "\n".join(workflow_rows) if workflow_rows else '<tr><td colspan="7">No workflows registered</td></tr>'
+    workflow_rows_html = "\n".join(workflow_rows) if workflow_rows else '<tr><td colspan="6">No workflows registered</td></tr>'
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -577,52 +574,6 @@ def generate_dashboard_html(data: DashboardData) -> str:
             font-size: 0.9rem;
         }}
 
-        .run-btn {{
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background: #60a5fa;
-            color: #fff;
-            font-size: 0.85rem;
-            cursor: pointer;
-            transition: background 0.2s;
-        }}
-
-        .run-btn:hover {{
-            background: #3b82f6;
-        }}
-
-        .run-btn:disabled {{
-            background: #666;
-            cursor: not-allowed;
-        }}
-
-        /* Result toast */
-        .toast {{
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            padding: 16px 24px;
-            border-radius: 8px;
-            color: #fff;
-            font-weight: 500;
-            z-index: 1000;
-            display: none;
-        }}
-
-        .toast.success {{
-            background: #4ade80;
-        }}
-
-        .toast.error {{
-            background: #f87171;
-        }}
-
-        .toast.show {{
-            display: block;
-            animation: slideIn 0.3s ease;
-        }}
-
         @keyframes slideIn {{
             from {{
                 transform: translateX(100%);
@@ -723,7 +674,6 @@ def generate_dashboard_html(data: DashboardData) -> str:
                     <th>Schedule</th>
                     <th>Next Run</th>
                     <th>Status</th>
-                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -754,43 +704,7 @@ def generate_dashboard_html(data: DashboardData) -> str:
         </footer>
     </div>
 
-    <div id="toast" class="toast"></div>
 
-    <script>
-        async function runWorkflow(name) {{
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = 'Running...';
-
-            try {{
-                const response = await fetch('/api/workflows/run/' + name, {{
-                    method: 'POST'
-                }});
-                const result = await response.json();
-
-                if (result.status === 'success') {{
-                    showToast('Workflow completed successfully!', 'success');
-                }} else {{
-                    showToast('Workflow failed: ' + (result.error || 'Unknown error'), 'error');
-                }}
-            }} catch (err) {{
-                showToast('Request failed: ' + err.message, 'error');
-            }} finally {{
-                btn.disabled = false;
-                btn.textContent = 'Run Now';
-            }}
-        }}
-
-        function showToast(message, type) {{
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = 'toast ' + type + ' show';
-
-            setTimeout(() => {{
-                toast.classList.remove('show');
-            }}, 5000);
-        }}
-    </script>
 </body>
 </html>'''
 

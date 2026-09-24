@@ -1,5 +1,11 @@
 # Pipeline Dashboard Changelog
 
+## v1.13.0 — 2026-09-24
+- deputy-service: clock in/out now actually changes RingCentral queue status. It had been sending the short extension number (e.g. 105), which RingCentral rejects with 404, so every update failed and the Zapier zap was doing the real work
+- deputy-service: new employees and stale IDs resolve themselves: Redis learned mapping, then shared/user_mappings.json, then a live lookup (Deputy employee email/name to RingCentral user), cached in Redis; a 404 on a stored ID re-resolves and retries once. Ambiguous matches are logged, never guessed
+- ringcentral-service: new `GET /api/ringcentral/extensions` (id, number, name, email, type)
+- shared/user_mappings.json: added Ilse Segura Delgado (ext 101); removed Erin Nikiel, Claudia Noriega, Gabriela Sandoval (inactive in Deputy)
+
 ## v1.12.0 — 2026-09-24
 - deputy-service: `POST /api/deputy/webhook/timesheet` and `/api/deputy/webhook/test` now require the header `Authorization: Bearer` followed by the new `DEPUTY_WEBHOOK_SECRET` env var, set in each Deputy webhook's Headers field. Anything else gets a 401, and so does every request while the variable is unset. Before this, anyone could forge a clock event and change an employee's RingCentral DND
 - CI: the test job runs the deputy-service tests; a failure blocks build and deploy

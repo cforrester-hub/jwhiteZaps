@@ -22,8 +22,7 @@ from .timesheet_parser import (
     parse_timesheet_webhook,
 )
 
-# Import shared user mappings
-from shared import find_by_deputy_id
+from .user_resolver import resolve_target
 
 settings = get_settings()
 
@@ -56,17 +55,17 @@ async def update_ringcentral_dnd(
     extension_id: str,
     dnd_status: DesiredDndStatus,
     employee_name: str,
-) -> bool:
+) -> tuple[bool, bool]:
     """
     Call RingCentral service to update DND status.
 
     Args:
-        extension_id: RingCentral extension ID
+        extension_id: RingCentral extension ID (not the short extension number)
         dnd_status: Desired DND status
         employee_name: Employee name for logging
 
     Returns:
-        True if successful, False otherwise
+        (success, not_found) - not_found means RingCentral doesn't know that extension ID
     """
     # Determine which endpoint to call based on desired status
     if dnd_status == DesiredDndStatus.TAKE_ALL_CALLS:
@@ -84,17 +83,18 @@ async def update_ringcentral_dnd(
                     f"Updated RingCentral DND for {employee_name} (ext {extension_id}): "
                     f"{result.get('dnd_status')}"
                 )
-                return True
+                return True, False
             else:
                 logger.error(
                     f"Failed to update RingCentral DND for {employee_name}: "
                     f"{response.status_code} - {response.text}"
                 )
-                return False
+                # ringcentral-service wraps RingCentral errors as 500 with the original status in the detail
+                return False, "API error: 404" in response.text
 
     except Exception as e:
         logger.error(f"Error calling RingCentral service for {employee_name}: {e}")
-        return False
+        return False, False
 
 
 async def notify_dashboard_status(
@@ -160,7 +160,7 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
     Process a timesheet event after acquiring dedupe lock.
 
     - Checks if the timesheet is for today (skips past timecards)
-    - Looks up the employee in user_mappings
+    - Resolves the employee's RingCentral extension ID (Redis, user_mappings.json, or live lookup)
     - Calls RingCentral to update DND status based on clock status
     """
     logger.info(
@@ -178,28 +178,18 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
             await mark_dedupe_completed(event.dedupe_key)
         return
 
-    # Look up employee in shared user_mappings
-    user = find_by_deputy_id(str(event.employee_id))
+    target = await resolve_target(str(event.employee_id))
 
-    if not user:
+    if not target:
         logger.warning(
-            f"No user mapping found for Deputy employee ID {event.employee_id}"
+            f"No RingCentral extension found for Deputy employee ID {event.employee_id}"
         )
         # Mark as completed anyway to avoid reprocessing
         if event.dedupe_key:
             await mark_dedupe_completed(event.dedupe_key)
         return
 
-    employee_name = user.get("name", "Unknown")
-    ringcentral_extension_id = user.get("ringcentral_extension_id")
-
-    if not ringcentral_extension_id:
-        logger.warning(
-            f"No RingCentral extension ID for {employee_name} (Deputy ID {event.employee_id})"
-        )
-        if event.dedupe_key:
-            await mark_dedupe_completed(event.dedupe_key)
-        return
+    employee_name = target.name
 
     # Update RingCentral DND status
     if event.desired_dnd_status:
@@ -215,11 +205,23 @@ async def process_timesheet_event(event: ParsedTimesheetEvent) -> None:
             f"setting DND to {event.desired_dnd_status.value}"
         )
 
-        success = await update_ringcentral_dnd(
-            extension_id=ringcentral_extension_id,
+        success, not_found = await update_ringcentral_dnd(
+            extension_id=target.extension_id,
             dnd_status=event.desired_dnd_status,
             employee_name=employee_name,
         )
+
+        # Stored ID is stale (extension deleted/reassigned): look the person up again and retry once
+        if not_found and target.source != "lookup":
+            logger.warning(f"RingCentral extension {target.extension_id} not found for {employee_name}; re-resolving")
+            fresh = await resolve_target(str(event.employee_id), refresh=True)
+            if fresh and fresh.extension_id != target.extension_id:
+                employee_name = fresh.name
+                success, _ = await update_ringcentral_dnd(
+                    extension_id=fresh.extension_id,
+                    dnd_status=event.desired_dnd_status,
+                    employee_name=employee_name,
+                )
 
         if not success:
             logger.error(

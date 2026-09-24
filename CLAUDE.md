@@ -33,7 +33,8 @@ Microservice Zapier Replacement - A containerized stack to replace Zapier automa
 
 ## Service Dependencies
 - workflow-service → ringcentral, storage, agencyzoom, transcription
-- deputy-service → redis, ringcentral-service
+- deputy-service → redis, ringcentral-service, Deputy API (employee lookup)
+- Deputy → RingCentral mapping: Redis learned entries → shared/user_mappings.json (`ringcentral_member_id` = RC extension ID) → live lookup by email/full name (cached in Redis; logs the JSON line to commit). Never use `ringcentral_extension_id` (short number) for API calls
 - dashboard-service → deputy-service (startup recovery)
 - pipeline-dashboard → PostgreSQL, AgencyZoom API (direct, not via agencyzoom-service)
 - az-analyst-service → PostgreSQL (read-only pd_* tables), AgencyZoom API (live notes/tasks)
@@ -132,6 +133,7 @@ docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|
 - GET /api/ringcentral/calls - Fetch call logs
 - GET /api/ringcentral/calls/{id} - Call details
 - GET /api/ringcentral/calls/{id}/raw - Debug raw response
+- GET /api/ringcentral/extensions - Enabled extensions (id, extension_number, name, email, type); presence/DND endpoints need the id, not the short extension number
 
 ### Deputy Service
 - POST /api/deputy/webhook/timesheet - Deputy webhook receiver (Authorization: Bearer DEPUTY_WEBHOOK_SECRET, set in the Deputy webhook's Headers field; rejects all if unset)

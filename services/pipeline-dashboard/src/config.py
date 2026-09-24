@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
-APP_VERSION = "1.12.0"
+APP_VERSION = "1.13.0"
 CHANGELOG_PATH = Path(__file__).resolve().parent.parent / "CHANGELOG.md"
 
 

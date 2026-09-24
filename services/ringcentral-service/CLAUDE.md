@@ -39,6 +39,7 @@ services/ringcentral-service/
 - `GET /api/ringcentral/voicemails/find-for-call/{call_id}` - Find voicemail associated with a missed call
 
 ### Presence/DND
+- `GET /api/ringcentral/extensions` - List enabled extensions with `id` (what the presence endpoints below need; the short extension number like `105` returns 404), number, name, email, type
 - `GET /api/ringcentral/extensions/{extension_id}/presence` - Get extension DND status
 - `PUT /api/ringcentral/extensions/{extension_id}/presence` - Update DND status
 - `POST /api/ringcentral/extensions/{extension_id}/available` - Set extension to accept all calls

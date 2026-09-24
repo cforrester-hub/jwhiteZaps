@@ -784,6 +784,40 @@ class UpdateDndRequest(BaseModel):
     user_status: str = "Available"
 
 
+class ExtensionInfo(BaseModel):
+    id: str  # Extension ID used by the presence/DND endpoints
+    extension_number: str
+    name: str
+    email: Optional[str] = None
+    type: Optional[str] = None  # User, Department (call queue), IvrMenu, ...
+
+
+@app.get("/api/ringcentral/extensions", response_model=list[ExtensionInfo])
+async def list_extensions():
+    """
+    List enabled extensions with their IDs.
+
+    Used to resolve a person (by email or name) to the extension ID that the
+    presence endpoints need; the short extension number (e.g. 105) is not accepted there.
+    """
+    try:
+        records = await get_ringcentral_client().get_extensions()
+    except Exception as e:
+        logger.error(f"Failed to list extensions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return [
+        ExtensionInfo(
+            id=str(r["id"]),
+            extension_number=str(r.get("extensionNumber", "")),
+            name=r.get("name", ""),
+            email=(r.get("contact") or {}).get("email"),
+            type=r.get("type"),
+        )
+        for r in records
+        if r.get("id")
+    ]
+
+
 @app.get("/api/ringcentral/extensions/{extension_id}/presence", response_model=PresenceResponse)
 async def get_extension_presence(extension_id: str):
     """

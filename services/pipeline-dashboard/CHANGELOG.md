@@ -1,6 +1,9 @@
 # Pipeline Dashboard Changelog
 
-## v1.11.2 � 2026-09-23
+## v1.11.3 — 2026-09-23
+- Fix: `/pipeline/api/changelog` returned 500 because the v1.11.2 entry had a Windows-1252 dash byte; the file is valid UTF-8 again
+
+## v1.11.2 — 2026-09-23
 - Security: Traefik no longer passes anonymous requests to ringcentral, agencyzoom, storage, transcription, workflow, or test services. `/health` stays public; every other path needs `X-API-Key` matching `WORKFLOW_ADMIN_API_KEY` (404 without it), and the deploy fails if that variable is unset. deputy-service exposes only `/health` and the timesheet webhook, `/api/dashboard/internal/*` is no longer routed, and Loki's port 3100 binds to localhost only. The dashboard's Run Now buttons stop working; the 5-minute cron is unchanged
 
 ## v1.11.1 — 2026-09-23

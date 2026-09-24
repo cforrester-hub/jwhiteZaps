@@ -108,8 +108,12 @@ docker compose logs -f --since 1h workflow-service | grep -i error
 # Search logs for specific call ID
 docker compose logs workflow-service 2>&1 | grep "chEF8Z9Qlp5CjUA"
 
-# Production force update
-docker compose pull && docker compose up -d --force-recreate
+# Production (on droplet, ~/app): ALWAYS pass both compose files, like the deploy does.
+# Plain `docker compose` uses only the base file: no prod env vars (e.g. WORKFLOW_ADMIN_API_KEY) and it tries to build from source.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
+
+# Pick up a changed .env value for one service
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d workflow-service
 
 # Check recent workflow runs
 docker compose logs --since 30m workflow-service | grep -E "(Starting|completed|processed)"

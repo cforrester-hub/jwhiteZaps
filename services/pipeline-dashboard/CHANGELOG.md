@@ -1,5 +1,8 @@
 # Pipeline Dashboard Changelog
 
+## v1.11.1 — 2026-09-23
+- Docs: droplet compose commands in CLAUDE.md now pass both compose files (`-f docker-compose.yml -f docker-compose.prod.yml`), matching the deploy; the old plain `docker compose` command ignored production settings
+
 ## v1.11.0 — 2026-09-23
 - workflow-service: new `POST /api/workflows/reprocess/{incoming_call|outgoing_call}/{call_id}` re-runs a single call regardless of age (the cron workflows only look back 4 hours) and creates a new note. Requires `X-API-Key` matching the new `WORKFLOW_ADMIN_API_KEY` env var; disabled when unset
 
